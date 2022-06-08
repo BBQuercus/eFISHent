@@ -42,4 +42,3 @@ A tool to facilitate the creation of eFISHent RNA FISH oligonucleotide probes.
     - dm6/Renilla (provided, exo)
     - hg38/RPL12 (provided, endo, repetitive, short, minus strand)
     - hg38/VIM (provided, endo, plus strand)
-# fishprobedesign

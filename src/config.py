@@ -1,0 +1,112 @@
+"""
+Processes:
+    - index creation
+    - probe generation
+
+General options:
+    - reference genome -> pass file, will check if index exists in same folder
+    - reference genome annotation
+    - ENCODE RNAseq count table for off-target weighting
+    - number of threads
+    - method of optimization
+    - optimization time limit
+    - verbosity
+
+Probe specific options:
+    - (sequence file) or (gene name & organism)
+    - strand on genome
+    - intronic/exonic/both
+    - endogenous or exogenous
+    - min and max length
+    - min and max melting temperature
+    - min and max GC content
+    - formamide concentration
+    - salt concentration
+    - maximum deltaG
+"""
+
+import luigi
+
+
+class GeneralConfig(luigi.Config):
+    reference_genome = luigi.Parameter(
+        description="Path to reference genome fasta file.", default="../indices/dm6.fa"
+    )
+    reference_annotation = luigi.Parameter(
+        description="Path to reference genome annotation file.", default=None
+    )
+    threads = luigi.IntParameter(description="Number of threads to use.", default=42)
+    verbosity = luigi.IntParameter(description="Verbosity level.", default=1)
+    output_dir = luigi.Parameter(
+        description="Path to output directory [default: current directory].",
+        default=None,
+    )
+
+
+class RunConfig(luigi.Config):
+    build_indices = luigi.BoolParameter(
+        description="Build indices for reference genome only.", default=True
+    )
+    save_intermediates = luigi.BoolParameter(
+        description="Save intermediate files?", default=False
+    )
+    optimization_method = luigi.Parameter(
+        description="Optimization method to use [options: optimal, greedy].",
+        default="greedy",
+    )
+    optimization_time_limit = luigi.IntParameter(
+        description="Time limit for optimization in minutes (if optimization method is optimal).",
+        default=60,
+    )
+
+
+class SequenceConfig(luigi.Config):
+    sequence_file = luigi.Parameter(
+        description="Path to the gene's sequence file.", default=None
+    )
+    gene_name = luigi.Parameter(description="Gene name.", default="hr-38")
+    organism_name = luigi.Parameter(
+        description="Latin name of the organism.", default="homo sapiens"
+    )
+    is_intronic = luigi.BoolParameter(
+        description="Is the probe intronic?", default=False
+    )
+    is_exonic = luigi.BoolParameter(description="Is the probe exonic?", default=True)
+    is_plus_strand = luigi.BoolParameter(
+        description="Is the probe targeting the plus strand?", default=True
+    )
+    is_endogenous = luigi.BoolParameter(
+        description="Is the probe endogenous?", default=True
+    )
+
+
+class ProbeConfig(luigi.Config):
+    min_length = luigi.IntParameter(description="Minimum probe length.")
+    max_length = luigi.IntParameter(description="Maximum probe length.")
+    min_tm = luigi.FloatParameter(description="Minimum melting temperature.")
+    max_tm = luigi.FloatParameter(description="Maximum melting temperature.")
+    min_gc = luigi.FloatParameter(description="Minimum GC content.")
+    max_gc = luigi.FloatParameter(description="Maximum GC content.")
+    formamide_concentration = luigi.FloatParameter(
+        description="Formamide concentration as a percentage of the total buffer."
+    )
+    na_concentration = luigi.FloatParameter(description="Na concentration in mM.")
+    kmer_length = luigi.IntParameter(
+        description="Length of k-mer used to filter probe sequences."
+    )
+    max_off_targets = luigi.IntParameter(description="Maximum number of off-targets.")
+    encode_count_table = luigi.Parameter(
+        description="Path to the ENCODE RNAseq count table."
+    )
+    max_off_target_fpkm = luigi.FloatParameter(
+        description=(
+            "Maximum off-target FPKM (Fragments Per Kilobase of transcript per Million mapped reads) "
+            "based on ENCODE RNAseq count table. "
+            "Only used if ENCODE RNAseq count table is provided [default: None]."
+        ),
+        default=None,
+    )
+    max_kmers = luigi.IntParameter(
+        description="Highest count of sub-k-mers found in reference genome."
+    )
+    max_deltaG = luigi.FloatParameter(description="Maximum deltaG in kcal/mol.")
