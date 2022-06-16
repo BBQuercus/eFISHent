@@ -18,7 +18,7 @@ import pysam
 from config import GeneralConfig
 from config import ProbeConfig
 from config import SequenceConfig
-from generate_probes import BasicFiltering
+from basic_filtering import BasicFiltering
 from prepare_sequence import BuildBlastDatabase
 from prepare_sequence import PrepareSequence
 import constants
@@ -27,6 +27,8 @@ import util
 
 class BuildBowtieIndex(luigi.Task):
     """Create bowtie index for a given reference genome."""
+
+    logger = logging.getLogger("custom-logger")
 
     def output(self):
         return [
@@ -51,7 +53,7 @@ class BuildBowtieIndex(luigi.Task):
 class AlignProbeCandidates(luigi.Task):
     """Align all probe candidates to the reference genome and filter."""
 
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("custom-logger")
     is_blast_required = (
         ProbeConfig().encode_count_table is not None and SequenceConfig().is_endogenous
     )
@@ -78,13 +80,15 @@ class AlignProbeCandidates(luigi.Task):
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_aligned.fasta")
         )
 
-    def align_probes(self, fname_fasta: str, fname_sam: str) -> None:
+    @staticmethod
+    def align_probes(fname_fasta: str, fname_sam: str) -> None:
         """Align probes to the reference genome."""
         # Convert fasta to fastq - bowtie doesn't return read names if not fastq...
         fname_fastq = fname_fasta.rstrip("a") + "q"
         os.system(f"seqtk seq -F 'I' {fname_fasta} > {fname_fastq}")
 
         # TODO change params to match endo/non-endo (currently only endo!)
+        # TODO --quiet output to logger
         endo_exo_param = (
             ""
             if SequenceConfig().is_endogenous
@@ -98,7 +102,8 @@ class AlignProbeCandidates(luigi.Task):
                 --sam -S {fname_sam}"
         )
 
-    def filter_unique_probes(self, fname_sam: str) -> pd.DataFrame:
+    @staticmethod
+    def filter_unique_probes(fname_sam: str) -> pd.DataFrame:
         """Filter probes based on alignment score and uniqueness."""
         # 60 - uniquely mapped read, regardless of number of mismatches / indels
         # 4 – flag for unmapped read
@@ -195,13 +200,10 @@ class AlignProbeCandidates(luigi.Task):
     def run(self):
         fname_fasta = self.input()["probes"].path
         fname_sam = os.path.splitext(fname_fasta)[0] + ".sam"
-        print(100 * "*")
         self.align_probes(fname_fasta, fname_sam)
-        print(100 * "*")
         df = self.filter_unique_probes(fname_sam)
-        print(100 * "*")
 
-        if ProbeConfig().encode_count_table:
+        if ProbeConfig().encode_count_table != "None":
             df = self.filter_fpkm(df)
 
         # Filter candidates found in samfile
