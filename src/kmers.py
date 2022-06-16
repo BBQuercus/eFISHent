@@ -19,6 +19,8 @@ import util
 
 
 class BuildJellyfishIndex(luigi.Task):
+    logger = logging.getLogger("custom-logger")
+
     def output(self):
         return luigi.LocalTarget(
             f"{util.get_genome_name()}_{ProbeConfig().kmer_length}.jf"
@@ -27,7 +29,7 @@ class BuildJellyfishIndex(luigi.Task):
     def run(self):
         if ProbeConfig().max_kmers <= 2:
             self.logger.warning(
-                "Jellyfish index will be created but not used because max_kmers <= 2."
+                f"{util.UniCode.warn} Jellyfish index will be created but not used because max_kmers <= 2."
             )
 
         os.system(
@@ -45,7 +47,7 @@ class BuildJellyfishIndex(luigi.Task):
 class KMerFiltering(luigi.Task):
     """Filter probes containing too many common short kmers."""
 
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("custom-logger")
 
     def requires(self):
         return {"jellyfish": BuildJellyfishIndex(), "probes": AlignProbeCandidates()}

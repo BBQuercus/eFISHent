@@ -17,7 +17,7 @@ import util
 class DownloadEntrezGeneSequence(luigi.Task):
     """Download genomic sequence as fasta from NCBI."""
 
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("custom-logger")
 
     def output(self):
         fname = f"{util.get_gene_name()}_entrez.fasta"
@@ -47,8 +47,9 @@ class DownloadEntrezGeneSequence(luigi.Task):
 
         if not fasta:
             raise LookupError(
-                "No Entrez Gene Probes found. "
-                "Please check your gene name and organism and try again."
+                "No Entrez gene found. "
+                "Please check your gene name and organism and try again. "
+                "Or provide a custom fasta file as `sequence-file`."
             )
 
         with self.output().open("w") as outfile:
@@ -76,11 +77,11 @@ class PrepareSequence(luigi.Task):
 
     Select right strand and exon/intron/both."""
 
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("custom-logger")
 
     def requires(self):
         tasks = {}
-        if not SequenceConfig().sequence_file:
+        if SequenceConfig().sequence_file == "None":
             tasks["entrez"] = DownloadEntrezGeneSequence()
         if SequenceConfig().is_exonic or SequenceConfig().is_intronic:
             tasks["blast"] = BuildBlastDatabase()
@@ -115,7 +116,7 @@ class PrepareSequence(luigi.Task):
             )
         if len(sequence) > 1:
             self.logger.warning(
-                "More than one record (potential isoforms) found in fasta file. "
+                f"{util.UniCode.warn} More than one record (potential isoforms) found in fasta file. "
                 "Will default to take the first sequence."
             )
             sequence = sequence[0]
