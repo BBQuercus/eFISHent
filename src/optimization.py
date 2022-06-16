@@ -15,36 +15,28 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pe
 
-from config import GeneralConfig
+from config import GeneralConfig, ProbeConfig
 from config import RunConfig
 from secondary_structure import SecondaryStructureFiltering
 import util
 
 
-# TODO add proper mathematical description
 class OptimizeProbeCoverage(luigi.Task):
     """Find the optimal probeset with the highest coverage (fast or optimal)."""
 
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("custom-logger")
 
     def requires(self):
         return SecondaryStructureFiltering()
 
     def output(self):
-        return luigi.LocalTarget(
-            os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_optimal.fasta")
-        )
-
-    def create_data_table(self, sequences: list) -> pd.DataFrame:
-        df = pd.DataFrame(
-            list(map(lambda x: (x.id, len(x)), sequences)), columns=["name", "length"]
-        )
-        df["start"] = (
-            df["name"].str.extract(r"^candidate-\d+-(\d+)$", expand=True).astype(int)
-        )
-        df["end"] = df["start"] + df["length"]
-        df = df.sort_values(by="start", ignore_index=True)
-        return df
+        return {
+            name: luigi.LocalTarget(os.path.join(util.get_output_dir(), filename))
+            for name, filename in [
+                ("probes", f"{util.get_gene_name()}_optimal.fasta"),
+                ("coverage", f"{util.get_gene_name()}.png"),
+            ]
+        }
 
     def run_optimal(self):
         index_block = 0
@@ -82,7 +74,8 @@ class OptimizeProbeCoverage(luigi.Task):
 
     def run(self):
         sequences = list(Bio.SeqIO.parse(self.input().path, "fasta"))
-        self.df = self.create_data_table(sequences)
+        self.df = util.create_data_table(sequences)
+        self.df["end"] += ProbeConfig().spacing
 
         if RunConfig().optimization_method == "greedy":
             assigned = self.run_greedy()
@@ -94,13 +87,13 @@ class OptimizeProbeCoverage(luigi.Task):
                 "Must be greedy or optimal."
             )
 
-        visualize_assignment(self.df, assigned)
+        visualize_assignment(self.df, assigned, self.output()["coverage"].path)
 
         candidates = [sequence for sequence in sequences if sequence.id in assigned]
         util.log_and_check_candidates(
             self.logger, "OptimizeProbeCoverage", len(candidates), len(sequences)
         )
-        Bio.SeqIO.write(candidates, self.output().path, format="fasta")
+        Bio.SeqIO.write(candidates, self.output()["probes"].path, format="fasta")
 
 
 def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
@@ -135,6 +128,7 @@ def greedy_model(df: pd.DataFrame) -> List[str]:
     return assigned
 
 
+# TODO add proper mathematical description
 def optimal_model(
     sequence: list, probes: list, probe_starts: dict, probe_ends: dict
 ) -> List[str]:
@@ -186,13 +180,15 @@ def optimal_model(
     return assigned
 
 
-def visualize_assignment(df: pd.DataFrame, assigned: List[str]) -> np.ndarray:
+def visualize_assignment(
+    df: pd.DataFrame, assigned: List[str], filename: str
+) -> np.ndarray:
     """Visualize the assignment as overlap matrix."""
     start = df["start"].min()
     end = df["end"].max()
     matrix = np.zeros((len(df), end - start))
     for idx, (_, row) in enumerate(df.iterrows()):
-        matrix[idx, start - row["start"] : row["end"] + 1] = (
+        matrix[idx, row["start"] - start : row["end"] - start + 1] = (
             2 if row["name"] in assigned else 1
         )
 
@@ -200,4 +196,4 @@ def visualize_assignment(df: pd.DataFrame, assigned: List[str]) -> np.ndarray:
     plt.title(f"Probe Coverage from {start} to {end}")
     plt.imshow(matrix)
     plt.colorbar()
-    plt.savefig("probe_coverage.png")
+    plt.savefig(filename, dpi=600)
