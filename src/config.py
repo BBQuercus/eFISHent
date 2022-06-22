@@ -35,8 +35,7 @@ class GeneralConfig(luigi.Config):
         default=None,
     )
     reference_annotation = luigi.Parameter(
-        description="Path to reference genome annotation file.",
-        default=None,
+        description="Path to reference genome annotation file.", default=None
     )
     threads = luigi.IntParameter(description="Number of threads to use.", default=42)
     verbosity = luigi.IntParameter(description="Verbosity level.", default=1)
@@ -49,8 +48,7 @@ class GeneralConfig(luigi.Config):
 
 class RunConfig(luigi.Config):
     build_indices = luigi.BoolParameter(
-        description="Build indices for reference genome only.",
-        default=False,
+        description="Build indices for reference genome only.", default=False
     )
     save_intermediates = luigi.BoolParameter(
         description="Save intermediate files?", default=False
@@ -68,20 +66,24 @@ class RunConfig(luigi.Config):
 
 class SequenceConfig(luigi.Config):
     sequence_file = luigi.Parameter(
-        description="Path to the gene's sequence file.", default=None
+        description="Path to the gene's sequence file.", default=""
     )
-    gene_name = luigi.Parameter(description="Gene name.", default=None)
+    ensemble_id = luigi.Parameter(
+        description="Ensembl ID of the gene of interest."
+        "Can be used instead of gene and organism name to download the gene of interest."
+        "Used to filter out the gene of interest from FPKM based filtering.",
+        default="",
+    )
+    gene_name = luigi.Parameter(description="Gene name.", default="")
     organism_name = luigi.Parameter(
-        description="Latin name of the organism.",
-        default="homo sapiens",
+        description="Latin name of the organism.", default=""
     )
     is_intronic = luigi.BoolParameter(
         description="Is the probe intronic?", default=False
     )
     is_exonic = luigi.BoolParameter(description="Is the probe exonic?", default=True)
     is_plus_strand = luigi.BoolParameter(
-        description="Is the probe targeting the plus strand?",
-        default=True,
+        description="Is the probe targeting the plus strand?", default=True
     )
     is_endogenous = luigi.BoolParameter(
         description="Is the probe endogenous?", default=True

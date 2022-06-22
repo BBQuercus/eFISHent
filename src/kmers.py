@@ -18,7 +18,32 @@ from alignment import AlignProbeCandidates
 import util
 
 
+def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: str) -> int:
+    """Count kmers in a sequence.
+
+    Only keep the sequence if it has less than max_kmers kmers.
+    """
+
+    sub_kmers = [
+        str(sequence.seq[i : i + ProbeConfig().kmer_length])
+        for i in range(len(sequence) - ProbeConfig().kmer_length + 1)
+    ]
+    kmer_counts_raw = os.popen(
+        f"jellyfish query\
+            {jellyfish_path}\
+            {' '.join(sub_kmers)}"
+    ).read()
+
+    # Format of jellyfish output: "kmer1 count1\nkmer2 count2\n..."
+    kmer_counts = list(
+        map(lambda x: int(x.split(" ")[1]), kmer_counts_raw.split("\n")[:-1])
+    )
+    return max(kmer_counts)
+
+
 class BuildJellyfishIndex(luigi.Task):
+    """Index building task for jellyfish kmers."""
+
     logger = logging.getLogger("custom-logger")
 
     def output(self):
@@ -57,36 +82,22 @@ class KMerFiltering(luigi.Task):
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_kmer.fasta")
         )
 
-    def count_kmers(self, sequence: Bio.SeqRecord) -> Optional[Bio.SeqRecord.SeqRecord]:
-        """Count kmers in a sequence.
-
-        Only keep the sequence if it has less than max_kmers kmers.
-        """
-
-        sub_kmers = [
-            str(sequence.seq[i : i + ProbeConfig().kmer_length])
-            for i in range(len(sequence) - ProbeConfig().kmer_length + 1)
-        ]
-        kmer_counts_raw = os.popen(
-            f"jellyfish query\
-                {self.input()['jellyfish'].path}\
-                {' '.join(sub_kmers)}"
-        ).read()
-
-        # Format of jellyfish output: "kmer1 count1\nkmer2 count2\n..."
-        kmer_counts = list(
-            map(lambda x: int(x.split(" ")[1]), kmer_counts_raw.split("\n")[:-1])
-        )
-
-        if max(kmer_counts) <= ProbeConfig().max_kmers:
-            return sequence
+    def _get_kmer_count(self, sequence: Bio.SeqRecord) -> int:
+        return get_max_kmer_count(sequence, self.input()["jellyfish"].path)
 
     def run(self):
-        sequences = list(Bio.SeqIO.parse(self.input()["probes"].path, format="fasta"))
+        sequences = list(
+            Bio.SeqIO.parse(self.input()["probes"]["fasta"].path, format="fasta")
+        )
 
         with multiprocessing.Pool(GeneralConfig().threads) as pool:
-            candidates = pool.map(self.count_kmers, sequences)
-        candidates = [c for c in candidates if c is not None]
+            counts = pool.map(self._get_kmer_count, sequences)
+
+        candidates = [
+            seq
+            for seq, count in zip(sequences, counts)
+            if count <= ProbeConfig().max_kmers
+        ]
 
         util.log_and_check_candidates(
             self.logger, "KMerFiltering", len(candidates), len(sequences)
