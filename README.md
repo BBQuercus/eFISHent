@@ -56,18 +56,20 @@ Probe filtering workflow:
 
 * **General**
   * [x] Find a name and description for the tool
-  * [ ] Add mathematical description for model
   * [x] Add basic documentation in CLI and in README.md
   * [x] Add more detailed documentation as wiki page(s)
+  * [ ] Add mathematical description for model
   * [ ] Create bioconda recipe
 
 * **Components**
   * [x] Add spacing option (length +- nt in optimization step)
+  * [x] Remove gene of interest when using rna-seq data
+  * [x] Save alignment and kmer scores to csv output
   * [ ] Allow selection of isoform in entrez query
+  * [ ] Add EnsembleID support in entrez query
   * [ ] Select intron/exon based on blast from sequence
   * [ ] Verify bowtie parameters run on endo and exo targets
-  * [ ] Remove gene of interest when using rna-seq data
-  * [ ] Save alignment and kmer scores to csv output
+  * [ ] Add GTF file reading & saving as parquet/csv step
 
 * **Interface**
   * [x] Clean up output files
@@ -75,6 +77,7 @@ Probe filtering workflow:
   * [x] Decide on way to handle temporary files (tempdir?)
   * [x] Find way to handle rerunning same gene with different parameters (unique name hash?)
   * [x] Find way to make CLI alter config (luigi.configuration.add_config_path)
+  * [ ] Use final output file as indicator if pipeline finished running
 
 * **Testing**
   * [ ] Add unit tests for core components
