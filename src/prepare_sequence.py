@@ -104,7 +104,7 @@ class PrepareSequence(luigi.Task):
     def run(self):
         input_file = (
             self.input()["entrez"].path
-            if self.input()["entrez"]
+            if "entrez" in self.input()
             else SequenceConfig().sequence_file
         )
         sequence = list(Bio.SeqIO.parse(input_file, format="fasta"))
@@ -119,7 +119,7 @@ class PrepareSequence(luigi.Task):
                 f"{util.UniCode.warn} More than one record (potential isoforms) found in fasta file. "
                 "Will default to take the first sequence."
             )
-            sequence = sequence[0]
+        sequence = sequence[0]
 
         if SequenceConfig().is_plus_strand:
             sequence = sequence.reverse_complement(id=True, description=True)

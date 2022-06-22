@@ -51,13 +51,15 @@ def get_gene_name() -> str:
     if sequence_file is not None and os.path.isfile(sequence_file):
         basename = secure_filename(os.path.splitext(os.path.basename(sequence_file))[0])
 
+    # TODO add else for ensembl
+
     # Name based on NCBI parameters
-    if SequenceConfig().gene_name and SequenceConfig().organism_name:
+    elif SequenceConfig().gene_name and SequenceConfig().organism_name:
         basename = secure_filename(
             f"{SequenceConfig().organism_name}_{SequenceConfig().gene_name}"
         )
 
-    if basename is None:
+    elif basename is None:
         raise ValueError(
             "Could not determine gene name. "
             "Please specify the gene name and organism or pass in a sequence file."
