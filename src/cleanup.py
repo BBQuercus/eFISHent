@@ -33,7 +33,7 @@ class CleanUpOutput(luigi.Task):
 
     logger = logging.getLogger("custom-logger")
     is_blast_required = (
-        ProbeConfig().encode_count_table is not None and SequenceConfig().is_endogenous
+        ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
     )
 
     def requires(self):
@@ -76,7 +76,9 @@ class CleanUpOutput(luigi.Task):
                 df, df_fpkm, how="left", left_on="name", right_on="qname"
             )["FPKM"].fillna(0)
 
-        df["name"] = [f"{util.get_gene_name()}-{idx + 1}" for idx in df.index]
+        df["name"] = [
+            f"{util.get_gene_name(hashed=False)}-{idx + 1}" for idx in df.index
+        ]
         return df
 
     def prettify_sequences(self, df: pd.DataFrame) -> list:
@@ -105,6 +107,8 @@ class CleanUpOutput(luigi.Task):
 
         if not RunConfig().save_intermediates:
             for filename in intermediary_files:
-                if filename.endswith((".fasta", ".sam", ".fastq", ".png")):
+                if filename.endswith(
+                    (".fasta", ".sam", ".fastq", ".png", ".txt", ".csv")
+                ):
                     self.logger.debug(f"Removing {filename}")
                     os.remove(filename)

@@ -192,8 +192,8 @@ def visualize_assignment(
             2 if row["name"] in assigned else 1
         )
 
-    plt.figure(figsize=(10, 10))
+    plt.figure()
     plt.title(f"Probe Coverage from {start} to {end}")
     plt.imshow(matrix)
-    plt.colorbar()
-    plt.savefig(filename, dpi=600)
+    plt.tight_layout()
+    plt.savefig(filename, dpi=600, bbox_inches="tight")

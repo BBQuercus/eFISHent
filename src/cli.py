@@ -25,6 +25,18 @@ GROUP_DESCRIPTIONS = {
 }
 
 
+def string_to_bool(value):
+    """Workaround for using typed boolean values as arguments."""
+    if isinstance(value, bool):
+        return value
+    if value.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif value.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
+
+
 def get_parameter_type(param: luigi.Parameter) -> type:
     """Get the type of a parameter."""
     if isinstance(param, luigi.IntParameter):
@@ -32,7 +44,7 @@ def get_parameter_type(param: luigi.Parameter) -> type:
     elif isinstance(param, luigi.FloatParameter):
         return float
     elif isinstance(param, luigi.BoolParameter):
-        return bool
+        return string_to_bool
     return str
 
 
@@ -79,7 +91,9 @@ def _add_groups(parser: argparse.ArgumentParser) -> None:
                 type=get_parameter_type(param),
                 required=name in required_params,
                 default=param._default,
-                help=f"{param.description} [default: {param._default}, required: {name in required_params}]",
+                help=f"{param.description} "
+                f"[default: {'-' if not param._default else param._default}, "
+                f"required: {name in required_params}]",
             )
 
 
@@ -89,7 +103,7 @@ def _parse_args() -> argparse.Namespace:
         prog="eFISHent",
         description=f"{UniCode.bold}eFISHent {UniCode.fishing} {UniCode.dna} to design all your probes.{UniCode.end}",
         epilog=(
-            'See the online wiki at "https://github.com/BBQuercus/deepBlink/wiki" for an overview.\n'
+            'See the online wiki at "https://github.com/BBQuercus/eFISHent/wiki" for an overview.\n'
             f"We hope you enjoy using eFISHent {UniCode.party}!"
         ),
         add_help=False,
@@ -154,4 +168,6 @@ def main():
             tasks = [CleanUpOutput()]
 
         luigi.build(tasks, local_scheduler=True)
+
+    if tasks[-1].complete():
         logger.info(f"{UniCode.party} eFISHent has finished running!")

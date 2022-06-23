@@ -44,26 +44,28 @@ def create_config_hash(
     )
 
 
-def get_gene_name() -> str:
+def get_gene_name(hashed: bool = True) -> str:
     """Return the gene name without extension."""
     # Name based on gene fasta file
     sequence_file = SequenceConfig().sequence_file
     if sequence_file is not None and os.path.isfile(sequence_file):
         basename = secure_filename(os.path.splitext(os.path.basename(sequence_file))[0])
-
-    # TODO add else for ensembl
-
+    # Using Ensembl ID
+    elif SequenceConfig().ensemble_id:
+        basename = secure_filename(SequenceConfig().ensemble_id)
     # Name based on NCBI parameters
     elif SequenceConfig().gene_name and SequenceConfig().organism_name:
         basename = secure_filename(
             f"{SequenceConfig().organism_name}_{SequenceConfig().gene_name}"
         )
-
-    elif basename is None:
+    else:
         raise ValueError(
             "Could not determine gene name. "
-            "Please specify the gene name and organism or pass in a sequence file."
+            "Please specify the gene name and organism, or Ensembl ID, or pass in a sequence file."
         )
+
+    if not hashed:
+        return basename
     return f"{basename}_{create_config_hash(luigi.configuration.get_config())}"
 
 
