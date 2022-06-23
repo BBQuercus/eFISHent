@@ -13,10 +13,10 @@ import Bio.SeqIO
 import Bio.SeqRecord
 import luigi
 
-from config import GeneralConfig
-from config import ProbeConfig
-from kmers import KMerFiltering
-import util
+from .config import GeneralConfig
+from .config import ProbeConfig
+from .kmers import KMerFiltering
+from . import util
 
 
 def get_free_energy(sequence: Bio.SeqRecord) -> float:

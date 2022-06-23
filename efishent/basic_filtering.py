@@ -10,10 +10,10 @@ import Bio.SeqUtils
 import Bio.SeqUtils.MeltingTemp
 import luigi
 
-from config import GeneralConfig
-from config import ProbeConfig
-from generate_probes import GenerateAllProbes
-import util
+from .config import GeneralConfig
+from .config import ProbeConfig
+from .generate_probes import GenerateAllProbes
+from . import util
 
 
 def get_melting_temp(sequence: str) -> float:

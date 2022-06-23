@@ -68,8 +68,8 @@ Probe filtering workflow:
   * [x] Add GTF file reading & saving as parquet/csv step
   * [x] Add EnsembleID support in entrez query
   * [x] Verify bowtie parameters run on endo and exo targets
-  * [ ] Allow selection of isoform in entrez query
-  * [ ] Select intron/exon based on blast from sequence
+  * [x] Select intron/exon based on blast from sequence - doesn't make sense given all different isoforms and variations
+  * [x] Allow selection of isoform in entrez query - not available / different transcript id's yield same sequence
 
 * **Interface**
   * [x] Clean up output files

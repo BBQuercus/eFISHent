@@ -16,14 +16,14 @@ import luigi
 import numpy as np
 import pandas as pd
 
-from config import GeneralConfig
-from config import ProbeConfig
-from config import SequenceConfig
-from basic_filtering import BasicFiltering
-from prepare_sequence import BuildBlastDatabase
-from prepare_sequence import PrepareSequence
-import constants
-import util
+from .config import GeneralConfig
+from .config import ProbeConfig
+from .config import SequenceConfig
+from .basic_filtering import BasicFiltering
+from .prepare_sequence import BuildBlastDatabase
+from .prepare_sequence import PrepareSequence
+from . import constants
+from . import util
 
 
 class BuildBowtieIndex(luigi.Task):
@@ -112,6 +112,17 @@ class AlignProbeCandidates(luigi.Task):
             )
         return tasks
 
+    @staticmethod
+    def read_count_table() -> pd.DataFrame:
+        """Read and verify a RNAseq FPRKM count table."""
+        df_counts = pd.read_csv(ProbeConfig().encode_count_table, sep="\t")
+        counts = df_counts[df_counts["gene_id"].str.contains("ENSG")].copy()
+        counts["clean_id"] = counts["gene_id"].apply(lambda x: x.split(".")[0])
+        return counts[constants.COUNTS_COLUMNS]
+
+    def read_gtf_file(self):
+        return pd.read_parquet(self.input()["gtf"].path)[constants.GTF_COLUMNS]
+
     def align_probes(self, fname_fasta: str, fname_sam: str) -> None:
         """Align probes to the reference genome."""
         # Convert fasta to fastq - bowtie doesn't return read names if not in fastq...
@@ -161,17 +172,6 @@ class AlignProbeCandidates(luigi.Task):
             columns=constants.SAMFILE_COLUMNS,
         )
         return df
-
-    @staticmethod
-    def read_count_table() -> pd.DataFrame:
-        """Read and verify a RNAseq FPRKM count table."""
-        df_counts = pd.read_csv(ProbeConfig().encode_count_table, sep="\t")
-        counts = df_counts[df_counts["gene_id"].str.contains("ENSG")].copy()
-        counts["clean_id"] = counts["gene_id"].apply(lambda x: x.split(".")[0])
-        return counts[constants.COUNTS_COLUMNS]
-
-    def read_gtf_file(self):
-        return pd.read_parquet(self.input()["gtf"].path)[constants.GTF_COLUMNS]
 
     def filter_gene_of_interest(self, df: pd.DataFrame) -> pd.DataFrame:
         """Filter FPKM table to exclude the gene of interest."""

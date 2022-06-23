@@ -1,4 +1,3 @@
-import copy
 import hashlib
 import logging
 import os
@@ -8,8 +7,8 @@ import unicodedata
 import luigi
 import pandas as pd
 
-from config import GeneralConfig
-from config import SequenceConfig
+from .config import GeneralConfig
+from .config import SequenceConfig
 
 
 FASTA_EXT = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")

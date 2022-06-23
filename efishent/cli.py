@@ -2,18 +2,19 @@ import argparse
 import configparser
 import logging
 import os
+import sys
 import tempfile
 
 import luigi
 
-from alignment import BuildBowtieIndex
-from cleanup import CleanUpOutput
-from config import GeneralConfig
-from config import ProbeConfig
-from config import RunConfig
-from config import SequenceConfig
-from kmers import BuildJellyfishIndex
-from util import UniCode
+from .alignment import BuildBowtieIndex
+from .cleanup import CleanUpOutput
+from .config import GeneralConfig
+from .config import ProbeConfig
+from .config import RunConfig
+from .config import SequenceConfig
+from .kmers import BuildJellyfishIndex
+from .util import UniCode
 
 CONFIG_CLASSES = [GeneralConfig, RunConfig, SequenceConfig, ProbeConfig]
 
@@ -110,6 +111,12 @@ def _parse_args() -> argparse.Namespace:
     )
     _add_groups(parser)
     _add_utilities(parser)
+    try:
+        if len(sys.argv) == 1:
+            parser.print_help()
+            parser.exit(0)
+    except Exception as e:
+        print(e)
     return parser.parse_args()
 
 
@@ -143,6 +150,7 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
         custom_level = logging.WARNING
 
     logging.getLogger("luigi").setLevel(luigi_level)
+    logging.getLogger("luigi-interface").setLevel(luigi_level)
     luigi.interface.core.log_level = luigi_level
 
     logger = logging.getLogger("custom-logger")

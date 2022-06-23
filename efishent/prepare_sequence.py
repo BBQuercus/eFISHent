@@ -10,9 +10,9 @@ import subprocess
 import Bio.SeqIO
 import luigi
 
-from config import GeneralConfig
-from config import SequenceConfig
-import util
+from .config import GeneralConfig
+from .config import SequenceConfig
+from . import util
 
 
 class DownloadEntrezGeneSequence(luigi.Task):
@@ -66,6 +66,8 @@ class DownloadEntrezGeneSequence(luigi.Task):
 
 
 class BuildBlastDatabase(luigi.Task):
+    """Build local nucleotide blast database."""
+
     def output(self):
         return [
             luigi.LocalTarget(f"{util.get_genome_name()}.{extension}")
@@ -94,25 +96,13 @@ class PrepareSequence(luigi.Task):
 
     def requires(self):
         tasks = {}
-        if SequenceConfig().sequence_file == "None":
+        if not SequenceConfig().sequence_file:
             tasks["entrez"] = DownloadEntrezGeneSequence()
-        if SequenceConfig().is_exonic or SequenceConfig().is_intronic:
-            tasks["blast"] = BuildBlastDatabase()
         return tasks
 
     def output(self):
         fname = f"{util.get_gene_name()}_sequence.fasta"
         return luigi.LocalTarget(os.path.join(util.get_output_dir(), fname))
-
-    def select_gene_region(
-        self, sequence: Bio.SeqRecord.SeqRecord
-    ) -> Bio.SeqRecord.SeqRecord:
-        """Select exon/intronic regions."""
-        # TODO select exon/intron/both
-        # Create blast database
-        # Blast sequence against database
-        # Parse blast output
-        # Select regions based on genome annotation
 
     def run(self):
         input_file = (
@@ -137,7 +127,5 @@ class PrepareSequence(luigi.Task):
         if SequenceConfig().is_plus_strand:
             sequence = sequence.reverse_complement(id=True, description=True)
             self.logger.debug("Converted sequence to reverse complement.")
-
-        # sequence = self.select_gene_region(sequence)
 
         Bio.SeqIO.write(sequence, self.output().path, format="fasta")

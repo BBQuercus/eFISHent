@@ -15,10 +15,10 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pe
 
-from config import GeneralConfig, ProbeConfig
-from config import RunConfig
-from secondary_structure import SecondaryStructureFiltering
-import util
+from .config import GeneralConfig, ProbeConfig
+from .config import RunConfig
+from .secondary_structure import SecondaryStructureFiltering
+from . import util
 
 
 class OptimizeProbeCoverage(luigi.Task):

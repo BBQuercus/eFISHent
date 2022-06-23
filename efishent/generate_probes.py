@@ -12,9 +12,9 @@ import Bio.SeqUtils
 import Bio.SeqUtils.MeltingTemp
 import luigi
 
-from config import ProbeConfig
-from prepare_sequence import PrepareSequence
-import util
+from .config import ProbeConfig
+from .prepare_sequence import PrepareSequence
+from . import util
 
 
 class GenerateAllProbes(luigi.Task):
@@ -48,4 +48,3 @@ class GenerateAllProbes(luigi.Task):
 
         util.log_and_check_candidates(self.logger, "GenerateAllProbes", len(candidates))
         Bio.SeqIO.write(candidates, self.output().path, "fasta")
-
