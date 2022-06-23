@@ -6,6 +6,8 @@ Filter probes based on alignment score and uniqueness.
 
 import logging
 import os
+import subprocess
+import warnings
 
 from tqdm import tqdm
 import Bio.SeqIO
@@ -44,10 +46,33 @@ class BuildBowtieIndex(luigi.Task):
         ]
 
     def run(self):
-        os.system(
-            f"bowtie-build {os.path.abspath(GeneralConfig().reference_genome)} {util.get_genome_name()} "
-            f"--threads {GeneralConfig().threads}"
-        )
+        args_bowtie = [
+            "bowtie-build",
+            os.path.abspath(GeneralConfig().reference_genome),
+            util.get_genome_name(),
+            "--threads",
+            str(GeneralConfig().threads),
+        ]
+        subprocess.check_call(args_bowtie)
+
+
+class PrepareAnnotationFile(luigi.Task):
+    """Convert gtf annotation file to parquet.
+
+    Doesn't change any data but greatly speeds up subsequent I/O (~10x increase).
+    """
+
+    logger = logging.getLogger("custom-logger")
+
+    def output(self):
+        return luigi.LocalTarget(GeneralConfig().reference_annotation + ".parq")
+
+    def run(self):
+        warnings.filterwarnings("ignore")
+        df = gtfparse.read_gtf(GeneralConfig().reference_annotation)
+        warnings.filterwarnings("default")
+        self.logger.debug("Read gtf file with gtfparse")
+        df.to_parquet(self.output().path)
 
 
 class AlignProbeCandidates(luigi.Task):
@@ -55,7 +80,7 @@ class AlignProbeCandidates(luigi.Task):
 
     logger = logging.getLogger("custom-logger")
     is_blast_required = (
-        ProbeConfig().encode_count_table is not None and SequenceConfig().is_endogenous
+        ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
     )
 
     def _requires(self):
@@ -71,6 +96,7 @@ class AlignProbeCandidates(luigi.Task):
         tasks = {"probes": BasicFiltering()}
         if self.is_blast_required:
             tasks["blastseq"] = PrepareSequence()
+            tasks["gtf"] = PrepareAnnotationFile()
         return tasks
 
     def output(self):
@@ -128,6 +154,17 @@ class AlignProbeCandidates(luigi.Task):
         )
         return df
 
+    @staticmethod
+    def read_count_table() -> pd.DataFrame:
+        """Read and verify a RNAseq FPRKM count table."""
+        df_counts = pd.read_csv(ProbeConfig().encode_count_table, sep="\t")
+        counts = df_counts[df_counts["gene_id"].str.contains("ENSG")].copy()
+        counts["clean_id"] = counts["gene_id"].apply(lambda x: x.split(".")[0])
+        return counts[constants.COUNTS_COLUMNS]
+
+    def read_gtf_file(self):
+        return pd.read_parquet(self.input()["gtf"].path)[constants.GTF_COLUMNS]
+
     def filter_gene_of_interest(self, df: pd.DataFrame) -> pd.DataFrame:
         """Filter FPKM table to exclude the gene of interest."""
         # Filter using provided EnsembleID directly
@@ -139,14 +176,22 @@ class AlignProbeCandidates(luigi.Task):
 
         # Filter using blast
         fname = os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_blast.txt")
-        os.system(
-            f"blastn\
-                -db {util.get_genome_name()}\
-                -query {self.input()['blastseq'].path}\
-                -task megablast\
-                -outfmt 6\
-                -num_threads {GeneralConfig().threads} > {fname}"
-        )
+        args_blast = [
+            "blastn",
+            "-db",
+            util.get_genome_name(),
+            "-query",
+            self.input()["blastseq"].path,
+            "-task",
+            "megablast",
+            "-outfmt",
+            "6",
+            "-num_threads",
+            GeneralConfig().threads,
+            ">",
+            fname,
+        ]
+        subprocess.check_call(args_blast)
         df_blast = pd.read_csv(fname, sep="\t", names=constants.BLAST_COLUMNS)
         df_blast = df_blast[
             (df_blast["pident"] >= 98)
@@ -178,14 +223,6 @@ class AlignProbeCandidates(luigi.Task):
             break
 
         return df
-
-    @staticmethod
-    def read_count_table() -> pd.DataFrame:
-        """Read and verify a RNAseq FPRKM count table."""
-        df_counts = pd.read_csv(ProbeConfig().encode_count_table, sep="\t")
-        counts = df_counts[df_counts["gene_id"].str.contains("ENSG")].copy()
-        counts["clean_id"] = counts["gene_id"].apply(lambda x: x.split(".")[0])
-        return counts[constants.COUNTS_COLUMNS]
 
     def get_maximum_fpkm(
         self, df_sam: pd.DataFrame, df_counts: pd.DataFrame, df_gtf: pd.DataFrame
@@ -242,29 +279,23 @@ class AlignProbeCandidates(luigi.Task):
         df_max_fpkm = dfs.groupby("qname", as_index=False)["FPKM"].max()
         return df_max_fpkm
 
-    def read_gtf_file(self):
-        return gtfparse.read_gtf(GeneralConfig().reference_annotation)[
-            constants.GTF_COLUMNS
-        ]
-
     def run(self):
         fname_fasta = self.input()["probes"].path
         fname_sam = os.path.splitext(fname_fasta)[0] + ".sam"
         self.align_probes(fname_fasta, fname_sam)
         df_sam = self.filter_unique_probes(fname_sam)
 
-        if ProbeConfig().encode_count_table:
+        if self.is_blast_required:
             df_gtf = self.read_gtf_file()
             df_counts = self.read_count_table()
             df_max_fpkm = self.get_maximum_fpkm(df_sam, df_counts, df_gtf)
             df_max_fpkm.to_csv(self.output()["table"].path, index=False)
-            candidates = df_max_fpkm[
-                df_max_fpkm["FPKM"] > ProbeConfig().max_off_target_fpkm
+            df_sam = df_max_fpkm[
+                df_max_fpkm["FPKM"] <= ProbeConfig().max_off_target_fpkm
             ]
 
         # Filter candidates found in samfile
         sequences = list(Bio.SeqIO.parse(fname_fasta, "fasta"))
-        # TODO error overwriting candidates
         candidates = [
             seq for seq in tqdm(sequences) if seq.id in df_sam["qname"].values
         ]

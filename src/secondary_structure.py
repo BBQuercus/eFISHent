@@ -2,11 +2,11 @@
 Predict secondary structure of probes and filter them based on deltaG.
 """
 
-from typing import Tuple
 import logging
 import multiprocessing
 import os
 import re
+import subprocess
 import tempfile
 
 import Bio.SeqIO
@@ -26,7 +26,8 @@ def get_free_energy(sequence: Bio.SeqRecord) -> float:
     with tempfile.TemporaryDirectory() as tmpdirname:
         fname = os.path.join(tmpdirname, "input.fasta")
         Bio.SeqIO.write(sequence, fname, "fasta")
-        sec = os.popen(f"Fold {fname} - --bracket --MFE").read()
+        args_fold = ["Fold", fname, "-", "--bracket", "--MFE"]
+        sec = subprocess.check_output(args_fold, stderr=subprocess.STDOUT).decode()
 
     # Format with secondary structure:
     # >ENERGY = -deltaG NAME DESCRIPTION\nSEQENCE\nDOT-BRACKET

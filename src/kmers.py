@@ -3,14 +3,14 @@ Create jellyfish indices of the reference genome.
 Filter probes based on jellyfish indices.
 """
 
-from typing import Optional
 import logging
 import multiprocessing
 import os
+import subprocess
 
-import luigi
 import Bio.SeqIO
 import Bio.SeqRecord
+import luigi
 
 from config import GeneralConfig
 from config import ProbeConfig
@@ -28,17 +28,14 @@ def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: str) -> int:
         str(sequence.seq[i : i + ProbeConfig().kmer_length])
         for i in range(len(sequence) - ProbeConfig().kmer_length + 1)
     ]
-    kmer_counts_raw = os.popen(
-        f"jellyfish query\
-            {jellyfish_path}\
-            {' '.join(sub_kmers)}"
-    ).read()
+    args_jellyfish = ["jellyfish", "query", jellyfish_path, " ".join(sub_kmers)]
+    kmer_counts_raw = subprocess.check_output(args_jellyfish, stderr=subprocess.STDOUT).decode()
 
     # Format of jellyfish output: "kmer1 count1\nkmer2 count2\n..."
     kmer_counts = list(
         map(lambda x: int(x.split(" ")[1]), kmer_counts_raw.split("\n")[:-1])
     )
-    return max(kmer_counts)
+    return max(kmer_counts) if kmer_counts else 0
 
 
 class BuildJellyfishIndex(luigi.Task):
@@ -57,16 +54,24 @@ class BuildJellyfishIndex(luigi.Task):
                 f"{util.UniCode.warn} Jellyfish index will be created but not used because max_kmers <= 2."
             )
 
-        os.system(
-            f"jellyfish count\
-                --mer-len {ProbeConfig().kmer_length}\
-                --out-counter-len 1\
-                --lower-count 2\
-                --size 100M\
-                --threads {GeneralConfig().threads}\
-                --output {self.output().path}\
-                {GeneralConfig().reference_genome}"
-        )
+        args_jellyfish = [
+            "jellyfish",
+            "count",
+            "--mer-len",
+            ProbeConfig().kmer_length,
+            "--out-counter-len",
+            "1",
+            "--lower-count",
+            "2",
+            "--size",
+            "100M",
+            "--threads",
+            GeneralConfig().threads,
+            "--output",
+            self.output().path,
+            GeneralConfig().reference_genome,
+        ]
+        subprocess.check_call(args_jellyfish)
 
 
 class KMerFiltering(luigi.Task):
