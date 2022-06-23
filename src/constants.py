@@ -11,9 +11,6 @@ SAMFILE_COLUMNS = [
     "seq",
     "qual",
     "NM",
-    "MD",
-    "AS",
-    "XS",
 ]
 
 BLAST_COLUMNS = [

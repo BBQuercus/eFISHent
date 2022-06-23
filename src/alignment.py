@@ -15,7 +15,6 @@ import gtfparse
 import luigi
 import numpy as np
 import pandas as pd
-import pysam
 
 from config import GeneralConfig
 from config import ProbeConfig
@@ -113,39 +112,48 @@ class AlignProbeCandidates(luigi.Task):
             )
         return tasks
 
-    @staticmethod
-    def align_probes(fname_fasta: str, fname_sam: str) -> None:
+    def align_probes(self, fname_fasta: str, fname_sam: str) -> None:
         """Align probes to the reference genome."""
-        # Convert fasta to fastq - bowtie doesn't return read names if not fastq...
+        # Convert fasta to fastq - bowtie doesn't return read names if not in fastq...
         fname_fastq = fname_fasta.rstrip("a") + "q"
-        os.system(f"seqtk seq -F 'I' {fname_fasta} > {fname_fastq}")
+        with open(fname_fasta, "r") as fasta, open(fname_fastq, "w") as fastq:
+            for record in Bio.SeqIO.parse(fasta, "fasta"):
+                record.letter_annotations["phred_quality"] = [40] * len(record)
+                Bio.SeqIO.write(record, fastq, "fastq")
 
-        # TODO change params to match endo/non-endo (currently only endo!)
-        # TODO --quiet output to logger
-        endo_exo_param = (
-            ""
-            if SequenceConfig().is_endogenous
-            else f"-m {ProbeConfig().max_off_targets}"
-        )
-        os.system(
-            f"bowtie\
-                -x {util.get_genome_name()} {fname_fastq}\
-                --threads {GeneralConfig().threads}\
-                {endo_exo_param}\
-                --sam -S {fname_sam}"
+        alignments = str(max(ProbeConfig().max_off_targets + 1, 1))
+        endo_exo_param = [] if SequenceConfig().is_endogenous else ["-m", alignments]
+        args_bowtie = [
+            "bowtie",
+            "-x",
+            util.get_genome_name(),
+            fname_fastq,
+            "--threads",
+            str(GeneralConfig().threads),
+            *endo_exo_param,
+            "--sam",
+            "-S",
+            fname_sam,
+        ]
+        self.logger.debug(f"Using bowtie command - {' '.join(args_bowtie)}")
+        subprocess.check_call(
+            args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
         )
 
-    @staticmethod
-    def filter_unique_probes(fname_sam: str) -> pd.DataFrame:
+    def filter_unique_probes(self, fname_sam: str) -> pd.DataFrame:
         """Filter probes based on alignment score and uniqueness."""
         # 60 - uniquely mapped read, regardless of number of mismatches / indels
         # 4 – flag for unmapped read
-        pysam_parameters = (
+        flags = (
             ["--min-MQ", "60"]
             if SequenceConfig().is_endogenous
-            else ["--require_flags", "4"]
+            else ["--require-flags", "4"]
         )
-        filtered_sam = pysam.view(*pysam_parameters, fname_sam)
+        args_samtools = ["samtools", "view", fname_sam, *flags]
+        self.logger.debug(f"Using samtools command - {' '.join(args_samtools)}")
+        filtered_sam = subprocess.check_output(
+            args_samtools, stderr=subprocess.STDOUT
+        ).decode()
 
         # Parse tab and newline delimited pysam output
         df = pd.DataFrame(
