@@ -173,3 +173,5 @@ data_tables/
 .vscode/
 *.tsv
 *.png
+*.parq
+*.ipynb

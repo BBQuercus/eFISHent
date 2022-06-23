@@ -3,11 +3,12 @@ Download Entrez Gene Probes from NCBI.
 Select the right strand and select intronic/exonic regions.
 """
 
-import os
 import logging
+import os
+import subprocess
 
-import luigi
 import Bio.SeqIO
+import luigi
 
 from config import GeneralConfig
 from config import SequenceConfig
@@ -24,26 +25,34 @@ class DownloadEntrezGeneSequence(luigi.Task):
         return luigi.LocalTarget(os.path.join(util.get_output_dir(), fname))
 
     def run(self):
-        if not SequenceConfig().gene_name or not SequenceConfig().organism_name:
+        has_ensembl = SequenceConfig().ensemble_id
+        has_gene_and_organism = (
+            SequenceConfig().gene_name and SequenceConfig().organism_name
+        )
+        if not has_ensembl and not has_gene_and_organism:
             raise ValueError(
                 "For downloading Entrez Gene Probes, "
-                " you need to specify the gene name and organism name."
+                " you need to specify the gene name and organism name or provide an Emsembl ID."
             )
 
-        fasta = os.popen(
-            f"esearch\
-                -db gene\
-                -query '{SequenceConfig().gene_name} [GENE]\
-                    {SequenceConfig().organism_name} [ORGN]' |"
-            " elink\
-                -db gene\
-                -target nuccore\
-                -name gene_nuccore_refseqrna |"
-            " efetch -format fasta"
-        ).read()
-        self.logger.debug(
-            f"Fetched Entrez Gene Probes for {SequenceConfig().gene_name} in {SequenceConfig().organism_name}."
-        )
+        if has_ensembl:
+            query = SequenceConfig().ensemble_id
+        else:
+            query = f"{SequenceConfig().gene_name} [GENE] {SequenceConfig().organism_name} [ORGN]"
+        args_search = ["esearch", "-db", "gene", "-query", query]
+        args_link = [
+            "elink",
+            "-db",
+            "gene",
+            "-target",
+            "nuccore",
+            "-name",
+            "gene_nuccore_refseqrna",
+        ]
+        args_fetch = ["efetch", "-format", "fasta"]
+        args_entrez = [*args_search, "|", *args_link, "|", *args_fetch]
+        self.logger.debug(f"Fetching from Entrez using query '{query}'.")
+        fasta = subprocess.check_output(args_entrez, stderr=subprocess.STDOUT).decode()
 
         if not fasta:
             raise LookupError(
@@ -64,12 +73,16 @@ class BuildBlastDatabase(luigi.Task):
         ]
 
     def run(self):
-        os.system(
-            f"makeblastdb\
-                -dbtype nucl\
-                -in {GeneralConfig().reference_genome}\
-                -out {util.get_genome_name()}"
-        )
+        args_blast = [
+            "makeblastdb",
+            "-dbtype",
+            "nucl",
+            "-in",
+            GeneralConfig().reference_genome,
+            "-out",
+            util.get_genome_name(),
+        ]
+        subprocess.check_call(args_blast)
 
 
 class PrepareSequence(luigi.Task):

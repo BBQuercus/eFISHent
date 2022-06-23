@@ -65,11 +65,11 @@ Probe filtering workflow:
   * [x] Add spacing option (length +- nt in optimization step)
   * [x] Remove gene of interest when using rna-seq data
   * [x] Save alignment and kmer scores to csv output
+  * [x] Add GTF file reading & saving as parquet/csv step
+  * [x] Add EnsembleID support in entrez query
+  * [x] Verify bowtie parameters run on endo and exo targets
   * [ ] Allow selection of isoform in entrez query
-  * [ ] Add EnsembleID support in entrez query
   * [ ] Select intron/exon based on blast from sequence
-  * [ ] Verify bowtie parameters run on endo and exo targets
-  * [ ] Add GTF file reading & saving as parquet/csv step
 
 * **Interface**
   * [x] Clean up output files
@@ -77,7 +77,8 @@ Probe filtering workflow:
   * [x] Decide on way to handle temporary files (tempdir?)
   * [x] Find way to handle rerunning same gene with different parameters (unique name hash?)
   * [x] Find way to make CLI alter config (luigi.configuration.add_config_path)
-  * [ ] Use final output file as indicator if pipeline finished running
+  * [x] Use final output file as indicator if pipeline finished running
+  * [x] Proper boolean support :monkey:
 
 * **Testing**
   * [ ] Add unit tests for core components
