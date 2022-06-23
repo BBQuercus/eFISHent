@@ -10,7 +10,7 @@ from setuptools import setup
 
 setup(
     # Description
-    name="efishent",
+    name="eFISHent",
     version="0.0.1",
     license="MIT",
     description="RNA FISH oligos/probes design tool.",
@@ -22,16 +22,22 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=[
+        "biopython",
+        "gtfparse",
+        "luigi",
         "matplotlib",
         "numpy",
         "pandas",
-        "luigi",
-        "gtfparse",
-        "biopython",
-        "tqdm",
+        "pyarrow",
         "pyomo",
+        "tqdm",
     ],
-    entry_points={"console_scripts": ["efishent = efishent.cli:main"]},
+    entry_points={
+        "console_scripts": [
+            "efishent = eFISHent.cli:main",
+            "eFISHent = eFISHent.cli:main",
+        ]
+    },
     # Metadata
     author="Bastian Eichenberger",
     author_email="bastian@eichenbergers.ch",
