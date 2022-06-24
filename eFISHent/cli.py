@@ -9,14 +9,10 @@ import luigi
 
 from .alignment import BuildBowtieIndex
 from .cleanup import CleanUpOutput
-from .config import GeneralConfig
-from .config import ProbeConfig
-from .config import RunConfig
-from .config import SequenceConfig
+from .constants import CONFIG_CLASSES
 from .kmers import BuildJellyfishIndex
 from .util import UniCode
 
-CONFIG_CLASSES = [GeneralConfig, RunConfig, SequenceConfig, ProbeConfig]
 
 GROUP_DESCRIPTIONS = {
     f"{UniCode.blue} General": "General configuration that will be used for all tasks.",
@@ -85,6 +81,7 @@ def _add_groups(parser: argparse.ArgumentParser) -> None:
     ]
     required_params = ["reference_genome"]
 
+    # TODO fix bug where false default bool params are also "-"
     for group, config_class in zip(groups, CONFIG_CLASSES):
         for name, param in config_class().get_params():
             group.add_argument(

@@ -56,7 +56,6 @@ class SecondaryStructureFiltering(luigi.Task):
     def run(self):
         sequences = list(Bio.SeqIO.parse(self.input().path, format="fasta"))
 
-        # TODO inclue data tables in package
         with multiprocessing.Pool(GeneralConfig().threads) as pool:
             free_energies = pool.map(get_free_energy, sequences)
 

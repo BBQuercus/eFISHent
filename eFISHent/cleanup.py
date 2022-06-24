@@ -61,7 +61,17 @@ class CleanUpOutput(luigi.Task):
 
         # Add data columns
         df["GC"] = [round(get_gc_content(seq.seq), 2) for seq in sequences]
-        df["TM"] = [round(get_melting_temp(seq.seq), 2) for seq in sequences]
+        df["TM"] = [
+            round(
+                get_melting_temp(
+                    seq.seq,
+                    ProbeConfig().na_concentration,
+                    ProbeConfig().formamide_concentration,
+                ),
+                2,
+            )
+            for seq in sequences
+        ]
         df["deltaG"] = [get_free_energy(seq) for seq in sequences]
 
         # Add jellyfish count

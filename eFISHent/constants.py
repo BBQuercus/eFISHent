@@ -1,3 +1,8 @@
+from .config import GeneralConfig
+from .config import ProbeConfig
+from .config import RunConfig
+from .config import SequenceConfig
+
 SAMFILE_COLUMNS = [
     "qname",
     "flag",
@@ -39,3 +44,7 @@ GTF_COLUMNS = [
     "exon_number",
     "feature",
 ]
+
+CONFIG_CLASSES = [GeneralConfig, RunConfig, SequenceConfig, ProbeConfig]
+
+FASTA_EXT = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")

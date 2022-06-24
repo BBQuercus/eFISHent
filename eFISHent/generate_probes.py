@@ -30,21 +30,38 @@ class GenerateAllProbes(luigi.Task):
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_all.fasta")
         )
 
-    def run(self):
-        sequence = Bio.SeqIO.read(self.input().path, format="fasta")
+    def create_candidate_probes(
+        self, sequence: Bio.SeqRecord.SeqRecord, min_length: int, max_length: int
+    ) -> list:
+        """Create a set of all subsequences of sequence with the right lengths."""
+        if min_length > max_length:
+            raise ValueError(
+                "Minimum probe length must be smaller or equal to maximum length. "
+                f"{min_length} > {max_length}!"
+            )
+        if min_length >= len(sequence):
+            raise ValueError(
+                "Minimum probe length must be shorter than the sequence length. "
+                f"{min_length} >= {len(sequence)}!"
+            )
 
         candidates = []
         idx = 1
-        for length in tqdm(
-            range(ProbeConfig().min_length, ProbeConfig().max_length + 1)
-        ):
-            for i in range(0, len(sequence.seq) - length + 1):
+        for length in tqdm(range(min_length, max_length + 1)):
+            for start_pos in range(0, len(sequence) - length + 1):
                 candidates.append(
                     Bio.SeqRecord.SeqRecord(
-                        sequence.seq[i : i + length], id=f"candidate-{idx}-{i}"
+                        sequence.seq[start_pos : start_pos + length],
+                        id=f"candidate-{idx}-{start_pos}",
                     )
                 )
                 idx += 1
+        return candidates
 
+    def run(self):
+        sequence = Bio.SeqIO.read(self.input().path, format="fasta")
+        candidates = self.create_candidate_probes(
+            sequence, ProbeConfig().min_length, ProbeConfig().max_length
+        )
         util.log_and_check_candidates(self.logger, "GenerateAllProbes", len(candidates))
         Bio.SeqIO.write(candidates, self.output().path, "fasta")

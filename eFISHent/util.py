@@ -9,9 +9,7 @@ import pandas as pd
 
 from .config import GeneralConfig
 from .config import SequenceConfig
-
-
-FASTA_EXT = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
+from .constants import FASTA_EXT
 
 
 def get_output_dir() -> str:
