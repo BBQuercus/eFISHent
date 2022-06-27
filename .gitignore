@@ -167,7 +167,6 @@ cython_debug/
 *.ntf
 *.nto
 *.jf
-data_tables/
 
 # Other
 .vscode/

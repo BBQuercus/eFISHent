@@ -40,6 +40,7 @@ class OptimizeProbeCoverage(luigi.Task):
         }
 
     def run_optimal(self):
+        """Run the optimal model by parallelizing non-overlapping segments."""
         index_block = 0
         prev_probe = self.df.iloc[0]
         blocks = []
@@ -54,19 +55,20 @@ class OptimizeProbeCoverage(luigi.Task):
         self.df["block"] = blocks
 
         with multiprocessing.Pool(GeneralConfig().threads) as pool:
-            _assigned = pool.map(self.run_optimal_block, blocks)
+            _assigned = pool.map(self.run_optimal_block, self.df["block"].unique())
 
         # Flatten the list of lists
         assigned = functools.reduce(lambda x, y: x + y, _assigned)
         return assigned
 
     def run_optimal_block(self, block: int) -> List[str]:
+        """Run a single non-overlapping block."""
         df = self.df[self.df["block"] == block]
         sequence = list(range(df["start"].min(), df["end"].max()))
         probes = df["name"].values
         probe_starts = {k: v for _, (k, v) in df[["name", "start"]].iterrows()}
         probe_ends = {k: v for _, (k, v) in df[["name", "end"]].iterrows()}
-        assigned = optimal_model(sequence, probes, probe_starts, probe_ends)
+        assigned = optimal_model(sequence, probes, probe_starts, probe_ends, self.time_limit)
         return assigned
 
     def run_greedy(self):
@@ -81,6 +83,7 @@ class OptimizeProbeCoverage(luigi.Task):
         if RunConfig().optimization_method == "greedy":
             assigned = self.run_greedy()
         elif RunConfig().optimization_method == "optimal":
+            self.time_limit = RunConfig().optimization_time_limit
             assigned = self.run_optimal()
         else:
             raise ValueError(
@@ -131,7 +134,7 @@ def greedy_model(df: pd.DataFrame) -> List[str]:
 
 # TODO add proper mathematical description
 def optimal_model(
-    sequence: list, probes: list, probe_starts: dict, probe_ends: dict
+    sequence: list, probes: list, probe_starts: dict, probe_ends: dict, time_limit:int
 ) -> List[str]:
     """Run the optimal mathematical model."""
     # Model to make non-contiguous connections across a sequence
@@ -174,7 +177,7 @@ def optimal_model(
     model.C1 = pe.Constraint(model.probes, rule=cover)
     model.C2 = pe.Constraint(model.sequence, rule=over_cover)
     solver = pe.SolverFactory("glpk")
-    solver.options["tmlim"] = RunConfig().optimization_time_limit
+    solver.options["tmlim"] = time_limit
     solver.solve(model, tee=False)
 
     assigned = [name for name, assign in model.assign.get_values().items() if assign]
@@ -187,9 +190,9 @@ def visualize_assignment(
     """Visualize the assignment as overlap matrix."""
     start = df["start"].min()
     end = df["end"].max()
-    matrix = np.zeros((len(df), end - start))
+    matrix = np.zeros((len(df) + 1, end - start))
     for idx, (_, row) in enumerate(df.iterrows()):
-        matrix[idx, row["start"] - start : row["end"] - start + 1] = (
+        matrix[idx + 1, row["start"] - start : row["end"] - start + 1] = (
             2 if row["name"] in assigned else 1
         )
 

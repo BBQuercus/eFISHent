@@ -147,18 +147,21 @@ def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
 def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
     """Set the logging level of luigi and custom logger."""
     LOG_FORMAT = "%(asctime)s %(levelname)-4s [%(name)s] %(message)s"
-    logging.basicConfig(format=LOG_FORMAT, force=True)
 
     if debug:
         luigi_level = "DEBUG"
         custom_level = logging.DEBUG
+        logfile = "eFISHent.log"
     elif verbose:
         luigi_level = "WARNING"
         custom_level = logging.INFO
+        logfile = None
     else:
         luigi_level = "WARNING"
         custom_level = logging.WARNING
+        logfile = None
 
+    logging.basicConfig(filename=logfile,format=LOG_FORMAT, force=True)
     logging.getLogger("luigi").setLevel(luigi_level)
     logging.getLogger("luigi-interface").setLevel(luigi_level)
     luigi.interface.core.log_level = luigi_level
