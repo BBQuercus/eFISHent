@@ -23,6 +23,11 @@ def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: os.PathLike) -> 
 
     Only keep the sequence if it has less than max_kmers kmers.
     """
+    if len(sequence.seq) < ProbeConfig().kmer_length:
+        raise ValueError(
+            f"Probe length must be larger than kmer length ({ProbeConfig().kmer_length})."
+        )
+
     sub_kmers = [
         str(sequence.seq[i : i + ProbeConfig().kmer_length])
         for i in range(len(sequence) - ProbeConfig().kmer_length + 1)
@@ -72,6 +77,7 @@ class BuildJellyfishIndex(luigi.Task):
             self.output().path,
             GeneralConfig().reference_genome,
         ]
+        self.logger.debug(f"Running jellyfish with - {' '.join(args_jellyfish)}")
         subprocess.check_call(args_jellyfish)
 
 
