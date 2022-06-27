@@ -9,12 +9,12 @@ import os
 import subprocess
 import warnings
 
-from tqdm import tqdm
 import Bio.SeqIO
 import gtfparse
 import luigi
 import numpy as np
 import pandas as pd
+import pysam
 
 from .config import GeneralConfig
 from .config import ProbeConfig
@@ -49,8 +49,6 @@ class BuildBowtieIndex(luigi.Task):
             "bowtie-build",
             os.path.abspath(GeneralConfig().reference_genome),
             util.get_genome_name(),
-            "--threads",
-            str(GeneralConfig().threads),
         ]
         subprocess.check_call(args_bowtie)
 
@@ -136,7 +134,6 @@ class AlignProbeCandidates(luigi.Task):
         endo_exo_param = [] if SequenceConfig().is_endogenous else ["-m", alignments]
         args_bowtie = [
             "bowtie",
-            "-x",
             util.get_genome_name(),
             fname_fastq,
             "--threads",
@@ -160,27 +157,25 @@ class AlignProbeCandidates(luigi.Task):
             if SequenceConfig().is_endogenous
             else ["--require-flags", "4"]
         )
-        args_samtools = ["samtools", "view", fname_sam, *flags]
-        self.logger.debug(f"Using samtools command - {' '.join(args_samtools)}")
-        filtered_sam = subprocess.check_output(
-            args_samtools, stderr=subprocess.STDOUT
-        ).decode()
+        end = 14 if SequenceConfig().is_endogenous else 12
+        self.logger.debug(f"Using samtools command - {' '.join(flags)}")
+        filtered_sam = pysam.view(fname_sam, *flags)
 
         # Parse tab and newline delimited pysam output
         df = pd.DataFrame(
             [row.split("\t") for row in filtered_sam.split("\n")],
-            columns=constants.SAMFILE_COLUMNS,
+            columns=constants.SAMFILE_COLUMNS[:end],
         )
         return df
 
     def filter_gene_of_interest(self, df: pd.DataFrame) -> pd.DataFrame:
         """Filter FPKM table to exclude the gene of interest."""
-        # Filter using provided EnsembleID directly
-        if SequenceConfig().ensemble_id:
+        # Filter using provided EnsemblID directly
+        if SequenceConfig().ensembl_id:
             self.logger.debug(
-                f"Filtering directly using EmsembleID {SequenceConfig().ensemble_id}"
+                f"Filtering directly using EmsembleID {SequenceConfig().ensembl_id}"
             )
-            return df[df["clean_id"] != SequenceConfig().ensemble_id]
+            return df[df["clean_id"] != SequenceConfig().ensembl_id]
 
         # Filter using blast
         fname = os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_blast.txt")
@@ -251,7 +246,7 @@ class AlignProbeCandidates(luigi.Task):
         # Match FPKM to the probe candidates' off-target genomic locations
         # Loop over chromosome/rname to keep loci separated
         dfs = []
-        for sequence, df_sequence in tqdm(df_sam.groupby("rname")):
+        for sequence, df_sequence in df_sam.groupby("rname"):
             df_fpkm_sequence = df_fpkm[df_fpkm["seqname"] == sequence]
             gene_start = df_fpkm_sequence["start"].astype(int).values
             gene_end = df_fpkm_sequence["end"].astype(int).values
@@ -304,9 +299,7 @@ class AlignProbeCandidates(luigi.Task):
 
         # Filter candidates found in samfile
         sequences = list(Bio.SeqIO.parse(fname_fasta, "fasta"))
-        candidates = [
-            seq for seq in tqdm(sequences) if seq.id in df_sam["qname"].values
-        ]
+        candidates = [seq for seq in sequences if seq.id in df_sam["qname"].values]
         util.log_and_check_candidates(
             self.logger, "AlignProbeCandidates", len(candidates), len(sequences)
         )

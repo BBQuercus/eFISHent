@@ -15,6 +15,8 @@ SAMFILE_COLUMNS = [
     "tlen",
     "seq",
     "qual",
+    "XA",
+    "MD",
     "NM",
 ]
 
@@ -48,3 +50,17 @@ GTF_COLUMNS = [
 CONFIG_CLASSES = [GeneralConfig, RunConfig, SequenceConfig, ProbeConfig]
 
 FASTA_EXT = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
+
+_WINDOWS_DEVICE_FILES = (
+    "CON",
+    "AUX",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "PRN",
+    "NUL",
+)

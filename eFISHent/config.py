@@ -37,7 +37,7 @@ class GeneralConfig(luigi.Config):
         description="Path to reference genome annotation (gene transfer format / gtf) file.",
         default="",
     )
-    threads = luigi.IntParameter(description="Number of threads to launch.", default=42)
+    threads = luigi.IntParameter(description="Number of threads to launch.", default=2)
     output_dir = luigi.Parameter(
         description="Path to output directory. "
         "If not specified, will use the current directory.",
@@ -73,7 +73,7 @@ class SequenceConfig(luigi.Config):
         "Use this if the sequence can't be easily downloaded or if only certain regions should be targeted.",
         default="",
     )
-    ensemble_id = luigi.Parameter(
+    ensembl_id = luigi.Parameter(
         description="Ensembl ID of the gene of interest."
         "Can be used instead of gene and organism name to download the gene of interest."
         "Used to filter out the gene of interest from FPKM based filtering - "
@@ -149,7 +149,7 @@ class ProbeConfig(luigi.Config):
     max_kmers = luigi.IntParameter(
         description="Highest count of sub-k-mers found in reference genome.", default=5
     )
-    max_deltaG = luigi.FloatParameter(
+    max_deltag = luigi.FloatParameter(
         description="Maximum predicted deltaG in kcal/mol. "
         "Note: deltaGs range from 0 (no secondary structures) to increasingly negative values!",
         default=-10.0,

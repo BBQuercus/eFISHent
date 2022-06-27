@@ -15,7 +15,8 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pe
 
-from .config import GeneralConfig, ProbeConfig
+from .config import GeneralConfig
+from .config import ProbeConfig
 from .config import RunConfig
 from .secondary_structure import SecondaryStructureFiltering
 from . import util

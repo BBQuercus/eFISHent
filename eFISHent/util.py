@@ -10,12 +10,13 @@ import pandas as pd
 from .config import GeneralConfig
 from .config import SequenceConfig
 from .constants import FASTA_EXT
+from .constants import _WINDOWS_DEVICE_FILES
 
 
 def get_output_dir() -> str:
     """Return the output directory."""
     output_dir = GeneralConfig().output_dir
-    if output_dir != "None" and not os.path.exists(output_dir):
+    if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
     else:
         output_dir = os.getcwd()
@@ -48,8 +49,8 @@ def get_gene_name(hashed: bool = True) -> str:
     if sequence_file is not None and os.path.isfile(sequence_file):
         basename = secure_filename(os.path.splitext(os.path.basename(sequence_file))[0])
     # Using Ensembl ID
-    elif SequenceConfig().ensemble_id:
-        basename = secure_filename(SequenceConfig().ensemble_id)
+    elif SequenceConfig().ensembl_id:
+        basename = secure_filename(SequenceConfig().ensembl_id)
     # Name based on NCBI parameters
     elif SequenceConfig().gene_name and SequenceConfig().organism_name:
         basename = secure_filename(
@@ -71,9 +72,10 @@ def get_genome_name() -> str:
     if GeneralConfig().reference_genome is None:
         raise ValueError("Reference genome must be passed.")
 
-    if not os.path.exists(
-        GeneralConfig().reference_genome
-    ) or not GeneralConfig().reference_genome.endswith(FASTA_EXT):
+    if not (
+        os.path.exists(GeneralConfig().reference_genome)
+        or GeneralConfig().reference_genome.endswith(FASTA_EXT)
+    ):
         raise ValueError("The passed reference genome must be a valid .fa file.")
 
     return os.path.abspath(os.path.splitext(GeneralConfig().reference_genome)[0])
@@ -114,7 +116,7 @@ def secure_filename(filename: str) -> str:
     if (
         os.name == "nt"
         and filename
-        and filename.split(".")[0].upper() in _windows_device_files
+        and filename.split(".")[0].upper() in _WINDOWS_DEVICE_FILES
     ):
         filename = f"_{filename}"
 

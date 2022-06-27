@@ -18,18 +18,19 @@ from .alignment import AlignProbeCandidates
 from . import util
 
 
-def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: str) -> int:
+def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: os.PathLike) -> int:
     """Count kmers in a sequence.
 
     Only keep the sequence if it has less than max_kmers kmers.
     """
-
     sub_kmers = [
         str(sequence.seq[i : i + ProbeConfig().kmer_length])
         for i in range(len(sequence) - ProbeConfig().kmer_length + 1)
     ]
     args_jellyfish = ["jellyfish", "query", jellyfish_path, " ".join(sub_kmers)]
-    kmer_counts_raw = subprocess.check_output(args_jellyfish, stderr=subprocess.STDOUT).decode()
+    kmer_counts_raw = subprocess.check_output(
+        args_jellyfish, stderr=subprocess.STDOUT
+    ).decode()
 
     # Format of jellyfish output: "kmer1 count1\nkmer2 count2\n..."
     kmer_counts = list(
@@ -58,7 +59,7 @@ class BuildJellyfishIndex(luigi.Task):
             "jellyfish",
             "count",
             "--mer-len",
-            ProbeConfig().kmer_length,
+            str(ProbeConfig().kmer_length),
             "--out-counter-len",
             "1",
             "--lower-count",
@@ -66,7 +67,7 @@ class BuildJellyfishIndex(luigi.Task):
             "--size",
             "100M",
             "--threads",
-            GeneralConfig().threads,
+            str(GeneralConfig().threads),
             "--output",
             self.output().path,
             GeneralConfig().reference_genome,
@@ -88,12 +89,16 @@ class KMerFiltering(luigi.Task):
         )
 
     def _get_kmer_count(self, sequence: Bio.SeqRecord) -> int:
-        return get_max_kmer_count(sequence, self.input()["jellyfish"].path)
+        return get_max_kmer_count(sequence, self.path)
 
     def run(self):
         sequences = list(
             Bio.SeqIO.parse(self.input()["probes"]["fasta"].path, format="fasta")
         )
+
+        # TODO WTF... if this is passed as reference and not as variable
+        # multiprocessing will fk things up so that GeneralConfig() is reset...
+        self.path = self.input()["jellyfish"].path
 
         with multiprocessing.Pool(GeneralConfig().threads) as pool:
             counts = pool.map(self._get_kmer_count, sequences)

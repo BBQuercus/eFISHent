@@ -1,3 +1,4 @@
+from pathlib import Path
 import argparse
 import configparser
 import logging
@@ -20,6 +21,7 @@ GROUP_DESCRIPTIONS = {
     f"{UniCode.red} Sequence": "Details about the sequences the probe design will be performed on.",
     f"{UniCode.magenta} Probe": "Probe filtering and design options.",
 }
+REQUIRED_PARAMS = ["reference_genome"]
 
 
 def string_to_bool(value):
@@ -79,19 +81,24 @@ def _add_groups(parser: argparse.ArgumentParser) -> None:
         )
         for name, description in GROUP_DESCRIPTIONS.items()
     ]
-    required_params = ["reference_genome"]
 
-    # TODO fix bug where false default bool params are also "-"
     for group, config_class in zip(groups, CONFIG_CLASSES):
         for name, param in config_class().get_params():
+            param_type = get_parameter_type(param)
+            is_required = name in REQUIRED_PARAMS
+            default = (
+                "-"
+                if (not param._default and param_type != string_to_bool)
+                else param._default
+            )
             group.add_argument(
                 f"--{name.replace('_', '-')}",
-                type=get_parameter_type(param),
-                required=name in required_params,
+                type=param_type,
+                required=is_required,
                 default=param._default,
                 help=f"{param.description} "
-                f"[default: {'-' if not param._default else param._default}, "
-                f"required: {name in required_params}]",
+                f"[default: {default}, "
+                f"required: {is_required}]",
             )
 
 
@@ -120,13 +127,19 @@ def _parse_args() -> argparse.Namespace:
 def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
     """Create a custom config file."""
     config = configparser.ConfigParser()
-    config.read("luigi.cfg")
+    config_path = Path(__file__).resolve().parent.joinpath("luigi.cfg").as_posix()
+    config.read(config_path)
 
     for section, config_class in zip(
         ["GeneralConfig", "RunConfig", "SequenceConfig", "ProbeConfig"], CONFIG_CLASSES
     ):
         for name in config_class().get_param_names():
-            config.set(section, name, str(vars(args).get(name)))
+            value = vars(args).get(name)
+            config.set(section, name, str(value))
+            if name == "threads":
+                threads = min(vars(args).get(name), os.cpu_count())
+                config.set(section, name, str(threads))
+
     with open(config_file, "w") as f:
         config.write(f)
 

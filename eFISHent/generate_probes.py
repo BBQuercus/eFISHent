@@ -5,7 +5,6 @@ Create a list of candidate probes from a gene sequence.
 import logging
 import os
 
-from tqdm import tqdm
 import Bio.SeqIO
 import Bio.SeqRecord
 import Bio.SeqUtils
@@ -47,7 +46,7 @@ class GenerateAllProbes(luigi.Task):
 
         candidates = []
         idx = 1
-        for length in tqdm(range(min_length, max_length + 1)):
+        for length in range(min_length, max_length + 1):
             for start_pos in range(0, len(sequence) - length + 1):
                 candidates.append(
                     Bio.SeqRecord.SeqRecord(

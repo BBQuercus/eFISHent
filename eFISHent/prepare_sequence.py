@@ -26,11 +26,11 @@ class DownloadEntrezGeneSequence(luigi.Task):
         return luigi.LocalTarget(os.path.join(util.get_output_dir(), fname))
 
     def get_entrez_query(
-        self, ensemble_id: str, gene_name: str, organism_name: str
+        self, ensembl_id: str, gene_name: str, organism_name: str
     ) -> str:
         """Retrieve the query depending on sequence configuration arguments passed."""
-        if ensemble_id:
-            return ensemble_id
+        if ensembl_id:
+            return ensembl_id
 
         if gene_name and organism_name:
             return f"{gene_name} [GENE] {organism_name} [ORGN]"
@@ -70,7 +70,7 @@ class DownloadEntrezGeneSequence(luigi.Task):
 
     def run(self):
         query = self.get_entrez_query(
-            SequenceConfig().ensemble_id,
+            SequenceConfig().ensembl_id,
             SequenceConfig().gene_name,
             SequenceConfig().organism_name,
         )

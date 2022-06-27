@@ -17,7 +17,7 @@ setup(
     long_description_content_type="text/plain",
     long_description=textwrap.dedent("""TDB."""),
     # Installation
-    python_requires=">3.9",
+    python_requires=">=3.7",
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
@@ -30,7 +30,7 @@ setup(
         "pandas",
         "pyarrow",
         "pyomo",
-        "tqdm",
+        "pysam",
     ],
     entry_points={
         "console_scripts": [

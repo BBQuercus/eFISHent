@@ -4,6 +4,7 @@ import logging
 import multiprocessing
 import os
 
+import Bio.Seq
 import Bio.SeqIO
 import Bio.SeqRecord
 import Bio.SeqUtils
@@ -17,7 +18,7 @@ from . import util
 
 
 def get_melting_temp(
-    sequence: str, na_concentration: float, formamide_concentration: float
+    sequence: Bio.Seq.Seq, na_concentration: float, formamide_concentration: float
 ) -> float:
     """Get melting temperature of candidate."""
     tm_raw = Bio.SeqUtils.MeltingTemp.Tm_NN(sequence, Na=na_concentration)
@@ -27,12 +28,12 @@ def get_melting_temp(
     return melting_temp
 
 
-def get_gc_content(sequence: str) -> float:
+def get_gc_content(sequence: Bio.Seq.Seq) -> float:
     """Get GC content of candidate."""
     return Bio.SeqUtils.GC(sequence)
 
 
-def get_g_quadruplet_count(sequence: str) -> int:
+def get_g_quadruplet_count(sequence: Bio.Seq.Seq) -> int:
     """Get number of G quadruplets in candidate."""
     return sequence.count("GGGG")
 
@@ -50,33 +51,45 @@ class BasicFiltering(luigi.Task):
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_basic.fasta")
         )
 
-    def is_candidate_valid(self, candidate: Bio.SeqRecord.SeqRecord) -> bool:
+    def is_candidate_valid(
+        self, candidate: Bio.SeqRecord.SeqRecord, config: luigi.Config
+    ) -> bool:
         """Check if candidate matches basic criteria."""
-        # TODO verify that min is less than max!
+        if config.min_tm > config.max_tm:
+            raise ValueError("Max TM has to be greater or equal the min TM!")
+        if config.min_gc > config.max_gc:
+            raise ValueError("Max GC has to be greater or equal the min GC!")
+
         sequence = candidate.seq
         gc_content = get_gc_content(sequence)
         g_quadruplets = get_g_quadruplet_count(sequence)
         melting_temp = get_melting_temp(
-            sequence,
-            ProbeConfig().na_concentration,
-            ProbeConfig().formamide_concentration,
+            sequence, config.na_concentration, config.formamide_concentration
         )
 
         if (
-            ProbeConfig().min_gc <= gc_content <= ProbeConfig().max_gc
-            and ProbeConfig().min_tm <= melting_temp <= ProbeConfig().max_tm
+            config.min_gc <= gc_content <= config.max_gc
+            and config.min_tm <= melting_temp <= config.max_tm
             and g_quadruplets == 0
         ):
             return True
         return False
 
+    def _is_candidate_valid(self, candidate: Bio.SeqRecord.SeqRecord) -> bool:
+        """Counteracting the really weird multiprocess class behavior."""
+        return self.is_candidate_valid(candidate, self.config)
+
     def screen_sequences(self, sequences: list) -> list:
         """Filter candiates not matching criteria."""
         if len(sequences) > 1000:
+            self.config = ProbeConfig()
             with multiprocessing.Pool(GeneralConfig().threads) as pool:
-                valid = pool.map(self.is_candidate_valid, sequences)
+                valid = pool.map(self._is_candidate_valid, sequences)
         else:
-            valid = [self.is_candidate_valid(candidate) for candidate in sequences]
+            valid = [
+                self.is_candidate_valid(candidate, ProbeConfig())
+                for candidate in sequences
+            ]
 
         candidates = [seq for seq, valid in zip(sequences, valid) if valid]
         return candidates
