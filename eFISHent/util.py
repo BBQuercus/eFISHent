@@ -13,14 +13,14 @@ from .constants import FASTA_EXT
 from .constants import _WINDOWS_DEVICE_FILES
 
 
-def get_output_dir() -> str:
+def get_output_dir(config: luigi.Config = GeneralConfig) -> str:
     """Return the output directory."""
-    output_dir = GeneralConfig().output_dir
+    output_dir = config().output_dir
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    else:
+    if not output_dir:
         output_dir = os.getcwd()
-    return output_dir
+    return os.path.abspath(output_dir)
 
 
 def hash_fn(key: bytearray) -> str:
@@ -42,20 +42,18 @@ def create_config_hash(
     )
 
 
-def get_gene_name(hashed: bool = True) -> str:
+def get_gene_name(hashed: bool = True, config: luigi.Config = SequenceConfig) -> str:
     """Return the gene name without extension."""
     # Name based on gene fasta file
-    sequence_file = SequenceConfig().sequence_file
+    sequence_file = config().sequence_file
     if sequence_file is not None and os.path.isfile(sequence_file):
         basename = secure_filename(os.path.splitext(os.path.basename(sequence_file))[0])
     # Using Ensembl ID
-    elif SequenceConfig().ensembl_id:
-        basename = secure_filename(SequenceConfig().ensembl_id)
+    elif config().ensembl_id:
+        basename = secure_filename(config().ensembl_id)
     # Name based on NCBI parameters
-    elif SequenceConfig().gene_name and SequenceConfig().organism_name:
-        basename = secure_filename(
-            f"{SequenceConfig().organism_name}_{SequenceConfig().gene_name}"
-        )
+    elif config().gene_name and config().organism_name:
+        basename = secure_filename(f"{config().organism_name}_{config().gene_name}")
     else:
         raise ValueError(
             "Could not determine gene name. "
@@ -67,18 +65,18 @@ def get_gene_name(hashed: bool = True) -> str:
     return f"{basename}_{create_config_hash(luigi.configuration.get_config())}"
 
 
-def get_genome_name() -> str:
+def get_genome_name(config: luigi.Config = GeneralConfig) -> str:
     """Return the genome name without extension."""
-    if GeneralConfig().reference_genome is None:
+    if config().reference_genome is None:
         raise ValueError("Reference genome must be passed.")
 
     if not (
-        os.path.exists(GeneralConfig().reference_genome)
-        or GeneralConfig().reference_genome.endswith(FASTA_EXT)
+        os.path.exists(config().reference_genome)
+        or os.path.splitext(config().reference_genome)[1] in FASTA_EXT
     ):
         raise ValueError("The passed reference genome must be a valid .fa file.")
 
-    return os.path.abspath(os.path.splitext(GeneralConfig().reference_genome)[0])
+    return os.path.abspath(os.path.splitext(config().reference_genome)[0])
 
 
 def secure_filename(filename: str) -> str:
