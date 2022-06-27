@@ -38,11 +38,11 @@ def test_download_entrez_ensembl(task_download):
 
 
 @pytest.mark.parametrize(
-    "ensemble,gene,organism",
+    "ensembl,gene,organism",
     [("ENSG00000026025", "", ""), ("ENSG00000029248", "gene", "orgn")],
 )
-def test_get_ensembl_query(ensemble, gene, organism, task_download):
-    assert task_download.get_entrez_query(ensemble, gene, organism) == ensemble
+def test_get_ensembl_query(ensembl, gene, organism, task_download):
+    assert task_download.get_entrez_query(ensembl, gene, organism) == ensembl
 
 
 @pytest.mark.parametrize(
