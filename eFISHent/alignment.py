@@ -50,6 +50,7 @@ class BuildBowtieIndex(luigi.Task):
             os.path.abspath(GeneralConfig().reference_genome),
             util.get_genome_name(),
         ]
+        self.logger.debug(f"Running bowtie with - {''.join(args_bowtie)}")
         subprocess.check_call(args_bowtie)
 
 
@@ -64,12 +65,16 @@ class PrepareAnnotationFile(luigi.Task):
     def output(self):
         return luigi.LocalTarget(GeneralConfig().reference_annotation + ".parq")
 
-    def run(self):
+    def prepare_gtf_file(self, fname_input: str, fname_output) -> None:
+        """Save GTF file as parquet."""
         warnings.filterwarnings("ignore")
-        df = gtfparse.read_gtf(GeneralConfig().reference_annotation)
+        df = gtfparse.read_gtf(fname_input)
         warnings.filterwarnings("default")
         self.logger.debug("Read gtf file with gtfparse")
-        df.to_parquet(self.output().path)
+        df.to_parquet(fname_output)
+
+    def run(self):
+        self.prepare_gtf_file(GeneralConfig().reference_annotation, self.output().path)
 
 
 class AlignProbeCandidates(luigi.Task):
@@ -110,56 +115,65 @@ class AlignProbeCandidates(luigi.Task):
             )
         return tasks
 
-    @staticmethod
-    def read_count_table() -> pd.DataFrame:
+    def read_count_table(self, fname: str) -> pd.DataFrame:
         """Read and verify a RNAseq FPRKM count table."""
-        df_counts = pd.read_csv(ProbeConfig().encode_count_table, sep="\t")
+        df_counts = pd.read_csv(fname, sep="\t")
         counts = df_counts[df_counts["gene_id"].str.contains("ENSG")].copy()
         counts["clean_id"] = counts["gene_id"].apply(lambda x: x.split(".")[0])
+        self.logger.debug(f"Read count table with {len(counts)} entries.")
         return counts[constants.COUNTS_COLUMNS]
 
-    def read_gtf_file(self):
-        return pd.read_parquet(self.input()["gtf"].path)[constants.GTF_COLUMNS]
+    def read_gtf_file(self, fname: str):
+        """Parse prepared parquet-formatted gtf file."""
+        return pd.read_parquet(fname)[constants.GTF_COLUMNS]
 
-    def align_probes(self, fname_fasta: str, fname_sam: str) -> None:
-        """Align probes to the reference genome."""
+    def align_probes(
+        self,
+        fname_input: str,
+        fname_output: str,
+        max_off_targets: int,
+        is_endogenous: bool,
+        threads: int,
+    ):
+        """Align probes to the reference genome.
+
+        Takes a fasta file as input (which will be converted to fastq).
+        Saves a sam file with alignments.
+        """
         # Convert fasta to fastq - bowtie doesn't return read names if not in fastq...
-        fname_fastq = fname_fasta.rstrip("a") + "q"
-        with open(fname_fasta, "r") as fasta, open(fname_fastq, "w") as fastq:
+        fname_fastq = fname_input.rstrip("a") + "q"
+        with open(fname_input, "r") as fasta, open(fname_fastq, "w") as fastq:
             for record in Bio.SeqIO.parse(fasta, "fasta"):
                 record.letter_annotations["phred_quality"] = [40] * len(record)
                 Bio.SeqIO.write(record, fastq, "fastq")
+        self.logger.debug(f"Converted fasta to fastq - {fname_fastq}")
 
-        alignments = str(max(ProbeConfig().max_off_targets + 1, 1))
-        endo_exo_param = [] if SequenceConfig().is_endogenous else ["-m", alignments]
+        alignments = str(max(max_off_targets + 1, 1))
+        endo_exo_param = [] if is_endogenous else ["-m", alignments]
         args_bowtie = [
             "bowtie",
             util.get_genome_name(),
             fname_fastq,
             "--threads",
-            str(GeneralConfig().threads),
+            str(threads),
             *endo_exo_param,
             "--sam",
             "-S",
-            fname_sam,
+            fname_output,
         ]
-        self.logger.debug(f"Using bowtie command - {' '.join(args_bowtie)}")
+        self.logger.debug(f"Running bowtie with - {' '.join(args_bowtie)}")
         subprocess.check_call(
             args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
         )
 
-    def filter_unique_probes(self, fname_sam: str) -> pd.DataFrame:
-        """Filter probes based on alignment score and uniqueness."""
+    def filter_unique_probes(self, fname: str, is_endogenous: bool) -> pd.DataFrame:
+        """Filter sam file with probes based on alignment score and uniqueness."""
         # 60 - uniquely mapped read, regardless of number of mismatches / indels
         # 4 – flag for unmapped read
-        flags = (
-            ["--min-MQ", "60"]
-            if SequenceConfig().is_endogenous
-            else ["--require-flags", "4"]
-        )
-        end = 14 if SequenceConfig().is_endogenous else 12
-        self.logger.debug(f"Using samtools command - {' '.join(flags)}")
-        filtered_sam = pysam.view(fname_sam, *flags)
+        flags = ["--min-MQ", "60"] if is_endogenous else ["--require-flags", "4"]
+        end = 14 if is_endogenous else 12
+        self.logger.debug(f"Running samtools with - {' '.join(flags)}")
+        filtered_sam = pysam.view(fname, *flags)
 
         # Parse tab and newline delimited pysam output
         df = pd.DataFrame(
@@ -194,8 +208,11 @@ class AlignProbeCandidates(luigi.Task):
             ">",
             fname,
         ]
+        self.logger.debug(f"Running blast with - {''.join(args_blast)}")
         subprocess.check_call(args_blast)
         df_blast = pd.read_csv(fname, sep="\t", names=constants.BLAST_COLUMNS)
+
+        # Arbirary identity values to ensure similar targets aren't falsely selected
         df_blast = df_blast[
             (df_blast["pident"] >= 98)
             & (df_blast["evalue"] <= 1e-8)
@@ -230,7 +247,7 @@ class AlignProbeCandidates(luigi.Task):
     def get_maximum_fpkm(
         self, df_sam: pd.DataFrame, df_counts: pd.DataFrame, df_gtf: pd.DataFrame
     ) -> pd.DataFrame:
-        """Filter candidates based on FPKM."""
+        """Find the highest FPKM values across detected off-targets."""
         # Merge gtf and count table to get FPKM at each genomic location
         df_fpkm = pd.merge(
             df_counts,
@@ -283,14 +300,25 @@ class AlignProbeCandidates(luigi.Task):
         return df_max_fpkm
 
     def run(self):
+        # Alignment
         fname_fasta = self.input()["probes"].path
         fname_sam = os.path.splitext(fname_fasta)[0] + ".sam"
-        self.align_probes(fname_fasta, fname_sam)
-        df_sam = self.filter_unique_probes(fname_sam)
+        self.align_probes(
+            fname_input=fname_fasta,
+            fname_output=fname_sam,
+            max_off_targets=ProbeConfig().max_off_targets,
+            is_endogenous=SequenceConfig().is_endogenous,
+            threads=GeneralConfig().threads,
+        )
+        df_sam = self.filter_unique_probes(
+            fname=fname_sam, is_endogenous=SequenceConfig().is_endogenous
+        )
 
+        # TODO allow filtering if exogenous?
+        # FPKM stuff with count table
         if self.is_blast_required:
-            df_gtf = self.read_gtf_file()
-            df_counts = self.read_count_table()
+            df_gtf = self.read_gtf_file(self.input()["gtf"].path)
+            df_counts = self.read_count_table(ProbeConfig().encode_count_table)
             df_max_fpkm = self.get_maximum_fpkm(df_sam, df_counts, df_gtf)
             df_max_fpkm.to_csv(self.output()["table"].path, index=False)
             df_sam = df_max_fpkm[
