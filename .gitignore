@@ -153,10 +153,6 @@ dmypy.json
 cython_debug/
 
 # Bioinfo
-*.fasta
-*.fastq
-*.sam
-*.fa
 *.ebwt
 *.gtf
 *.ndb
@@ -170,7 +166,7 @@ cython_debug/
 
 # Other
 .vscode/
-*.tsv
 *.png
 *.parq
 *.ipynb
+.DS_Store
