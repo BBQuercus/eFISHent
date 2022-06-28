@@ -22,7 +22,10 @@ from . import util
 
 
 def get_free_energy(sequence: Bio.SeqRecord) -> float:
-    """Return the predicted free energy of the sequence."""
+    """Return the predicted free energy of the sequence.
+
+    Using "Fold" as part of the RNAstructure package from the Mathews lab.
+    """
     file_path = Path(__file__).resolve().parent.as_posix()
     data_table = os.path.join(file_path, "data_tables/")
     if sys.platform == "linux" or sys.platform == "linux2":

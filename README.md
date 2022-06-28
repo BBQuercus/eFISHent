@@ -57,7 +57,8 @@ Probe filtering workflow:
 * **General**
   * [x] Find a name and description for the tool
   * [x] Add basic documentation in CLI and in README.md
-  * [x] Add more detailed documentation as wiki page(s)
+  * [x] Add thread limiting check with `os.cpu_count()`
+  * [ ] Add more detailed documentation as wiki page(s)
   * [ ] Add mathematical description for model
   * [ ] Create bioconda recipe
 
