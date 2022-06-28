@@ -39,7 +39,7 @@ class OptimizeProbeCoverage(luigi.Task):
             ]
         }
 
-    def run_optimal(self):
+    def run_optimal(self, threads: int, time_limit: int):
         """Run the optimal model by parallelizing non-overlapping segments."""
         index_block = 0
         prev_probe = self.df.iloc[0]
@@ -54,7 +54,8 @@ class OptimizeProbeCoverage(luigi.Task):
             blocks.append(index_block)
         self.df["block"] = blocks
 
-        with multiprocessing.Pool(GeneralConfig().threads) as pool:
+        self.time_limit = time_limit
+        with multiprocessing.Pool(threads) as pool:
             _assigned = pool.map(self.run_optimal_block, self.df["block"].unique())
 
         # Flatten the list of lists
@@ -64,16 +65,11 @@ class OptimizeProbeCoverage(luigi.Task):
     def run_optimal_block(self, block: int) -> List[str]:
         """Run a single non-overlapping block."""
         df = self.df[self.df["block"] == block]
-        sequence = list(range(df["start"].min(), df["end"].max()))
-        probes = df["name"].values
-        probe_starts = {k: v for _, (k, v) in df[["name", "start"]].iterrows()}
-        probe_ends = {k: v for _, (k, v) in df[["name", "end"]].iterrows()}
-        assigned = optimal_model(sequence, probes, probe_starts, probe_ends, self.time_limit)
-        return assigned
+        return optimal_model(df, self.time_limit)
 
     def run_greedy(self):
-        assigned = greedy_model(self.df)
-        return assigned
+        """Run sequential greedy model."""
+        return greedy_model(self.df)
 
     def run(self):
         sequences = list(Bio.SeqIO.parse(self.input().path, "fasta"))
@@ -83,8 +79,10 @@ class OptimizeProbeCoverage(luigi.Task):
         if RunConfig().optimization_method == "greedy":
             assigned = self.run_greedy()
         elif RunConfig().optimization_method == "optimal":
-            self.time_limit = RunConfig().optimization_time_limit
-            assigned = self.run_optimal()
+            assigned = self.run_optimal(
+                threads=GeneralConfig().threads,
+                time_limit=RunConfig().optimization_time_limit,
+            )
         else:
             raise ValueError(
                 f"Invalid optimization method: {RunConfig().optimization_method}"
@@ -133,10 +131,14 @@ def greedy_model(df: pd.DataFrame) -> List[str]:
 
 
 # TODO add proper mathematical description
-def optimal_model(
-    sequence: list, probes: list, probe_starts: dict, probe_ends: dict, time_limit:int
-) -> List[str]:
+def optimal_model(df: pd.DataFrame, time_limit: int) -> List[str]:
     """Run the optimal mathematical model."""
+    # Convert dataframe to usable model inputs
+    sequence = list(range(df["start"].min(), df["end"].max()))
+    probes = df["name"].values
+    probe_starts = {k: v for _, (k, v) in df[["name", "start"]].iterrows()}
+    probe_ends = {k: v for _, (k, v) in df[["name", "end"]].iterrows()}
+
     # Model to make non-contiguous connections across a sequence
     # with objective to "cover" as many points in sequence as possible
     coverages = {
