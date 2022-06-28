@@ -10,6 +10,7 @@ import pytest
 
 
 def pytest_sessionstart(session):
+    """Delete old files in case of rerun."""
     files = glob.glob("./*/sacCer3*.ebwt")
     files.extend(glob.glob("./*/sacCer3*.jf"))
     files.extend(glob.glob("./*/Saccharomyces*"))
@@ -19,6 +20,7 @@ def pytest_sessionstart(session):
 
 
 def verify_csv(fname: str, *params):
+    """Basic inspection if CSV file has the right columns and values fall within ranges."""
     df = pd.read_csv(fname)
     assert all(df["length"] == df["sequence"].apply(len))
 
@@ -126,6 +128,7 @@ def test_downloaded_endogenous_optimal():
         "62",
         "--formamide-concentration",
         "20",
+        "--debug",
     ]
     tic = time.time()
     process = subprocess.run(args)
@@ -148,10 +151,11 @@ def test_counttable_full_output():
         "./tests/sacCer3.gtf",
         "--ensembl-id",
         "YKL185W",
-        "--encode-count-table",
-        "./tests/.tsv",
+        # "--encode-count-table",
+        # "./tests/.tsv",
         "--max-off-target-fpkm",
         "15",
+        "--debug",
     ]
     tic = time.time()
     process = subprocess.run(args)

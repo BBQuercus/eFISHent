@@ -100,14 +100,8 @@ class OptimizeProbeCoverage(luigi.Task):
 
 def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
     """Check if two ranges overlap."""
-    x_start, x_end = x
-    y_start, y_end = y
-    return (
-        (x_start >= y_start and x_start <= y_end)
-        or (x_end >= y_start and x_end <= y_end)
-        or (y_start >= x_start and y_start <= x_end)
-        or (y_end >= x_start and y_end <= x_end)
-    )
+    x_set = set(range(x[0], x[1] + 1))
+    return len(x_set.intersection(range(y[0], y[1] + 1))) != 0
 
 
 def greedy_model(df: pd.DataFrame) -> List[str]:

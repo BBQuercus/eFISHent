@@ -60,7 +60,7 @@ class CleanUpOutput(luigi.Task):
         basename: str,
         jellyfish_path: os.PathLike,
         alignment_path: os.PathLike = None,
-        config: luigi.Config = ProbeConfig(),
+        config: luigi.Config = ProbeConfig,
     ) -> pd.DataFrame:
         """Create table with probe information."""
         # Create basic table with probe start/end positions and name

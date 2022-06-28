@@ -34,7 +34,7 @@ def optimal_solution():
         ((0, 10), (0, 10), True),
         ((0, 10), (10, 20), True),
         ((0, 10), (11, 20), False),
-        ((0, 10), (4, 7), False),
+        ((0, 10), (4, 7), True),
     ],
 )
 def test_is_overlapping(x, y, overlapping):
