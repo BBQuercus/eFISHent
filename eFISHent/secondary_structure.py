@@ -29,7 +29,7 @@ def get_free_energy(sequence: Bio.SeqRecord) -> float:
     file_path = Path(__file__).resolve().parent.as_posix()
     data_table = os.path.join(file_path, "data_tables/")
     if sys.platform == "linux" or sys.platform == "linux2":
-        fold_path = "./Fold"
+        fold_path = "Fold"
     if sys.platform == "darwin":
         fold_path = os.path.join(file_path, "Fold_osx")
 
@@ -56,7 +56,7 @@ def get_free_energy(sequence: Bio.SeqRecord) -> float:
 class SecondaryStructureFiltering(luigi.Task):
     """Predict free energy of secondary structures and filter them based on deltaG."""
 
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("custom-logger")
 
     def requires(self):
         return KMerFiltering()

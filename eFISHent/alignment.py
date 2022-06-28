@@ -52,7 +52,10 @@ class BuildBowtieIndex(luigi.Task):
             util.get_genome_name(),
         ]
         self.logger.debug(f"Running bowtie with - {''.join(args_bowtie)}")
-        subprocess.check_call(args_bowtie)
+        subprocess.check_call(
+            args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        )
+        self.logger.info("Finished building bowtie index.")
 
 
 class PrepareAnnotationFile(luigi.Task):
@@ -76,6 +79,7 @@ class PrepareAnnotationFile(luigi.Task):
 
     def run(self):
         self.prepare_gtf_file(GeneralConfig().reference_annotation, self.output().path)
+        self.logger.info("Finished parsing GTF annotation file.")
 
 
 class AlignProbeCandidates(luigi.Task):
@@ -177,9 +181,12 @@ class AlignProbeCandidates(luigi.Task):
         filtered_sam = pysam.view(self.fname_sam, *flags)
 
         # Parse tab and newline delimited pysam output
+        data = [row.split("\t") for row in filtered_sam.split("\n")]
         end = 14 if is_endogenous else 12
         columns = constants.SAMFILE_COLUMNS[:end]
-        data = [row.split("\t") for row in filtered_sam.split("\n")]
+
+        # Padding in case some samfiles are larger, first cols will stay the same
+        columns.extend(["" for _ in range(len(columns) - len(data[0]))])
 
         # If empty [['']]
         if data[0][0]:

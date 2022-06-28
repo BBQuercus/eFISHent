@@ -35,7 +35,7 @@ class OptimizeProbeCoverage(luigi.Task):
             name: luigi.LocalTarget(os.path.join(util.get_output_dir(), filename))
             for name, filename in [
                 ("probes", f"{util.get_gene_name()}_optimal.fasta"),
-                ("coverage", f"{util.get_gene_name()}.png"),
+                ("coverage", f"{util.get_gene_name()}_optimization.png"),
             ]
         }
 

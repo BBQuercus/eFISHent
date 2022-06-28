@@ -74,8 +74,8 @@ class SequenceConfig(luigi.Config):
         default="",
     )
     ensembl_id = luigi.Parameter(
-        description="Ensembl ID of the gene of interest."
-        "Can be used instead of gene and organism name to download the gene of interest."
+        description="Ensembl ID of the gene of interest. "
+        "Can be used instead of gene and organism name to download the gene of interest. "
         "Used to filter out the gene of interest from FPKM based filtering - "
         "will do an automated blast-based filtering if not passed.",
         default="",

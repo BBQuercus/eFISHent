@@ -78,10 +78,13 @@ class DownloadEntrezGeneSequence(luigi.Task):
 
         with self.output().open("w") as outfile:
             outfile.write(fasta)
+        self.logger.info(f"Downloaded sequence from entrez using query '{query}'.")
 
 
 class BuildBlastDatabase(luigi.Task):
     """Build local nucleotide blast database."""
+
+    logger = logging.getLogger("custom-logger")
 
     def output(self):
         return [
@@ -99,7 +102,10 @@ class BuildBlastDatabase(luigi.Task):
             "-out",
             util.get_genome_name(),
         ]
-        subprocess.check_call(args_blast)
+        subprocess.check_call(
+            args_blast, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        )
+        self.logger.info("Finished building blast database.")
 
 
 class PrepareSequence(luigi.Task):
@@ -151,4 +157,5 @@ class PrepareSequence(luigi.Task):
         sequences = list(Bio.SeqIO.parse(input_file, format="fasta"))
         sequence = self.select_sequence(sequences)
         sequence = self.select_strand(sequence, SequenceConfig().is_plus_strand)
+        self.logger.info(f"Selected sequence and strand called '{sequence.id}'.")
         Bio.SeqIO.write(sequence, self.output().path, format="fasta")

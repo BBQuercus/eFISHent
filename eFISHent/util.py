@@ -124,7 +124,8 @@ def secure_filename(filename: str) -> str:
 def log_and_check_candidates(
     logger: logging.Logger, name: str, count: int, count_prev: int = 0
 ) -> None:
-    logger.info(f"Writing {count} (from {count_prev}) candidates in {name}.")
+    previous = f" (from {count_prev})" if count_prev else ""
+    logger.info(f"Writing {count}{previous} candidates in {name}.")
 
     if count == 0:
         raise ValueError(
