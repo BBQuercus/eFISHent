@@ -51,6 +51,7 @@ class CleanUpOutput(luigi.Task):
             for name, filename in [
                 ("fasta", f"{util.get_gene_name()}.fasta"),
                 ("table", f"{util.get_gene_name()}.csv"),
+                ("config", f"{util.get_gene_name()}.txt"),
             ]
         }
 
@@ -98,12 +99,20 @@ class CleanUpOutput(luigi.Task):
             for seq, name in zip(df["sequence"], df["name"])
         ]
 
-    def run(self):
-        # Files to be deleted
-        intermediary_files = glob.glob(
-            os.path.join(util.get_output_dir(), f"{util.get_gene_name()}*")
-        )
+    def prettify_configuration(self) -> str:
+        """Create a pretty file with all set/default configuration."""
+        config = luigi.configuration.get_config()
 
+        pretty = []
+        for section in config.sections():
+            pretty.append(f"{section.rstrip('Config')} configuration:")
+            for key, value in config[section].items():
+                if value and value != '""':
+                    pretty.append(f"  {key.replace('_', '-')}: {value}")
+            pretty.append("")
+        return "\n".join(pretty)
+
+    def run(self):
         sequences = list(
             Bio.SeqIO.parse(self.input()["optimize"]["probes"].path, "fasta")
         )
@@ -116,16 +125,23 @@ class CleanUpOutput(luigi.Task):
             else None,
         )
         sequences = self.prettify_sequences(df)
+        config = self.prettify_configuration()
 
-        # TODO add optional file with used parameters / config file?
-        df.to_csv(self.output()["table"].path, index=False)
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
+        df.to_csv(self.output()["table"].path, index=False)
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, "fasta")
+        with open(self.output()["config"].path, "w") as f:
+            f.write(config)
 
+        # Files to be deleted
         if not RunConfig().save_intermediates:
+            intermediary_files = glob.glob(
+                os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_*")
+            )
+            try:
+                intermediary_files.remove(f"{util.get_gene_name()}_entrez.fasta")
+            except ValueError:
+                pass
             for filename in intermediary_files:
-                if filename.endswith(
-                    (".fasta", ".sam", ".fastq", ".png", ".txt", ".csv")
-                ):
-                    self.logger.debug(f"Removing {filename}")
-                    os.remove(filename)
+                self.logger.debug(f"Removing {filename}")
+                os.remove(filename)

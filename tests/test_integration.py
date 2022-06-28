@@ -79,7 +79,7 @@ def test_passed_exogenous():
         "--save-intermediates",
         "True",
         "--sequence-file",
-        "./tests/renilla.fa",
+        "./tests/renilla.fasta",
         "--is-endogenous",
         "False",
         "--min-length",
@@ -136,7 +136,7 @@ def test_downloaded_endogenous_optimal():
 
     assert process.returncode == 0
     files = glob.glob("./Saccharomyces_cerevisiae_AAD4_*")
-    assert len(files) == 2
+    assert len(files) == 3
     verify_csv(files[0], args)
     [os.remove(f) for f in files]
 
@@ -163,7 +163,7 @@ def test_counttable_full_output():
 
     assert process.returncode == 0
     files = glob.glob("./YKL185W_*")
-    assert len(files) == 2
+    assert len(files) == 3
     [os.remove(f) for f in files]
 
 
