@@ -54,7 +54,14 @@ class CleanUpOutput(luigi.Task):
             ]
         }
 
-    def prettify_table(self, sequences: list):
+    def prettify_table(
+        self,
+        sequences: list,
+        basename: str,
+        jellyfish_path: os.PathLike,
+        alignment_path: os.PathLike = None,
+        config: luigi.Config = ProbeConfig(),
+    ) -> pd.DataFrame:
         """Create table with probe information."""
         # Create basic table with probe start/end positions and name
         df = util.create_data_table(sequences)
@@ -64,31 +71,22 @@ class CleanUpOutput(luigi.Task):
         df["TM"] = [
             round(
                 get_melting_temp(
-                    seq.seq,
-                    ProbeConfig().na_concentration,
-                    ProbeConfig().formamide_concentration,
+                    seq.seq, config().na_concentration, config().formamide_concentration
                 ),
                 2,
             )
             for seq in sequences
         ]
         df["deltaG"] = [get_free_energy(seq) for seq in sequences]
-
-        # Add jellyfish count
-        df["kmers"] = [
-            get_max_kmer_count(seq, self.input()["jellyfish"].path) for seq in sequences
-        ]
-
-        # Add max FPKM
-        if self.is_blast_required:
-            df_fpkm = pd.read_csv(self.input()["alignment"]["table"].path)
+        df["kmers"] = [get_max_kmer_count(seq, jellyfish_path) for seq in sequences]
+        if alignment_path is not None:
+            df_fpkm = pd.read_csv(alignment_path)
             df["FPKM"] = pd.merge(
                 df, df_fpkm, how="left", left_on="name", right_on="qname"
             )["FPKM"].fillna(0)
 
-        df["name"] = [
-            f"{util.get_gene_name(hashed=False)}-{idx + 1}" for idx in df.index
-        ]
+        # Create new/clean names
+        df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]
         return df
 
     def prettify_sequences(self, df: pd.DataFrame) -> list:
@@ -101,6 +99,7 @@ class CleanUpOutput(luigi.Task):
         ]
 
     def run(self):
+        # Files to be deleted
         intermediary_files = glob.glob(
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}*")
         )
@@ -108,9 +107,17 @@ class CleanUpOutput(luigi.Task):
         sequences = list(
             Bio.SeqIO.parse(self.input()["optimize"]["probes"].path, "fasta")
         )
-        df = self.prettify_table(sequences)
+        df = self.prettify_table(
+            sequences,
+            basename=util.get_gene_name(hashed=False),
+            jellyfish_path=self.input()["jellyfish"].path,
+            alignment_path=self.input()["alignment"]["table"].path
+            if self.is_blast_required
+            else None,
+        )
         sequences = self.prettify_sequences(df)
 
+        # TODO add optional file with used parameters / config file?
         df.to_csv(self.output()["table"].path, index=False)
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, "fasta")
