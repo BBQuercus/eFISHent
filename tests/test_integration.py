@@ -99,7 +99,7 @@ def test_passed_exogenous():
     csv_files = glob.glob("./renilla_*.csv")
     assert len(csv_files) == 1
     verify_csv(csv_files[0], args)
-    [os.remove(f) for f in csv_files]
+    [os.remove(f) for f in glob.glob("./renilla_*")]
 
 
 def test_downloaded_endogenous_optimal():
@@ -151,10 +151,10 @@ def test_counttable_full_output():
         "./tests/sacCer3.gtf",
         "--ensembl-id",
         "YKL185W",
-        # "--encode-count-table",
-        # "./tests/.tsv",
-        "--max-off-target-fpkm",
-        "15",
+        "--encode-count-table",
+        "./tests/count_table1.tsv",
+        "--max-expression-percentage",
+        "40",
         "--debug",
     ]
     tic = time.time()

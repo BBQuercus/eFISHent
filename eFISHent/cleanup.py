@@ -32,9 +32,12 @@ class CleanUpOutput(luigi.Task):
     """Clean up the output files and remove the intermediaries that are not needed."""
 
     logger = logging.getLogger("custom-logger")
-    is_blast_required = (
-        ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
-    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.is_blast_required = (
+            ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
+        )
 
     def requires(self):
         tasks = {
@@ -81,10 +84,10 @@ class CleanUpOutput(luigi.Task):
         df["deltaG"] = [get_free_energy(seq) for seq in sequences]
         df["kmers"] = [get_max_kmer_count(seq, jellyfish_path) for seq in sequences]
         if alignment_path is not None:
-            df_fpkm = pd.read_csv(alignment_path)
-            df["FPKM"] = pd.merge(
-                df, df_fpkm, how="left", left_on="name", right_on="qname"
-            )["FPKM"].fillna(0)
+            df_counts = pd.read_csv(alignment_path)
+            df["counts"] = pd.merge(
+                df, df_counts, how="left", left_on="name", right_on="qname"
+            )["counts"].fillna(0)
 
         # Create new/clean names
         df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]

@@ -35,8 +35,6 @@ BLAST_COLUMNS = [
     "bitscore",
 ]
 
-COUNTS_COLUMNS = ["clean_id", "length", "FPKM"]
-
 GTF_COLUMNS = [
     "gene_id",
     "seqname",

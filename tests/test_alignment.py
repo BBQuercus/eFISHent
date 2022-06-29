@@ -5,7 +5,6 @@ import pytest
 
 from eFISHent.alignment import AlignProbeCandidates
 from eFISHent.alignment import PrepareAnnotationFile
-from eFISHent.constants import COUNTS_COLUMNS
 
 
 def test_prepare_annotations():
@@ -21,26 +20,23 @@ def test_prepare_annotations():
 
 
 @pytest.fixture
-def task_align():
+def task_align() -> AlignProbeCandidates:
     task = AlignProbeCandidates()
     task.fname_genome = "./tests/sacCer3"
     return task
 
 
-def test_read_count_table(task_align):
-    fname_counts = "./tests/count_table1.tsv"
-    df = task_align.read_count_table(fname_counts)
-    for col in COUNTS_COLUMNS:
+def test_read_count_table(task_align: AlignProbeCandidates):
+    fname_count = "./tests/count_table1.tsv"
+    task_align.fname_count = fname_count
+    df = task_align.count_table
+    for col in ["gene_id", "count"]:
         assert col in df.columns
-
-    # Bad count table with clean_id instead of gene_id
-    fname_bad = "./tests/count_table2.csv"
-    with pytest.raises(ValueError):
-        task_align.read_count_table(fname_bad)
+    assert df["count"].dtype == float
 
 
 @pytest.mark.parametrize("gene,endogenous", [("renilla", False), ("aad4", True)])
-def test_align_probes(task_align, gene, endogenous):
+def test_align_probes(task_align: AlignProbeCandidates, gene, endogenous):
     fname_sam = f"./tests/{gene}_basic.sam"
     fname_fastq = f"./tests/{gene}_basic.fastq"
     task_align.fname_fasta = f"./tests/{gene}_basic.fasta"
@@ -64,7 +60,7 @@ def test_align_probes(task_align, gene, endogenous):
 
 
 @pytest.mark.parametrize("gene", ["renilla", "aad4"])
-def test_filter_unique_probes(task_align, gene):
+def test_filter_unique_probes(task_align: AlignProbeCandidates, gene):
     fname_sam = f"./tests/{gene}_basic.sam"
     task_align.fname_gene = gene
     task_align.fname_sam = fname_sam
@@ -76,25 +72,41 @@ def test_filter_unique_probes(task_align, gene):
     assert len(pd.merge(df_endo, df_exo, how="inner", on="qname")) == 0
 
 
-def test_exclude_gene_of_interest(task_align):
+def test_exclude_gene_of_interest(task_align: AlignProbeCandidates):
     df = pd.read_csv("./tests/count_table2.csv")
 
     # Using ensembl ID
     ensembl = "ENSG00000281100"
-    df = task_align.exclude_gene_of_interest(
+    out = task_align.exclude_gene_of_interest(
         df, ensembl_id=ensembl, fname_full_gene="", threads=2
     )
-    assert ensembl not in df["clean_id"]
+    assert ensembl not in out["gene_id"]
 
     # Using blast
-    # Create count_table with gtf merge!
-    # aad4_gene_id = "YDL243C"
-    # df = task_align.filter_gene_of_interest(
-    #     df, ensembl_id="", fname_full_gene="./tests/aad4.fasta", threads=2
-    # )
-    # assert aad4_gene_id not in df["clean_id"]
+    aad4_gene_id = "YDL243C"
+    out = task_align.exclude_gene_of_interest(
+        df, ensembl_id="", fname_full_gene="./tests/aad4.fasta", threads=2
+    )
+    assert aad4_gene_id not in out["gene_id"]
 
 
-def test_get_maximum_fpkm(task_align):
-    # task_align.get_maximum_fpkm(df_sam, df_counts, df_gtf)
-    pass
+def test_join_alignment_with_annotation(task_align: AlignProbeCandidates):
+    task_align.fname_sam = "./tests/aad4_basic.sam"
+    task_align.fname_count = "./tests/count_table1.tsv"
+    task_align.fname_gtf = "./tests/sacCer3.gtf.parq"
+    df_sam = task_align.filter_unique_probes(is_endogenous=True)
+    df_norm = task_align.norm_table
+
+    df = task_align.join_alignment_with_annotation(df_sam, df_norm)
+    assert len(df) >= len(df_sam)
+    for col in ["gene_id", "count", "qname"]:
+        assert col in df.columns
+
+
+def test_get_most_expressed_genes(task_align: AlignProbeCandidates):
+    task_align.fname_count = "./tests/count_table1.tsv"
+    task_align.fname_gtf = "./tests/sacCer3.gtf.parq"
+
+    percentage10 = task_align.get_most_expressed_genes(task_align.norm_table, 10)
+    percentage90 = task_align.get_most_expressed_genes(task_align.norm_table, 90)
+    assert len(percentage10) >= len(percentage90)

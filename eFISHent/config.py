@@ -1,28 +1,4 @@
-"""
-Processes:
-    - index creation
-    - probe generation
-
-General options:
-    - reference genome -> pass file, will check if index exists in same folder
-    - reference genome annotation
-    - ENCODE RNAseq count table for off-target weighting
-    - number of threads
-    - method of optimization
-    - optimization time limit
-
-Probe specific options:
-    - (sequence file) or (gene name & organism)
-    - strand on genome
-    - intronic/exonic/both
-    - endogenous or exogenous
-    - min and max length
-    - min and max melting temperature
-    - min and max GC content
-    - formamide concentration
-    - salt concentration
-    - maximum deltaG
-"""
+"""Luigi configurations passed as command line arguments."""
 
 import luigi
 
@@ -39,8 +15,10 @@ class GeneralConfig(luigi.Config):
     )
     threads = luigi.IntParameter(description="Number of threads to launch.", default=2)
     output_dir = luigi.Parameter(
-        description="Path to output directory. "
-        "If not specified, will use the current directory.",
+        description=(
+            "Path to output directory. "
+            "If not specified, will use the current directory."
+        ),
         default="",
     )
 
@@ -53,31 +31,39 @@ class RunConfig(luigi.Config):
         description="Save intermediate files?", default=False
     )
     optimization_method = luigi.Parameter(
-        description="Optimization method to use. "
-        "Greedy will procedurally select the next longest probe. "
-        "Optimal will optimize probes for maximum gene coverage - "
-        "slow if many overlaps are present (typically with non-stringent parameter settings). "
-        "[options: optimal, greedy].",
+        description=(
+            "Optimization method to use. "
+            "Greedy will procedurally select the next longest probe. "
+            "Optimal will optimize probes for maximum gene coverage - "
+            "slow if many overlaps are present (typically with non-stringent parameter settings). "
+            "[options: optimal, greedy]."
+        ),
         default="greedy",
     )
     optimization_time_limit = luigi.IntParameter(
-        description="Time limit for optimization in seconds. "
-        "Only used if optimization method is set to 'optimal'.",
+        description=(
+            "Time limit for optimization in seconds. "
+            "Only used if optimization method is set to 'optimal'."
+        ),
         default=60,
     )
 
 
 class SequenceConfig(luigi.Config):
     sequence_file = luigi.Parameter(
-        description="Path to the gene's sequence file. "
-        "Use this if the sequence can't be easily downloaded or if only certain regions should be targeted.",
+        description=(
+            "Path to the gene's sequence file. "
+            "Use this if the sequence can't be easily downloaded or if only certain regions should be targeted."
+        ),
         default="",
     )
     ensembl_id = luigi.Parameter(
-        description="Ensembl ID of the gene of interest. "
-        "Can be used instead of gene and organism name to download the gene of interest. "
-        "Used to filter out the gene of interest from FPKM based filtering - "
-        "will do an automated blast-based filtering if not passed.",
+        description=(
+            "Ensembl ID of the gene of interest. "
+            "Can be used instead of gene and organism name to download the gene of interest. "
+            "Used to filter out the gene of interest from FPKM based filtering - "
+            "will do an automated blast-based filtering if not passed."
+        ),
         default="",
     )
     gene_name = luigi.Parameter(description="Gene name.", default="")
@@ -103,8 +89,10 @@ class ProbeConfig(luigi.Config):
         description="Minimum distance in nucleotides between probes.", default=2
     )
     min_tm = luigi.FloatParameter(
-        description="Minimum melting temperature in degrees C. "
-        "Formamide and Na concentration will affect melting temperature!",
+        description=(
+            "Minimum melting temperature in degrees C. "
+            "Formamide and Na concentration will affect melting temperature!"
+        ),
         default=40.0,
     )
     max_tm = luigi.FloatParameter(
@@ -125,23 +113,30 @@ class ProbeConfig(luigi.Config):
         description="Na concentration in mM.", default=390.0
     )
     max_off_targets = luigi.IntParameter(
-        description="Maximum number of off-targets binding anywhere BUT "
-        "the gene of interest in the genome.",
+        description=(
+            "Maximum number of off-targets binding anywhere BUT "
+            "the gene of interest in the genome."
+        ),
         default=0,
     )
     encode_count_table = luigi.Parameter(
-        description="Path to the ENCODE RNAseq count table. "
-        "Must contain the columns 'gene_id' and 'FPKM'. "
-        "'gene_id' must use ensembl ID's!",
+        description=(
+            "Path to the ENCODE RNAseq count table in TSV format. "
+            "The first two columns have to be `gene_id` and `normalized_value` respectively. "
+            "Specific column names are not required. "
+            "`gene_id` have to be ensemble IDs of the respective genes. "
+            "`normalized_value` have to be normalized count values (RPKM, FPKM, TPM, DeSeq2-norm, etc). "
+        ),
         default="",
     )
-    max_off_target_fpkm = luigi.FloatParameter(
+    max_expression_percentage = luigi.FloatParameter(
         description=(
-            "Maximum off-target FPKM (Fragments Per Kilobase of transcript per Million mapped reads) "
-            "based on ENCODE RNAseq count table. "
-            "Only used if ENCODE RNAseq count table is provided."
+            "Remove any off-target genes expressed more highly than "
+            "`max-expression-percentage` percentage of all genes. "
+            "Genes to remove are based on ENCODE RNAseq count table provided in `encode-count-table`. "
+            "Only used if `encode-count-table` and `reference-annotation` are provided."
         ),
-        default=10.0,
+        default=50.0,
     )
     kmer_length = luigi.IntParameter(
         description="Length of k-mer used to filter probe sequences.", default=15
@@ -150,7 +145,9 @@ class ProbeConfig(luigi.Config):
         description="Highest count of sub-k-mers found in reference genome.", default=5
     )
     max_deltag = luigi.FloatParameter(
-        description="Maximum predicted deltaG in kcal/mol. "
-        "Note: deltaGs range from 0 (no secondary structures) to increasingly negative values!",
+        description=(
+            "Maximum predicted deltaG in kcal/mol. "
+            "Note: deltaGs range from 0 (no secondary structures) to increasingly negative values!"
+        ),
         default=-10.0,
     )

@@ -69,7 +69,7 @@ class PrepareAnnotationFile(luigi.Task):
     def output(self):
         return luigi.LocalTarget(GeneralConfig().reference_annotation + ".parq")
 
-    def prepare_gtf_file(self, fname_input: str, fname_output) -> None:
+    def prepare_gtf_file(self, fname_input: str, fname_output: str) -> None:
         """Save GTF file as parquet."""
         warnings.filterwarnings("ignore")
         df = gtfparse.read_gtf(fname_input)
@@ -86,24 +86,19 @@ class AlignProbeCandidates(luigi.Task):
     """Align all probe candidates to the reference genome and filter."""
 
     logger = logging.getLogger("custom-logger")
-    is_blast_required = (
-        ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
-    )
 
-    def _requires(self):
-        """Hidden / not directly accessed requirements."""
-        tasks = [BuildBowtieIndex()]
-        if self.is_blast_required:
-            tasks.append(BuildBlastDatabase())
-        return luigi.task.flatten(
-            [*tasks, super(AlignProbeCandidates, self)._requires()]
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.is_blast_required = (
+            ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
         )
 
     def requires(self):
-        tasks = {"probes": BasicFiltering()}
+        tasks = {"probes": BasicFiltering(), "bowtie": BuildBowtieIndex()}
         if self.is_blast_required:
             tasks["blastseq"] = PrepareSequence()
             tasks["gtf"] = PrepareAnnotationFile()
+            tasks["blast"] = BuildBlastDatabase()
         return tasks
 
     def output(self):
@@ -116,28 +111,57 @@ class AlignProbeCandidates(luigi.Task):
         }
         if self.is_blast_required:
             tasks["table"] = luigi.LocalTarget(
-                os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_fpkm.csv")
+                os.path.join(
+                    util.get_output_dir(), f"{util.get_gene_name()}_counts.csv"
+                )
             )
         return tasks
 
-    def read_count_table(self, fname: str) -> pd.DataFrame:
-        """Read and verify a RNAseq FPKM count table."""
-        df = pd.read_csv(fname, sep="\t")
-        required_columns = ["gene_id", *constants.COUNTS_COLUMNS[1:]]
-        if not all(col in df.columns for col in required_columns):
+    @property
+    def count_table(self) -> pd.DataFrame:
+        """Read and verify a RNAseq normalized count table."""
+        if not os.path.splitext(self.fname_count)[1] == ".tsv":
             raise ValueError(
-                f"The columns {required_columns} must be in the count table. "
+                "The count table must be provided as TSV file. "
+                f"Only found - {self.fname_count}"
+            )
+        df = pd.read_csv(self.fname_count, sep="\t").reset_index().dropna()
+        if not len(df.columns) >= 2:
+            raise ValueError(
+                "The count table must contain at least 2 columns."
                 f"Only found - {df.columns}"
+            )
+        self.logger.debug(f"Mapping original the first two columns of - {df.columns}.")
+        self.logger.debug(f"Read count table with {len(df)} entries.")
+        self.logger.debug(f"Found dtypes - {df.dtypes}")
+        self.logger.debug(f"First column - {df.iloc[0]}")
+
+        df = df.iloc[:, :2]
+        df.columns = ["gene_id", "count"]
+        try:
+            df = df.astype({"gene_id": str, "count": float})
+        except ValueError:
+            raise ValueError(
+                "Could not convert count table columns to the right type. "
+                "Please ensure the first two colums are of type string and number/float/int, respectively. "
             )
 
         # Remove potential version numbers
-        df["clean_id"] = df["gene_id"].apply(lambda x: x.split(".")[0])
-        self.logger.debug(f"Read count table with {len(df)} entries.")
-        return df[constants.COUNTS_COLUMNS]
+        df["gene_id"] = df["gene_id"].apply(lambda x: x.split(".")[0])
+        return df
 
-    def read_gtf_file(self, fname: str):
+    @property
+    def gtf_table(self) -> pd.DataFrame:
         """Parse prepared parquet-formatted gtf file."""
-        return pd.read_parquet(fname)[constants.GTF_COLUMNS]
+        return pd.read_parquet(self.fname_gtf)[constants.GTF_COLUMNS]
+
+    @property
+    def norm_table(self) -> pd.DataFrame:
+        """Merge gtf and count table."""
+        df = pd.merge(
+            self.count_table, self.gtf_table, how="left", on="gene_id"
+        ).dropna()
+        return df
 
     def align_probes(self, max_off_targets: int, is_endogenous: bool, threads: int):
         """Align probes to the reference genome.
@@ -193,66 +217,58 @@ class AlignProbeCandidates(luigi.Task):
             return pd.DataFrame(data, columns=columns).dropna()
         return pd.DataFrame(columns=columns)
 
-    def prepare_fpkm_table(
-        self, fname_gtf: str, fname_count: str, **gene_of_interest
-    ) -> pd.DataFrame:
-        """Merge gtf and count table."""
-        df_gtf = self.read_gtf_file(fname_gtf)
-        df_counts = self.read_count_table(fname_count)
-        df = pd.merge(
-            df_counts, df_gtf, how="left", left_on="clean_id", right_on="gene_id"
-        ).dropna()
-        return df
-
     def exclude_gene_of_interest(
         self, df: pd.DataFrame, ensembl_id: str, fname_full_gene: str, threads: int
     ) -> pd.DataFrame:
-        """Filter FPKM table to exclude the gene of interest."""
+        """Filter count table to exclude the gene of interest."""
         # Filter using provided EnsemblID directly
         if ensembl_id:
             self.logger.debug(f"Filtering directly using EmsembleID {ensembl_id}")
-            return df[df["clean_id"] != ensembl_id]
+            return df[df["gene_id"] != ensembl_id]
 
         # Filter using blast
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args_blast = [
-                "blastn",
-                "-db",
-                self.fname_genome,
-                "-query",
-                fname_full_gene,
-                "-task",
-                "megablast",
-                "-outfmt",
-                "6",
-                "-num_threads",
-                str(threads),
-            ]
-            self.logger.debug(f"Running blast with - {' '.join(args_blast)}")
-            process = subprocess.run(args_blast, capture_output=True, text=True)
-            data = [row.split("\t") for row in process.stdout.split("\n") if row]
-            df_blast = pd.DataFrame(data, columns=constants.BLAST_COLUMNS).astype(
-                {name: float for name in ["pident", "sstart", "send", "evalue"]}
-            )
+        args_blast = [
+            "blastn",
+            "-db",
+            self.fname_genome,
+            "-query",
+            fname_full_gene,
+            "-task",
+            "megablast",
+            "-outfmt",
+            "6",
+            "-num_threads",
+            str(threads),
+        ]
+        self.logger.debug(f"Running blast with - {' '.join(args_blast)}")
+        process = subprocess.run(args_blast, capture_output=True, text=True)
+        data = [row.split("\t") for row in process.stdout.split("\n") if row]
+        df_blast = pd.DataFrame(data, columns=constants.BLAST_COLUMNS).astype(
+            {name: float for name in ["pident", "sstart", "send", "evalue"]}
+        )
 
         # Arbirary identity values to ensure similar targets aren't falsely selected
         df_blast = df_blast[
             (df_blast["pident"] >= 98)
-            & (df_blast["evalue"] <= 1e-8)
+            & (df_blast["evalue"] <= 1e-5)
             & (df_blast["sseqid"] == df_blast.loc[0, "sseqid"])
         ]
 
         # Pad blast start/end results in case not everything was found/isoforms/etc.
         # Set to an arbitrary maximum value of 100 to not include other genes
+        # Account for forward and reverse direction
         for buffer in range(0, 110, 10):
             gene_ids = []
             for _, row in df_blast.iterrows():
                 gene_ids.extend(
                     df[
-                        (df["seqname"] == row["sseqid"])
-                        & (df["start"] >= row["sstart"] - buffer)
-                        & (df["end"] <= row["send"] + buffer)
-                    ]["clean_id"].values
+                        (
+                            (df["seqname"] == row["sseqid"])
+                            | (df["seqname"] == f"chr{row['sseqid']}")
+                        )
+                        & ((df["start"] >= row["sstart"]) & (df["end"] <= row["send"]))
+                        | ((df["start"] >= row["send"]) & (df["end"] <= row["sstart"]))
+                    ]["gene_id"].values
                 )
             if not gene_ids:
                 self.logger.debug(f"No genes found using a buffer of {buffer}")
@@ -262,22 +278,24 @@ class AlignProbeCandidates(luigi.Task):
             self.logger.debug(
                 f"Filtering out most frequent gene {most_frequent_gene_id}"
             )
-            df = df[df["clean_id"] != most_frequent_gene_id].reset_index(drop=True)
+            df = df[df["gene_id"] != most_frequent_gene_id].reset_index(drop=True)
             break
 
         return df
 
-    def get_maximum_fpkm(
-        self, df_fpkm: pd.DataFrame, df_sam: pd.DataFrame
+    def join_alignment_with_annotation(
+        self, df_sam: pd.DataFrame, df_norm: pd.DataFrame
     ) -> pd.DataFrame:
-        """Find the highest FPKM values across detected off-targets."""
-        # Match FPKM to the probe candidates' off-target genomic locations
-        # Loop over chromosome/rname to keep loci separated
+        """Merge probe alignment with normalized count table based on start/end positions."""
         dfs = []
+
         for sequence, df_sequence in df_sam.groupby("rname"):
-            df_fpkm_sequence = df_fpkm[df_fpkm["seqname"] == sequence]
-            gene_start = df_fpkm_sequence["start"].astype(int).values
-            gene_end = df_fpkm_sequence["end"].astype(int).values
+            df_count_sequence = df_norm[
+                (df_norm["seqname"] == sequence)
+                | (df_norm["seqname"] == sequence.lstrip("chr"))
+            ]
+            gene_start = df_count_sequence["start"].astype(int).values
+            gene_end = df_count_sequence["end"].astype(int).values
             align_start = df_sequence["pos"].astype(int).values
             align_end = align_start + df_sequence["seq"].apply(len).values
 
@@ -293,11 +311,11 @@ class AlignProbeCandidates(luigi.Task):
                 )
             )
 
-            # Join columns to merge alignment information with FPKM values
+            # Join columns to merge alignment information with count values
             df_sequence = pd.concat(
                 [
                     df_sequence.reset_index(drop=True).iloc[i].reset_index(drop=True),
-                    df_fpkm_sequence.reset_index(drop=True)
+                    df_count_sequence.reset_index(drop=True)
                     .iloc[j]
                     .reset_index(drop=True),
                 ],
@@ -305,37 +323,44 @@ class AlignProbeCandidates(luigi.Task):
             )
             dfs.append(df_sequence)
         dfs = pd.concat(dfs, ignore_index=True)
+        return dfs
 
-        # Get the highest FPKM per alignment/candidate
-        df_max_fpkm = dfs.groupby("qname", as_index=False)["FPKM"].max()
-        return df_max_fpkm
+    def get_most_expressed_genes(self, df: pd.DataFrame, percentage: float) -> list:
+        """Find the most highly expressed genes based on normalized count."""
+        quantile = df["count"].quantile(percentage / 100)
+        most_expressed = df[df["count"] > quantile].reset_index(drop=True)
+        return most_expressed["gene_id"].values.tolist()
 
     # TODO allow filtering if exogenous?
-    def filter_using_fpkm(self, df_sam: pd.DataFrame) -> pd.DataFrame:
+    def filter_using_count(self, df_sam: pd.DataFrame) -> pd.DataFrame:
         """Filter candidates binding off targets with too high FPKMs."""
-        df_fpkm = self.prepare_fpkm_table(
-            fname_gtf=self.input()["gtf"].path,
-            fname_count=ProbeConfig().encode_count_table,
-        )
-        df_fpkm = self.exclude_gene_of_interest(
-            df_fpkm,
+        df = self.exclude_gene_of_interest(
+            self.norm_table,
             ensembl_id=SequenceConfig().ensembl_id,
             fname_full_gene=self.input()["blastseq"].path,
             threads=GeneralConfig().threads,
         )
-        df_max_fpkm = self.get_maximum_fpkm(df_sam, df_fpkm)
-        df_max_fpkm.to_csv(self.output()["table"].path, index=False)
-        df_sam = df_max_fpkm[df_max_fpkm["FPKM"] <= ProbeConfig().max_off_target_fpkm]
+        df = self.join_alignment_with_annotation(df_sam=df_sam, df_norm=df)
+        most_expressed = self.get_most_expressed_genes(
+            df=self.norm_table, percentage=ProbeConfig().max_expression_percentage
+        )
+        df.to_csv(self.output()["table"].path, index=False)
+        df_sam = df[~df["gene_id"].isin(most_expressed)].reset_index(drop=True)
         return df_sam
 
     def run(self):
+        self.logger.warning(f"is required - {self.is_blast_required}")
+        self.logger.warning(ProbeConfig())
+
         # Naming
         self.fname_fasta = self.input()["probes"].path
         self.fname_sam = os.path.splitext(self.fname_fasta)[0] + ".sam"
         self.fname_genome = util.get_genome_name()
         self.fname_gene = util.get_gene_name()
+        self.fname_gtf = self.input()["gtf"].path
+        self.fname_count = ProbeConfig().encode_count_table
 
-        # Alignment
+        # Alignment and filtering
         self.align_probes(
             max_off_targets=ProbeConfig().max_off_targets,
             is_endogenous=SequenceConfig().is_endogenous,
@@ -343,9 +368,9 @@ class AlignProbeCandidates(luigi.Task):
         )
         df_sam = self.filter_unique_probes(is_endogenous=SequenceConfig().is_endogenous)
         if self.is_blast_required:
-            df_sam = self.filter_using_fpkm(df_sam)
+            df_sam = self.filter_using_count(df_sam)
 
-        # Filter candidates found in samfile
+        # Save output
         sequences = list(Bio.SeqIO.parse(self.fname_fasta, "fasta"))
         candidates = [seq for seq in sequences if seq.id in df_sam["qname"].values]
         util.log_and_check_candidates(
