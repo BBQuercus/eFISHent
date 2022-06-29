@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "Until properly published - if you use this software, please cite it as below."
+authors:
+  - family-names: "Eichenberger"
+    given-names: "Bastian Th"
+    orcid: "https://orcid.org/0000-0002-9892-5487"
+title: "eFISHent"
+version: 0.0.1
+doi: 10.5281/zenodo.6778238
+date-released: 2022-06-29
+url: "https://github.com/bbquercus/efishent"
