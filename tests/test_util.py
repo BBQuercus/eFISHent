@@ -59,7 +59,10 @@ def test_gene_name():
 
     # Gene file
     class Config(luigi.Config):
-        sequence_file = luigi.Parameter("./tests/renilla.fa")
+        sequence_file = luigi.Parameter("./tests/renilla.fasta")
+        ensembl_id = luigi.Parameter("")
+        gene_name = luigi.Parameter("")
+        organism_name = luigi.Parameter("")
 
     assert get_gene_name(config=Config).startswith("renilla")
     assert get_gene_name(hashed=False, config=Config) == "renilla"
@@ -68,6 +71,8 @@ def test_gene_name():
     class Config(luigi.Config):
         sequence_file = luigi.Parameter("")
         ensembl_id = luigi.Parameter("ENSG00000026025")
+        gene_name = luigi.Parameter("")
+        organism_name = luigi.Parameter("")
 
     assert get_gene_name(config=Config).startswith("ENSG00000026025")
 
@@ -82,7 +87,7 @@ def test_gene_name():
 
     # Gene file > NCBI
     class Config(luigi.Config):
-        sequence_file = luigi.Parameter("./tests/renilla.fa")
+        sequence_file = luigi.Parameter("./tests/renilla.fasta")
         ensembl_id = luigi.Parameter("")
         gene_name = luigi.Parameter("ACOOLGene123")
         organism_name = luigi.Parameter("Latin name")

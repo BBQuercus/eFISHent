@@ -46,7 +46,7 @@ def get_gene_name(hashed: bool = True, config: luigi.Config = SequenceConfig) ->
     """Return the gene name without extension."""
     # Name based on gene fasta file
     sequence_file = config().sequence_file
-    if sequence_file is not None and os.path.isfile(sequence_file):
+    if sequence_file and os.path.isfile(sequence_file):
         basename = secure_filename(os.path.splitext(os.path.basename(sequence_file))[0])
     # Using Ensembl ID
     elif config().ensembl_id:

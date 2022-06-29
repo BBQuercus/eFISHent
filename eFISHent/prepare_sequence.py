@@ -89,7 +89,7 @@ class BuildBlastDatabase(luigi.Task):
     def output(self):
         return [
             luigi.LocalTarget(f"{util.get_genome_name()}.{extension}")
-            for extension in ["ndb", "nhr", "nin", "not", "nsq", "ntf", "nto"]
+            for extension in ["nhr", "nin", "nsq"]
         ]
 
     def run(self):
