@@ -1,6 +1,5 @@
 """Setup file for pypi package called efishent."""
 
-# TODO write makefile for basic deployment using
 # python setup.py sdist
 # twine upload dist/latest-version.tar.gz
 
@@ -15,7 +14,13 @@ setup(
     license="MIT",
     description="RNA FISH oligos/probes design tool.",
     long_description_content_type="text/plain",
-    long_description=textwrap.dedent("""TDB."""),
+    long_description=textwrap.dedent(
+        """
+    eFISHent is a command-line based tool to facilitate the creation of eFISHent RNA FISH oligonucleotide probes.
+    This is just the python code which is reliant on multiple compiled bioinformatics libaries.
+    Therefore please install other dependencies separately or use the bioconda package.
+    """
+    ),
     # Installation
     python_requires=">=3.7",
     packages=find_packages(),
