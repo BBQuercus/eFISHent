@@ -135,7 +135,7 @@ def test_downloaded_endogenous_optimal():
     assert time.time() - tic < 60
 
     assert process.returncode == 0
-    files = glob.glob("./Saccharomyces_cerevisiae_AAD4_*")
+    files = sorted(glob.glob("./Saccharomyces_cerevisiae_AAD4_*"))
     assert len(files) == 3
     verify_csv(files[0], args)
     [os.remove(f) for f in files]

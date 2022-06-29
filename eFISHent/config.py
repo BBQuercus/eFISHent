@@ -68,7 +68,11 @@ class SequenceConfig(luigi.Config):
     )
     gene_name = luigi.Parameter(description="Gene name.", default="")
     organism_name = luigi.Parameter(
-        description="Latin name of the organism.", default=""
+        description=(
+            "Latin name of the organism. "
+            "Can be passed together with `ensembl_id` to narrow search."
+        ),
+        default="",
     )
     is_plus_strand = luigi.BoolParameter(
         description="Is the probe targeting the plus strand?", default=True

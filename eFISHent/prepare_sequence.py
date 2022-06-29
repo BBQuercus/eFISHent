@@ -30,10 +30,12 @@ class DownloadEntrezGeneSequence(luigi.Task):
     ) -> str:
         """Retrieve the query depending on sequence configuration arguments passed."""
         if ensembl_id:
-            return ensembl_id
+            return f"({ensembl_id})" + (
+                f" AND {organism_name}[Organism]" if organism_name else ""
+            )
 
         if gene_name and organism_name:
-            return f"{gene_name} [GENE] {organism_name} [ORGN]"
+            return f"({gene_name}[Gene Name]) AND {organism_name}[Organism]"
 
         raise ValueError(
             "For downloading Entrez Gene Probes, "

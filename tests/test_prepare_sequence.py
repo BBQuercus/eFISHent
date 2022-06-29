@@ -38,11 +38,19 @@ def test_download_entrez_ensembl(task_download):
 
 
 @pytest.mark.parametrize(
-    "ensembl,gene,organism",
-    [("ENSG00000026025", "", ""), ("ENSG00000029248", "gene", "orgn")],
+    "ensembl,gene,organism,query",
+    [
+        ("ENSG00000026025", "", "", "(ENSG00000026025)"),
+        (
+            "ENSG00000128272",
+            "gene",
+            "homo sapiens",
+            "(ENSG00000128272) AND homo sapiens[Organism]",
+        ),
+    ],
 )
-def test_get_ensembl_query(ensembl, gene, organism, task_download):
-    assert task_download.get_entrez_query(ensembl, gene, organism) == ensembl
+def test_get_ensembl_query(ensembl, gene, organism, query, task_download):
+    assert task_download.get_entrez_query(ensembl, gene, organism) == query
 
 
 @pytest.mark.parametrize(
@@ -51,7 +59,7 @@ def test_get_ensembl_query(ensembl, gene, organism, task_download):
 def test_get_ensembl_gene_organism(gene, organism, task_download):
     assert (
         task_download.get_entrez_query("", gene, organism)
-        == f"{gene} [GENE] {organism} [ORGN]"
+        == f"({gene}[Gene Name]) AND {organism}[Organism]"
     )
 
 

@@ -349,16 +349,11 @@ class AlignProbeCandidates(luigi.Task):
         return df_sam
 
     def run(self):
-        self.logger.warning(f"is required - {self.is_blast_required}")
-        self.logger.warning(ProbeConfig())
-
         # Naming
         self.fname_fasta = self.input()["probes"].path
         self.fname_sam = os.path.splitext(self.fname_fasta)[0] + ".sam"
         self.fname_genome = util.get_genome_name()
         self.fname_gene = util.get_gene_name()
-        self.fname_gtf = self.input()["gtf"].path
-        self.fname_count = ProbeConfig().encode_count_table
 
         # Alignment and filtering
         self.align_probes(
@@ -368,6 +363,8 @@ class AlignProbeCandidates(luigi.Task):
         )
         df_sam = self.filter_unique_probes(is_endogenous=SequenceConfig().is_endogenous)
         if self.is_blast_required:
+            self.fname_gtf = self.input()["gtf"].path
+            self.fname_count = ProbeConfig().encode_count_table
             df_sam = self.filter_using_count(df_sam)
 
         # Save output
