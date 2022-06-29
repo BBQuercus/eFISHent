@@ -1,3 +1,11 @@
+<!-- [![Github Actions Status](https://github.com/bbquercus/efishent/workflows/main/badge.svg)]() -->
+<!-- [![Conda download statistics](https://anaconda.org/bioconda/efishent/badges/downloads.svg)]() -->
+[![GitHub code licence is MIT](https://anaconda.org/bioconda/efishent/badges/license.svg)]()
+[![Anaconda package version number](https://anaconda.org/bioconda/efishent/badges/version.svg)]()
+[![DOI](https://zenodo.org/badge/501129295.svg)](https://zenodo.org/badge/latestdoi/501129295)
+
+<img src="https://github.com/bbquercus/efishent/raw/master/logo.png" width="200px" align="right" alt="Logo of deepBlink.">
+
 # eFISHent
 
 A tool to facilitate the creation of eFISHent RNA FISH oligonucleotide probes.
@@ -59,10 +67,11 @@ Probe filtering workflow:
   * [x] Add basic documentation in CLI and in README.md
   * [x] Add thread limiting check with `os.cpu_count()`
   * [x] Create bioconda recipe
-  * [ ] Add logo to repository
+  * [x] Add logo to repository
   * [ ] Add more detailed documentation as wiki page(s)
     * [ ] Add benchmarks for deltaG, FPKM
     * [ ] Add links to genomes and RNAseq databases
-    * [ ] Add examples from multiple sources
+    * [x] Add examples from multiple sources
   * [ ] Add mathematical description for model (in wiki?)
-  * [ ] Add citation
+  * [x] Add citation
+  * [ ] Set up CI pipeline
