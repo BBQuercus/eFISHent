@@ -4,7 +4,7 @@
 [![Anaconda package version number](https://anaconda.org/bioconda/efishent/badges/version.svg)]()
 [![DOI](https://zenodo.org/badge/501129295.svg)](https://zenodo.org/badge/latestdoi/501129295)
 
-<img src="https://github.com/bbquercus/efishent/raw/master/logo.png" width="200px" align="right" alt="Logo of deepBlink.">
+<img src="https://raw.githubusercontent.com/BBQuercus/eFISHent/main/logo.png" width="200px" align="right" alt="Logo of eFISHent.">
 
 # eFISHent
 
