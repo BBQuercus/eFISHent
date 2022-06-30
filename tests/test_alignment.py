@@ -16,8 +16,6 @@ def test_prepare_annotations():
     for col in ["seqname", "source", "feature", "start", "end"]:
         assert col in df.columns
 
-    os.remove(fname_output)
-
 
 @pytest.fixture
 def task_align() -> AlignProbeCandidates:

@@ -14,7 +14,6 @@ import pandas as pd
 from .config import GeneralConfig
 from .config import SequenceConfig
 from .constants import FASTA_EXT
-from .constants import _WINDOWS_DEVICE_FILES
 
 
 def get_output_dir(config: luigi.Config = GeneralConfig) -> Any:
@@ -125,7 +124,7 @@ def log_and_check_candidates(
         )
 
 
-def create_data_table(sequences: List[Bio.SeqRecord.Seqrecord]) -> pd.DataFrame:
+def create_data_table(sequences: List[Bio.SeqRecord.SeqRecord]) -> pd.DataFrame:
     """Create a data table from a list of sequences."""
     df = pd.DataFrame(
         list(map(lambda x: (x.id, len(x)), sequences)), columns=["name", "length"]
