@@ -1,9 +1,13 @@
+"""Utility and getter functions."""
+
+from typing import Any, List
 import hashlib
 import logging
 import os
 import re
 import unicodedata
 
+import Bio.SeqRecord
 import luigi
 import pandas as pd
 
@@ -13,7 +17,7 @@ from .constants import FASTA_EXT
 from .constants import _WINDOWS_DEVICE_FILES
 
 
-def get_output_dir(config: luigi.Config = GeneralConfig) -> str:
+def get_output_dir(config: luigi.Config = GeneralConfig) -> Any:
     """Return the output directory."""
     output_dir = config().output_dir
     if output_dir and not os.path.exists(output_dir):
@@ -23,7 +27,7 @@ def get_output_dir(config: luigi.Config = GeneralConfig) -> str:
     return os.path.abspath(output_dir)
 
 
-def hash_fn(key: bytearray) -> str:
+def hash_fn(key: str) -> str:
     """Deterministic hash function."""
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:10]
 
@@ -65,7 +69,7 @@ def get_gene_name(hashed: bool = True, config: luigi.Config = SequenceConfig) ->
     return f"{basename}_{create_config_hash(luigi.configuration.get_config())}"
 
 
-def get_genome_name(config: luigi.Config = GeneralConfig) -> str:
+def get_genome_name(config: luigi.Config = GeneralConfig) -> Any:
     """Return the genome name without extension."""
     if config().reference_genome is None:
         raise ValueError("Reference genome must be passed.")
@@ -81,21 +85,13 @@ def get_genome_name(config: luigi.Config = GeneralConfig) -> str:
 
 def secure_filename(filename: str) -> str:
     """Pass a filename and return a secure version of it.
+
     This filename can then safely be stored on a regular file system and passed
     to `os.path.join`.  The filename returned is an ASCII only string for
     maximum portability.
 
     On windows system the function also makes sure that the file is not
     named after one of the special device files.
-
-    >>> secure_filename("My cool movie.mov")
-    'My_cool_movie.mov'
-    >>> secure_filename("../../../etc/passwd")
-    'etc_passwd'
-    >>> secure_filename(u'i contain cool \xfcml\xe4uts.txt')
-    'i_contain_cool_umlauts.txt'
-
-    The function might return an empty filename.
     """
     filename = unicodedata.normalize("NFKD", filename)
     filename = filename.encode("ascii", "ignore").decode("ascii")
@@ -107,23 +103,13 @@ def secure_filename(filename: str) -> str:
     filename = str(_filename_ascii_strip_re.sub("", "_".join(filename.split()))).strip(
         "._"
     )
-
-    # on nt a couple of special files are present in each folder.  We
-    # have to ensure that the target file is not such a filename.  In
-    # this case we prepend an underline
-    if (
-        os.name == "nt"
-        and filename
-        and filename.split(".")[0].upper() in _WINDOWS_DEVICE_FILES
-    ):
-        filename = f"_{filename}"
-
     return filename
 
 
 def log_and_check_candidates(
     logger: logging.Logger, name: str, count: int, count_prev: int = 0
 ) -> None:
+    """Log candidate count before/after filtering."""
     previous = f" (from {count_prev})" if count_prev else ""
     logger.info(f"Writing {count}{previous} candidates in {name}.")
 
@@ -139,7 +125,7 @@ def log_and_check_candidates(
         )
 
 
-def create_data_table(sequences: list) -> pd.DataFrame:
+def create_data_table(sequences: List[Bio.SeqRecord.Seqrecord]) -> pd.DataFrame:
     """Create a data table from a list of sequences."""
     df = pd.DataFrame(
         list(map(lambda x: (x.id, len(x)), sequences)), columns=["name", "length"]

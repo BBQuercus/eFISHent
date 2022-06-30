@@ -1,6 +1,4 @@
-"""
-Predict secondary structure of probes and filter them based on deltaG.
-"""
+"""Predict secondary structure of probes and filter them based on deltaG."""
 
 from pathlib import Path
 import logging

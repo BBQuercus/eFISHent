@@ -6,7 +6,6 @@ import subprocess
 import time
 
 import pandas as pd
-import pytest
 
 
 def pytest_sessionstart(session):
@@ -16,7 +15,7 @@ def pytest_sessionstart(session):
     files.extend(glob.glob("./*/Saccharomyces*"))
     files.extend(glob.glob("./*/YKL185W_*.jf"))
     files.extend(glob.glob("./*/renilla_*.jf"))
-    [os.remove(f) for f in files]
+    [os.remove(f) for f in files]  # type: ignore
 
 
 def verify_csv(fname: str, *params):
@@ -99,7 +98,7 @@ def test_passed_exogenous():
     csv_files = glob.glob("./renilla_*.csv")
     assert len(csv_files) == 1
     verify_csv(csv_files[0], args)
-    [os.remove(f) for f in glob.glob("./renilla_*")]
+    [os.remove(f) for f in glob.glob("./renilla_*")]  # type: ignore
 
 
 def test_downloaded_endogenous_optimal():
@@ -138,7 +137,7 @@ def test_downloaded_endogenous_optimal():
     files = sorted(glob.glob("./Saccharomyces_cerevisiae_AAD4_*"))
     assert len(files) == 3
     verify_csv(files[0], args)
-    [os.remove(f) for f in files]
+    [os.remove(f) for f in files]  # type: ignore
 
 
 def test_counttable_full_output():
@@ -164,7 +163,7 @@ def test_counttable_full_output():
     assert process.returncode == 0
     files = glob.glob("./YKL185W_*")
     assert len(files) == 3
-    [os.remove(f) for f in files]
+    [os.remove(f) for f in files]  # type: ignore
 
 
 def test_error():

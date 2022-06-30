@@ -1,6 +1,4 @@
-"""
-Find the optimal probeset with the highest coverage (fast or optimal).
-"""
+"""Find the optimal probeset with the highest coverage (fast or optimal)."""
 
 from typing import List, Tuple
 import functools
@@ -180,9 +178,7 @@ def optimal_model(df: pd.DataFrame, time_limit: int) -> List[str]:
     return assigned
 
 
-def visualize_assignment(
-    df: pd.DataFrame, assigned: List[str], filename: str
-) -> np.ndarray:
+def visualize_assignment(df: pd.DataFrame, assigned: List[str], filename: str) -> None:
     """Visualize the assignment as overlap matrix."""
     start = df["start"].min()
     end = df["end"].max()

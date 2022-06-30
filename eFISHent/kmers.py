@@ -1,5 +1,5 @@
-"""
-Create jellyfish indices of the reference genome.
+"""Create jellyfish indices of the reference genome.
+
 Filter probes based on jellyfish indices.
 """
 
@@ -18,7 +18,7 @@ from .alignment import AlignProbeCandidates
 from . import util
 
 
-def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: os.PathLike) -> int:
+def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: str) -> int:
     """Count kmers in a sequence.
 
     Only keep the sequence if it has less than max_kmers kmers.

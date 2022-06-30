@@ -53,11 +53,7 @@ def test_create_data_table():
         assert seq in raw_sequences
 
 
-def test_gene_name():
-    default_file = "./eFISHent/luigi.cfg"
-    luigi.configuration.add_config_path(default_file)
-
-    # Gene file
+def test_gene_name_genefile():
     class Config(luigi.Config):
         sequence_file = luigi.Parameter("./tests/renilla.fasta")
         ensembl_id = luigi.Parameter("")
@@ -67,7 +63,8 @@ def test_gene_name():
     assert get_gene_name(config=Config).startswith("renilla")
     assert get_gene_name(hashed=False, config=Config) == "renilla"
 
-    # Ensembl ID
+
+def test_gene_name_ensembl():
     class Config(luigi.Config):
         sequence_file = luigi.Parameter("")
         ensembl_id = luigi.Parameter("ENSG00000026025")
@@ -76,7 +73,8 @@ def test_gene_name():
 
     assert get_gene_name(config=Config).startswith("ENSG00000026025")
 
-    # NCBI params
+
+def test_gene_name_genename():
     class Config(luigi.Config):
         sequence_file = luigi.Parameter("")
         ensembl_id = luigi.Parameter("")
@@ -85,7 +83,8 @@ def test_gene_name():
 
     assert get_gene_name(config=Config).startswith("Latin_name_ACOOLGene123_")
 
-    # Gene file > NCBI
+
+def test_gene_name_genefile_genename():
     class Config(luigi.Config):
         sequence_file = luigi.Parameter("./tests/renilla.fasta")
         ensembl_id = luigi.Parameter("")
@@ -95,36 +94,38 @@ def test_gene_name():
     assert get_gene_name(config=Config).startswith("renilla")
 
 
-def test_genome_name():
-    # Not passed
+def test_genome_name_notpassed():
     class Config(luigi.Config):
         reference_genome = luigi.Parameter("")
 
     with pytest.raises(ValueError):
         get_genome_name(config=Config)
 
-    # Invalid
+
+def test_genome_name_invalid():
     class Config(luigi.Config):
         reference_genome = luigi.Parameter("./some_random_file.notfasta")
 
     with pytest.raises(ValueError):
         get_genome_name(config=Config)
 
-    # Valid
+
+def test_genome_name_valid():
     class Config(luigi.Config):
         reference_genome = luigi.Parameter("./tests/sacCer3.fa")
 
     assert get_genome_name(config=Config) == os.path.abspath("./tests/sacCer3")
 
 
-def test_output_dir():
+def test_output_dir_passed():
     # Passed
     class Config(luigi.Config):
         output_dir = luigi.Parameter("./tests/")
 
     assert get_output_dir(config=Config) == os.path.abspath("./tests/")
 
-    # Not passed
+
+def test_output_dir_unpassed():
     class Config(luigi.Config):
         output_dir = luigi.Parameter("")
 

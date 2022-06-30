@@ -1,5 +1,6 @@
 """Filter probes based on simple criteria."""
 
+from typing import List
 import logging
 import multiprocessing
 import os
@@ -25,17 +26,17 @@ def get_melting_temp(
     melting_temp = Bio.SeqUtils.MeltingTemp.chem_correction(
         tm_raw, fmd=formamide_concentration
     )
-    return melting_temp
+    return float(melting_temp)
 
 
 def get_gc_content(sequence: Bio.Seq.Seq) -> float:
     """Get GC content of candidate."""
-    return Bio.SeqUtils.GC(sequence)
+    return float(Bio.SeqUtils.GC(sequence))
 
 
 def get_g_quadruplet_count(sequence: Bio.Seq.Seq) -> int:
     """Get number of G quadruplets in candidate."""
-    return sequence.count("GGGG")
+    return int(sequence.count("GGGG"))
 
 
 class BasicFiltering(luigi.Task):
@@ -79,7 +80,9 @@ class BasicFiltering(luigi.Task):
         """Counteracting the really weird multiprocess class behavior."""
         return self.is_candidate_valid(candidate, self.config)
 
-    def screen_sequences(self, sequences: list) -> list:
+    def screen_sequences(
+        self, sequences: List[Bio.SeqRecord.SeqRecord]
+    ) -> List[Bio.SeqRecord.SeqRecord]:
         """Filter candiates not matching criteria."""
         if len(sequences) > 1000:
             self.config = ProbeConfig()

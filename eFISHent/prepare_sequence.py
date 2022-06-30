@@ -1,8 +1,9 @@
-"""
-Download Entrez Gene Probes from NCBI.
+"""Download Entrez Gene Probes from NCBI.
+
 Select the right strand and select intronic/exonic regions.
 """
 
+from typing import List
 import logging
 import os
 import subprocess
@@ -113,7 +114,8 @@ class BuildBlastDatabase(luigi.Task):
 class PrepareSequence(luigi.Task):
     """Prepare gene sequence.
 
-    Select right strand and exon/intron/both."""
+    Select right strand and exon/intron/both.
+    """
 
     logger = logging.getLogger("custom-logger")
 
@@ -127,7 +129,9 @@ class PrepareSequence(luigi.Task):
         fname = f"{util.get_gene_name()}_sequence.fasta"
         return luigi.LocalTarget(os.path.join(util.get_output_dir(), fname))
 
-    def select_sequence(self, sequences: list) -> Bio.SeqRecord.SeqRecord:
+    def select_sequence(
+        self, sequences: List[Bio.SeqRecord.SeqRecord]
+    ) -> Bio.SeqRecord.SeqRecord:
         """Select a single sequence as template."""
         if not sequences:
             raise ValueError(

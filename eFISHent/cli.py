@@ -1,3 +1,5 @@
+"""Command line interface."""
+
 from pathlib import Path
 import argparse
 import configparser
@@ -5,6 +7,7 @@ import logging
 import os
 import sys
 import tempfile
+from typing import Any, List
 
 import luigi
 
@@ -24,7 +27,7 @@ GROUP_DESCRIPTIONS = {
 REQUIRED_PARAMS = ["reference_genome"]
 
 
-def string_to_bool(value):
+def string_to_bool(value) -> bool:
     """Workaround for using typed boolean values as arguments."""
     if isinstance(value, bool):
         return value
@@ -32,11 +35,11 @@ def string_to_bool(value):
         return True
     elif value.lower() in ("no", "false", "f", "n", "0"):
         return False
-    else:
-        raise argparse.ArgumentTypeError("Boolean value expected.")
+
+    raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
-def get_parameter_type(param: luigi.Parameter) -> type:
+def get_parameter_type(param: luigi.Parameter) -> Any:
     """Get the type of a parameter."""
     if isinstance(param, luigi.IntParameter):
         return int
@@ -137,7 +140,7 @@ def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
             value = vars(args).get(name)
             config.set(section, name, str(value))
             if name == "threads":
-                threads = min(vars(args).get(name), os.cpu_count())
+                threads = min(vars(args).get(name), os.cpu_count())  # type: ignore
                 config.set(section, name, str(threads))
 
     with open(config_file, "w") as f:
@@ -149,7 +152,10 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
     log_format = "%(asctime)s %(levelname)-4s %(message)s"
 
     if debug:
-        log_format = "%(asctime)s %(levelname)-4s [%(name)s] %(filename)s %(funcName)s %(lineno)d / %(thread)d - %(message)s"
+        log_format = (
+            "%(asctime)s %(levelname)-4s [%(name)s] "
+            "%(filename)s %(funcName)s %(lineno)d / %(thread)d - %(message)s"
+        )
         luigi_level = "DEBUG"
         custom_level = logging.DEBUG
         logfile = "eFISHent.log"
@@ -162,7 +168,7 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
         custom_level = logging.WARNING
         logfile = None
 
-    logging.basicConfig(filename=logfile,format=log_format, force=True)
+    logging.basicConfig(filename=logfile, format=log_format, force=True)
     logging.getLogger("luigi").setLevel(luigi_level)
     logging.getLogger("luigi-interface").setLevel(luigi_level)
     luigi.interface.core.log_level = luigi_level
@@ -183,7 +189,7 @@ def main():
         create_custom_config(args, config_file)
         luigi.configuration.add_config_path(config_file)
 
-        tasks = []
+        tasks: List[luigi.Task] = []
         if args.build_indices:
             tasks = [BuildJellyfishIndex(), BuildBowtieIndex()]
         else:

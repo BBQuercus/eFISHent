@@ -1,9 +1,8 @@
-"""
-Create a list of candidate probes from a gene sequence.
-"""
+"""Create a list of candidate probes from a gene sequence."""
 
 import logging
 import os
+from typing import List
 
 import Bio.SeqIO
 import Bio.SeqRecord
@@ -31,7 +30,7 @@ class GenerateAllProbes(luigi.Task):
 
     def create_candidate_probes(
         self, sequence: Bio.SeqRecord.SeqRecord, min_length: int, max_length: int
-    ) -> list:
+    ) -> List[Bio.SeqRecord.SeqRecord]:
         """Create a set of all subsequences of sequence with the right lengths."""
         if min_length > max_length:
             raise ValueError(

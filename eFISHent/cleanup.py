@@ -1,12 +1,9 @@
-"""
-Clean up the output directory and remove the files that are not needed.
-Prettify the output files.
+"""Clean up the output directory.
 
-Output files:
-    - .fasta with the probe sequences
-    - .csv with probe information (Tm, GC, deltaG, etc.)
+Remove the files that are not needed and prettify the kept output.
 """
 
+from typing import List, Optional
 import glob
 import logging
 import os
@@ -60,10 +57,10 @@ class CleanUpOutput(luigi.Task):
 
     def prettify_table(
         self,
-        sequences: list,
+        sequences: List[Bio.SeqRecord.SeqRecord],
         basename: str,
-        jellyfish_path: os.PathLike,
-        alignment_path: os.PathLike = None,
+        jellyfish_path: str,
+        alignment_path: Optional[str] = None,
         config: luigi.Config = ProbeConfig,
     ) -> pd.DataFrame:
         """Create table with probe information."""
@@ -93,7 +90,7 @@ class CleanUpOutput(luigi.Task):
         df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]
         return df
 
-    def prettify_sequences(self, df: pd.DataFrame) -> list:
+    def prettify_sequences(self, df: pd.DataFrame) -> List[Bio.SeqRecord.SeqRecord]:
         """Clean up sequence id's and descriptions."""
         return [
             Bio.SeqRecord.SeqRecord(
