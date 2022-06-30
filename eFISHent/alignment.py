@@ -1,13 +1,14 @@
-"""
+"""Alignment based tasks.
+
 Create bowtie index for a given genome.
 Align probes to the reference genome.
 Filter probes based on alignment score and uniqueness.
 """
 
+from typing import Any
 import logging
 import os
 import subprocess
-import tempfile
 import warnings
 
 import Bio.SeqIO
@@ -120,12 +121,14 @@ class AlignProbeCandidates(luigi.Task):
     @property
     def count_table(self) -> pd.DataFrame:
         """Read and verify a RNAseq normalized count table."""
-        if not os.path.splitext(self.fname_count)[1] == ".tsv":
+        extension = os.path.splitext(self.fname_count)[1].lower()
+        if extension not in (".tsv", ".csv", ".txt"):
             raise ValueError(
-                "The count table must be provided as TSV file. "
+                "The count table must be provided as TSV, CSV, or TXT file. "
                 f"Only found - {self.fname_count}"
             )
-        df = pd.read_csv(self.fname_count, sep="\t").reset_index().dropna()
+        sep = "\t" if extension in (".tsv", ".txt") else ","
+        df = pd.read_csv(self.fname_count, sep=sep, index_col=0).reset_index().dropna()
         if not len(df.columns) >= 2:
             raise ValueError(
                 "The count table must contain at least 2 columns."
@@ -202,7 +205,7 @@ class AlignProbeCandidates(luigi.Task):
         # 4 – flag for unmapped read
         flags = ["--min-MQ", "60"] if is_endogenous else ["--require-flags", "4"]
         self.logger.debug(f"Running samtools with - {' '.join(flags)}")
-        filtered_sam = pysam.view(self.fname_sam, *flags)
+        filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
 
         # Parse tab and newline delimited pysam output
         data = [row.split("\t") for row in filtered_sam.split("\n")]
@@ -325,7 +328,7 @@ class AlignProbeCandidates(luigi.Task):
         dfs = pd.concat(dfs, ignore_index=True)
         return dfs
 
-    def get_most_expressed_genes(self, df: pd.DataFrame, percentage: float) -> list:
+    def get_most_expressed_genes(self, df: pd.DataFrame, percentage: float) -> Any:
         """Find the most highly expressed genes based on normalized count."""
         quantile = df["count"].quantile(percentage / 100)
         most_expressed = df[df["count"] > quantile].reset_index(drop=True)

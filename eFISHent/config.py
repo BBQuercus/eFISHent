@@ -125,7 +125,7 @@ class ProbeConfig(luigi.Config):
     )
     encode_count_table = luigi.Parameter(
         description=(
-            "Path to the ENCODE RNAseq count table in TSV format. "
+            "Path to the ENCODE RNAseq count table provided as TSV, CSV, or TXT format. "
             "The first two columns have to be `gene_id` and `normalized_value` respectively. "
             "Specific column names are not required. "
             "`gene_id` have to be ensemble IDs of the respective genes. "

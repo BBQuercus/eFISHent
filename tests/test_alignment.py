@@ -26,9 +26,11 @@ def task_align() -> AlignProbeCandidates:
     return task
 
 
-def test_read_count_table(task_align: AlignProbeCandidates):
-    fname_count = "./tests/count_table1.tsv"
-    task_align.fname_count = fname_count
+@pytest.mark.parametrize(
+    "fname", ["./tests/count_table1.tsv", "./tests/count_table3.txt"]
+)
+def test_read_count_table(task_align: AlignProbeCandidates, fname):
+    task_align.fname_count = fname
     df = task_align.count_table
     for col in ["gene_id", "count"]:
         assert col in df.columns
