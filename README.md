@@ -3,6 +3,7 @@
 [![Anaconda package version number](https://anaconda.org/bioconda/efishent/badges/version.svg)]()
 [![Github Actions Status](https://github.com/bbquercus/eFISHent/workflows/Tests/badge.svg)]()
 [![CodeFactor](https://www.codefactor.io/repository/github/bbquercus/efishent/badge)](https://www.codefactor.io/repository/github/bbquercus/efishent)
+[![codecov](https://codecov.io/gh/BBQuercus/eFISHent/branch/main/graph/badge.svg?token=C1SRFYZ5VP)](https://codecov.io/gh/BBQuercus/eFISHent)
 [![Maintainability](https://api.codeclimate.com/v1/badges/7470189fdd927276f80e/maintainability)](https://codeclimate.com/github/BBQuercus/eFISHent/maintainability)
 [![DOI](https://zenodo.org/badge/501129295.svg)](https://zenodo.org/badge/latestdoi/501129295)
 
@@ -70,10 +71,10 @@ Probe filtering workflow:
   * [x] Add thread limiting check with `os.cpu_count()`
   * [x] Create bioconda recipe
   * [x] Add logo to repository
-  * [ ] Add more detailed documentation as wiki page(s)
-    * [ ] Add benchmarks for deltaG, FPKM
-    * [ ] Add links to genomes and RNAseq databases
-    * [x] Add examples from multiple sources
-  * [ ] Add mathematical description for model (in wiki?)
   * [x] Add citation
-  * [ ] Set up CI pipeline
+  * [x] Set up CI pipeline
+  * [ ] Add more detailed documentation as wiki page(s)
+    * [x] Add links to genomes and RNAseq databases
+    * [x] Add examples from multiple sources
+    * [ ] Add benchmarks for deltaG, FPKM
+  * [ ] Add mathematical description for model (in wiki?)
