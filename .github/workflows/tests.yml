@@ -5,7 +5,8 @@ on:
   - pull_request
 
 jobs:
-  test-ubuntu:
+  # Unittests
+  test:
     name: Test (${{ matrix.python-version }}, MacOS)
     runs-on: "macos-latest"
     strategy:
@@ -33,8 +34,28 @@ jobs:
       - name: Install tox
         run: |
           python -m pip install --upgrade pip
+          python -m pip install codecov
           python -m pip install tox
-          python -m pip install tox-gh-actions
           python -m pip install tox-conda
+          python -m pip install tox-gh-actions
       - name: Run tox
-        run: tox
+        run: tox -e py
+      - name: Upload coverage reports to Codecov
+        run: codecov
+        env:
+          super_secret: ${{ secrets.CODECOV }}
+
+  # Important checks but not reliant on different versions
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "3.8"
+      - name: install tox
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tox
+      - name: run tox style
+        run: tox -e style

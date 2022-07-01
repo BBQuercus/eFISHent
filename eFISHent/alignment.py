@@ -1,9 +1,4 @@
-"""Alignment based tasks.
-
-Create bowtie index for a given genome.
-Align probes to the reference genome.
-Filter probes based on alignment score and uniqueness.
-"""
+"""Filter probes based on alignment score and uniqueness."""
 
 from typing import Any
 import logging
