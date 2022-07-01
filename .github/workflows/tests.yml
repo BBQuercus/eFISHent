@@ -6,8 +6,8 @@ on:
 
 jobs:
   test-ubuntu:
-    name: Test (${{ matrix.python-version }}, Ubuntu)
-    runs-on: "ubuntu-latest"
+    name: Test (${{ matrix.python-version }}, MacOS)
+    runs-on: "macos-latest"
     strategy:
       matrix:
         python-version: ["3.7.4"]
