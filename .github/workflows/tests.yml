@@ -21,14 +21,6 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Verify conda
-        run: |
-          conda activate test
-          conda info
-          conda list
-          conda config --show-sources
-          conda config --show
-          printenv | sort
       - name: Install tox
         run: |
           python -m pip install --upgrade pip
