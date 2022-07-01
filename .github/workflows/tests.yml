@@ -7,11 +7,12 @@ on:
 jobs:
   # Unittests
   test:
-    name: Test (${{ matrix.python-version }}, MacOS)
-    runs-on: "macos-latest"
+    name: Test (${{ matrix.python-version }}, ${{matrix.os}})
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.7.4"]
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        os: ["macos-latest", "ubuntu-latest"]
     defaults:
       run:
         shell: bash -l {0}
@@ -50,9 +51,9 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: "3.8"
-      - name: install tox
+      - name: Install tox
         run: |
           python -m pip install --upgrade pip
           python -m pip install tox
-      - name: run tox style
+      - name: Run tox
         run: tox -e style
