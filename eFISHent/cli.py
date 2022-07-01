@@ -11,9 +11,9 @@ from typing import Any, List
 
 import luigi
 
-from .alignment import BuildBowtieIndex
 from .cleanup import CleanUpOutput
 from .constants import CONFIG_CLASSES
+from .indexing import BuildBowtieIndex
 from .kmers import BuildJellyfishIndex
 from .util import UniCode
 
@@ -76,6 +76,27 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
     utility.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
 
+def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> None:
+    """Add a single configuration class/group to a parser."""
+    for name, param in config_class().get_params():
+        param_type = get_parameter_type(param)
+        is_required = name in REQUIRED_PARAMS
+        default = (
+            "-"
+            if (not param._default and param_type != string_to_bool)
+            else param._default
+        )
+        group.add_argument(
+            f"--{name.replace('_', '-')}",
+            type=param_type,
+            required=is_required,
+            default=param._default,
+            help=f"{param.description} "
+            f"[default: {default}, "
+            f"required: {is_required}]",
+        )
+
+
 def _add_groups(parser: argparse.ArgumentParser) -> None:
     """Add the main option groups to the parser."""
     groups = [
@@ -86,23 +107,7 @@ def _add_groups(parser: argparse.ArgumentParser) -> None:
     ]
 
     for group, config_class in zip(groups, CONFIG_CLASSES):
-        for name, param in config_class().get_params():
-            param_type = get_parameter_type(param)
-            is_required = name in REQUIRED_PARAMS
-            default = (
-                "-"
-                if (not param._default and param_type != string_to_bool)
-                else param._default
-            )
-            group.add_argument(
-                f"--{name.replace('_', '-')}",
-                type=param_type,
-                required=is_required,
-                default=param._default,
-                help=f"{param.description} "
-                f"[default: {default}, "
-                f"required: {is_required}]",
-            )
+        _add_group(group, config_class)
 
 
 def _parse_args() -> argparse.Namespace:

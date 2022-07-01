@@ -99,18 +99,32 @@ class CleanUpOutput(luigi.Task):
             for seq, name in zip(df["sequence"], df["name"])
         ]
 
+    def prettify_section(self, section: str) -> str:
+        """Prettify a single configuration section."""
+        pretty = [f"{section.rstrip('Config')} configuration:"]
+        for key, value in self.config[section].items():
+            if value and value != '""':
+                pretty.append(f"  {key.replace('_', '-')}: {value}")
+        return "\n".join(pretty)
+
     def prettify_configuration(self) -> str:
         """Create a pretty file with all set/default configuration."""
-        config = luigi.configuration.get_config()
+        self.config = luigi.configuration.get_config()
+        pretty = [self.prettify_section(section) for section in self.config.sections()]
+        return "\n\n".join(pretty)
 
-        pretty = []
-        for section in config.sections():
-            pretty.append(f"{section.rstrip('Config')} configuration:")
-            for key, value in config[section].items():
-                if value and value != '""':
-                    pretty.append(f"  {key.replace('_', '-')}: {value}")
-            pretty.append("")
-        return "\n".join(pretty)
+    def remove_intermediates(self) -> None:
+        """Remove intermediary files no longer used."""
+        intermediary_files = glob.glob(
+            os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_*")
+        )
+        try:
+            intermediary_files.remove(f"{util.get_gene_name()}_entrez.fasta")
+        except ValueError:
+            pass
+        for filename in intermediary_files:
+            self.logger.debug(f"Removing {filename}")
+            os.remove(filename)
 
     def run(self):
         sequences = list(
@@ -135,13 +149,4 @@ class CleanUpOutput(luigi.Task):
 
         # Files to be deleted
         if not RunConfig().save_intermediates:
-            intermediary_files = glob.glob(
-                os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_*")
-            )
-            try:
-                intermediary_files.remove(f"{util.get_gene_name()}_entrez.fasta")
-            except ValueError:
-                pass
-            for filename in intermediary_files:
-                self.logger.debug(f"Removing {filename}")
-                os.remove(filename)
+            self.remove_intermediates()
