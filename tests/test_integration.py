@@ -58,15 +58,15 @@ def test_index_only():
     args = [
         "efishent",
         "--reference-genome",
-        "./tests/sacCer3.fa",
+        "./tests/data/sacCer3.fa",
         "--build-indices",
         "True",
     ]
     process = subprocess.run(args)
     assert process.returncode == 0
-    bowtie_files = glob.glob("./tests/sacCer3*.ebwt")
+    bowtie_files = glob.glob("./tests/data/sacCer3*.ebwt")
     assert len(bowtie_files) == 6
-    assert os.path.isfile("./tests/sacCer3_15.jf")
+    assert os.path.isfile("./tests/data/sacCer3_15.jf")
 
 
 def test_passed_exogenous():
@@ -74,11 +74,11 @@ def test_passed_exogenous():
     args = [
         "efishent",
         "--reference-genome",
-        "./tests/sacCer3.fa",
+        "./tests/data/sacCer3.fa",
         "--save-intermediates",
         "True",
         "--sequence-file",
-        "./tests/renilla.fasta",
+        "./tests/data/renilla.fasta",
         "--is-endogenous",
         "False",
         "--min-length",
@@ -106,7 +106,7 @@ def test_downloaded_endogenous_optimal():
     args = [
         "efishent",
         "--reference-genome",
-        "./tests/sacCer3.fa",
+        "./tests/data/sacCer3.fa",
         "--gene-name",
         "AAD4",
         "--organism-name",
@@ -135,7 +135,7 @@ def test_downloaded_endogenous_optimal():
 
     assert process.returncode == 0
     files = sorted(glob.glob("./Saccharomyces_cerevisiae_AAD4_*"))
-    assert len(files) == 3
+    assert len(files) == 4  # log, csv, fasta-probes, fasta-ensembl
     verify_csv(files[0], args)
     [os.remove(f) for f in files]  # type: ignore
 
@@ -145,13 +145,13 @@ def test_counttable_full_output():
     args = [
         "efishent",
         "--reference-genome",
-        "./tests/sacCer3.fa",
+        "./tests/data/sacCer3.fa",
         "--reference-annotation",
-        "./tests/sacCer3.gtf",
+        "./tests/data/sacCer3.gtf",
         "--ensembl-id",
         "YKL185W",
         "--encode-count-table",
-        "./tests/count_table1.tsv",
+        "./tests/data/count_table1.tsv",
         "--max-expression-percentage",
         "40",
         "--debug",
@@ -162,7 +162,7 @@ def test_counttable_full_output():
 
     assert process.returncode == 0
     files = glob.glob("./YKL185W_*")
-    assert len(files) == 3
+    assert len(files) == 4  # log, csv, fasta-probes, fasta-ensembl
     [os.remove(f) for f in files]  # type: ignore
 
 
