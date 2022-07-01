@@ -154,7 +154,7 @@ def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
 
 def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
     """Set the logging level of luigi and custom logger."""
-    log_format = "%(asctime)s %(levelname)-4s %(message)s"
+    log_format = "%(asctime)s %(levelname)-4s - %(message)s"
 
     if debug:
         log_format = (

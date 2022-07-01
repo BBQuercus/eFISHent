@@ -154,7 +154,6 @@ cython_debug/
 
 # Bioinfo
 *.ebwt
-*.gtf
 *.ndb
 *.nhr
 *.nin
@@ -167,6 +166,5 @@ cython_debug/
 # Other
 .vscode/
 *.png
-*.parq
 *.ipynb
 .DS_Store

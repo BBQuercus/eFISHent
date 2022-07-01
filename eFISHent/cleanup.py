@@ -119,9 +119,13 @@ class CleanUpOutput(luigi.Task):
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_*")
         )
         try:
-            intermediary_files.remove(f"{util.get_gene_name()}_entrez.fasta")
+            intermediary_files.remove(
+                os.path.join(
+                    util.get_output_dir(), f"{util.get_gene_name()}_entrez.fasta"
+                )
+            )
         except ValueError:
-            pass
+            self.logger.debug("Didn't find entrez file...")
         for filename in intermediary_files:
             self.logger.debug(f"Removing {filename}")
             os.remove(filename)
