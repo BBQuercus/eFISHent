@@ -24,6 +24,7 @@ jobs:
           auto-activate-base: true
       - name: Verify conda
         run: |
+          conda activate test
           conda info
           conda list
           conda config --show-sources
