@@ -17,9 +17,9 @@ from .basic_filtering import BasicFiltering
 from .config import GeneralConfig
 from .config import ProbeConfig
 from .config import SequenceConfig
+from .indexing import BuildBlastDatabase
 from .indexing import BuildBowtieIndex
 from .indexing import PrepareAnnotationFile
-from .prepare_sequence import BuildBlastDatabase
 from .prepare_sequence import PrepareSequence
 
 

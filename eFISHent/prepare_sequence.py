@@ -12,9 +12,8 @@ import Bio.SeqIO
 import Bio.SeqRecord
 import luigi
 
-from .config import GeneralConfig
-from .config import SequenceConfig
 from . import util
+from .config import SequenceConfig
 
 
 class DownloadEntrezGeneSequence(luigi.Task):
@@ -82,33 +81,6 @@ class DownloadEntrezGeneSequence(luigi.Task):
         with self.output().open("w") as outfile:
             outfile.write(fasta)
         self.logger.info(f"Downloaded sequence from entrez using query '{query}'.")
-
-
-class BuildBlastDatabase(luigi.Task):
-    """Build local nucleotide blast database."""
-
-    logger = logging.getLogger("custom-logger")
-
-    def output(self):
-        return [
-            luigi.LocalTarget(f"{util.get_genome_name()}.{extension}")
-            for extension in ["nhr", "nin", "nsq"]
-        ]
-
-    def run(self):
-        args_blast = [
-            "makeblastdb",
-            "-dbtype",
-            "nucl",
-            "-in",
-            GeneralConfig().reference_genome,
-            "-out",
-            util.get_genome_name(),
-        ]
-        subprocess.check_call(
-            args_blast, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
-        )
-        self.logger.info("Finished building blast database.")
 
 
 class PrepareSequence(luigi.Task):
