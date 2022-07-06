@@ -13,6 +13,7 @@ import luigi
 
 from .cleanup import CleanUpOutput
 from .constants import CONFIG_CLASSES
+from .indexing import BuildBlastDatabase
 from .indexing import BuildBowtieIndex
 from .kmers import BuildJellyfishIndex
 from .util import UniCode
@@ -196,7 +197,7 @@ def main():
 
         tasks: List[luigi.Task] = []
         if args.build_indices:
-            tasks = [BuildJellyfishIndex(), BuildBowtieIndex()]
+            tasks = [BuildJellyfishIndex(), BuildBowtieIndex(), BuildBlastDatabase()]
         else:
             tasks = [CleanUpOutput()]
 
