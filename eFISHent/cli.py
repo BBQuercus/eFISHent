@@ -174,7 +174,7 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
         custom_level = logging.WARNING
         logfile = None
 
-    logging.basicConfig(filename=logfile, format=log_format, force=True)
+    logging.basicConfig(filename=logfile, format=log_format, force=True)  # type: ignore
     logging.getLogger("luigi").setLevel(luigi_level)
     logging.getLogger("luigi-interface").setLevel(luigi_level)
     luigi.interface.core.log_level = luigi_level

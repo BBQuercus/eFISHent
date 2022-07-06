@@ -11,7 +11,7 @@
 
 # eFISHent
 
-A tool to facilitate the creation of eFISHent RNA FISH oligonucleotide probes.
+A command-line based tool to facilitate the creation of eFISHent RNA fluorescence in-situ hybridization (RNA FISH) oligonucleotide probes.
 
 ## Description
 
@@ -48,7 +48,8 @@ eFISHent is built up modularly using the following components...
 
 Index creation workflow:
 
-* Bowtie index (`alignment.py`)
+* Bowtie index (`indexing.py`)
+* Blast database (`indexing.py`)
 * Jellyfish indices (`kmers.py`)
 
 Probe filtering workflow:
@@ -65,16 +66,8 @@ Probe filtering workflow:
 
 ## TODO
 
-* **General**
-  * [x] Find a name and description for the tool
-  * [x] Add basic documentation in CLI and in README.md
-  * [x] Add thread limiting check with `os.cpu_count()`
-  * [x] Create bioconda recipe
-  * [x] Add logo to repository
-  * [x] Add citation
-  * [x] Set up CI pipeline
-  * [ ] Add more detailed documentation as wiki page(s)
-    * [x] Add links to genomes and RNAseq databases
-    * [x] Add examples from multiple sources
-    * [ ] Add benchmarks for deltaG, FPKM
-  * [ ] Add mathematical description for model (in wiki?)
+* [ ] Add more detailed documentation as wiki page(s)
+  * [x] Add links to genomes and RNAseq databases
+  * [x] Add examples from multiple sources
+  * [ ] Add benchmarks for deltaG, FPKM
+* [ ] Add mathematical description for model (in wiki?)
