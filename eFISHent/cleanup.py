@@ -118,6 +118,7 @@ class CleanUpOutput(luigi.Task):
         intermediary_files = glob.glob(
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_*")
         )
+        self.logger.debug(f"Found file intermediates - {intermediary_files}")
         try:
             intermediary_files.remove(
                 os.path.join(

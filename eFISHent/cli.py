@@ -164,7 +164,7 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
         )
         luigi_level = "DEBUG"
         custom_level = logging.DEBUG
-        logfile = "eFISHent.log"
+        logfile = "efishent.log"
     elif verbose:
         luigi_level = "WARNING"
         custom_level = logging.INFO
@@ -174,7 +174,7 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
         custom_level = logging.WARNING
         logfile = None
 
-    logging.basicConfig(filename=logfile, format=log_format)
+    logging.basicConfig(filename=logfile, format=log_format, force=True)
     logging.getLogger("luigi").setLevel(luigi_level)
     logging.getLogger("luigi-interface").setLevel(luigi_level)
     luigi.interface.core.log_level = luigi_level
