@@ -19,7 +19,7 @@ from .kmers import KMerFiltering
 from . import util
 
 
-def get_free_energy(sequence: Bio.SeqRecord) -> float:
+def get_free_energy(sequence: Bio.SeqRecord.SeqRecord) -> float:
     """Return the predicted free energy of the sequence.
 
     Using "Fold" as part of the RNAstructure package from the Mathews lab.
@@ -35,7 +35,7 @@ def get_free_energy(sequence: Bio.SeqRecord) -> float:
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         fname = os.path.join(tmp_dir, "input.fasta")
-        Bio.SeqIO.write(sequence, fname, "fasta")
+        Bio.SeqIO.write(sequence, fname, format="fasta")
         args_fold = [fold_path, fname, "-", "--bracket", "--MFE"]
         sec = subprocess.check_output(args_fold, stderr=subprocess.STDOUT).decode()
 

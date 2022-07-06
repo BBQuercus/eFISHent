@@ -75,7 +75,12 @@ class SequenceConfig(luigi.Config):
         default="",
     )
     is_plus_strand = luigi.BoolParameter(
-        description="Is the probe targeting the plus strand?", default=True
+        description=(
+            "Is the probe targeting the plus strand? "
+            "Note: Entrez downloads will download the gene 5'-3'. "
+            "Specifying the strand is therefore not required."
+        ),
+        default=True,
     )
     is_endogenous = luigi.BoolParameter(
         description="Is the probe endogenous?", default=True
@@ -114,7 +119,7 @@ class ProbeConfig(luigi.Config):
         default=0.0,
     )
     na_concentration = luigi.FloatParameter(
-        description="Na concentration in mM.", default=390.0
+        description="Na concentration in mM.", default=330.0
     )
     max_off_targets = luigi.IntParameter(
         description=(
