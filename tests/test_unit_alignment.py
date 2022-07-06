@@ -79,6 +79,8 @@ def test_exclude_gene_of_interest_blast(task_align: AlignProbeCandidates):
     assert aad4_gene_id not in out["gene_id"]
 
 
+# TODO add test for filter_using_count
+# TODO add test for fwd and rev strand
 def test_join_alignment_with_annotation(task_align: AlignProbeCandidates):
     task_align.fname_sam = "./tests/data/aad4_basic.sam"
     task_align.fname_count = "./tests/data/count_table1.tsv"

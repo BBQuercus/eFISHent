@@ -57,3 +57,5 @@ CONFIG_CLASSES: List[luigi.Config] = [
 ]
 
 FASTA_EXT = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
+
+SAM_FLAG_REVERSE = "16"

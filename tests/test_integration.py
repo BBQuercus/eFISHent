@@ -154,12 +154,11 @@ def test_counttable_full_output():
         "./tests/data/count_table1.tsv",
         "--max-expression-percentage",
         "40",
+        "--na-concentration",
+        "390",
         "--debug",
     ]
-    tic = time.time()
     process = subprocess.run(args)
-    assert time.time() - tic < 60
-
     assert process.returncode == 0
     files = glob.glob("./YKL185W_*")
     assert len(files) == 4  # log, csv, fasta-probes, fasta-ensembl

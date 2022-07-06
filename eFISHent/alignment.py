@@ -240,7 +240,13 @@ class AlignProbeCandidates(luigi.Task):
             gene_start = df_count_sequence["start"].astype(int).values
             gene_end = df_count_sequence["end"].astype(int).values
             align_start = df_sequence["pos"].astype(int).values
-            align_end = align_start + df_sequence["seq"].apply(len).values
+            align_length = df_sequence["seq"].apply(len).values
+            align_strand = (
+                (df_sequence["flag"] == constants.SAM_FLAG_REVERSE)
+                .replace({True: -1, False: 1})
+                .values
+            )
+            align_end = align_start + align_strand * align_length
 
             # Create n*m matrix of which alignments(n) match up with which annotations(m)
             i, j = np.where(
@@ -276,18 +282,18 @@ class AlignProbeCandidates(luigi.Task):
 
     # TODO allow filtering if exogenous?
     def filter_using_count(self, df_sam: pd.DataFrame) -> pd.DataFrame:
-        """Filter candidates binding off targets with too high FPKMs."""
-        df = self.exclude_gene_of_interest(
-            self.norm_table,
+        """Filter candidates binding off targets above a expression percentage threshold."""
+        df = self.join_alignment_with_annotation(df_sam=df_sam, df_norm=self.norm_table)
+        df.to_csv(self.output()["table"].path, index=False)
+        df_off_targets = self.exclude_gene_of_interest(
+            df,
             ensembl_id=SequenceConfig().ensembl_id,
             fname_full_gene=self.input()["blastseq"].path,
             threads=GeneralConfig().threads,
         )
-        df = self.join_alignment_with_annotation(df_sam=df_sam, df_norm=df)
         most_expressed = self.get_most_expressed_genes(
-            df=self.norm_table, percentage=ProbeConfig().max_expression_percentage
+            df=df_off_targets, percentage=ProbeConfig().max_expression_percentage
         )
-        df.to_csv(self.output()["table"].path, index=False)
         df_sam = df[~df["gene_id"].isin(most_expressed)].reset_index(drop=True)
         return df_sam
 
@@ -312,7 +318,8 @@ class AlignProbeCandidates(luigi.Task):
 
         # Save output
         sequences = list(Bio.SeqIO.parse(self.fname_fasta, "fasta"))
-        candidates = [seq for seq in sequences if seq.id in df_sam["qname"].values]
+        candidates = [seq for seq in sequences if seq.id in df_sam["qname"].unique()]
+        self.logger.debug(df_sam["qname"].values)
         util.log_and_check_candidates(
             self.logger, "AlignProbeCandidates", len(candidates), len(sequences)
         )
