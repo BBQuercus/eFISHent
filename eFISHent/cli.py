@@ -12,6 +12,7 @@ from typing import Any, List
 import luigi
 
 from .cleanup import CleanUpOutput
+from .constants import CLI_SHORTFORM
 from .constants import CONFIG_CLASSES
 from .indexing import BuildBlastDatabase
 from .indexing import BuildBowtieIndex
@@ -88,6 +89,7 @@ def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> No
             else param._default
         )
         group.add_argument(
+            f"-{CLI_SHORTFORM.get(name)}",
             f"--{name.replace('_', '-')}",
             type=param_type,
             required=is_required,

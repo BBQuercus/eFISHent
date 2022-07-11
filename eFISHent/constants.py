@@ -59,3 +59,35 @@ CONFIG_CLASSES: List[luigi.Config] = [
 FASTA_EXT = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
 
 SAM_FLAG_REVERSE = "16"
+
+CLI_SHORTFORM = {
+    "reference_genome": "g",
+    "reference_annotation": "a",
+    "threads": "t",
+    "output_dir": "o",
+    "build_indices": "idx",
+    "save_intermediates": "int",
+    "optimization_method": "om",
+    "optimization_time_limit": "otl",
+    "sequence_file": "seq",
+    "ensembl_id": "id",
+    "gene_name": "gen",
+    "organism_name": "org",
+    "is_plus_strand": "plus",
+    "is_endogenous": "endo",
+    "min_length": "l",
+    "max_length": "L",
+    "spacing": "s",
+    "min_tm": "tm",
+    "max_tm": "TM",
+    "min_gc": "gc",
+    "max_gc": "GC",
+    "formamide_concentration": "f",
+    "na_concentration": "na",
+    "max_off_targets": "ot",
+    "encode_count_table": "ct",
+    "max_expression_percentage": "ep",
+    "kmer_length": "kl",
+    "max_kmers": "km",
+    "max_deltag": "dg",
+}
