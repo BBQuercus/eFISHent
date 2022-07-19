@@ -69,5 +69,13 @@ Probe filtering workflow:
 * [ ] Add more detailed documentation as wiki page(s)
   * [x] Add links to genomes and RNAseq databases
   * [x] Add examples from multiple sources
-  * [ ] Add benchmarks for deltaG, FPKM
+  * [ ] Add benchmarks for deltaG, counts
 * [ ] Add mathematical description for model (in wiki?)
+* [ ] Add filtering step to prevent off chance of probes hybridizing with themselves
+  * [x] Create function to check if probes could bind
+  * [ ] Greedy model - skip if probe rev complement is in set
+  * [ ] Optimal model - add constraint between similar probes to not get assigned
+* [ ] Add probe set analysis visualization
+  * [ ] Input probe set fasta
+  * [ ] All filtering step components as graphs (tm, gc, length, # off targets)
+  * [ ] Save output as pdf?

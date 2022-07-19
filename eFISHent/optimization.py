@@ -6,7 +6,9 @@ import logging
 import multiprocessing
 import os
 
+import Bio.Seq
 import Bio.SeqIO
+import Bio.pairwise2
 import luigi
 import matplotlib.pyplot as plt
 import numpy as np
@@ -100,6 +102,24 @@ def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
     """Check if two ranges overlap."""
     x_set = set(range(x[0], x[1] + 1))
     return len(x_set.intersection(range(y[0], y[1] + 1))) != 0
+
+
+def is_binding(seq1: str, seq2: str) -> bool:
+    """Check if seq1 is similar to (rev) complement of seq2 / if would bind."""
+    seq1 = Bio.Seq.Seq(seq1)
+    seq2 = Bio.Seq.Seq(seq2)
+
+    alignments = []
+    alignments.extend(Bio.pairwise2.align.globalxx(seq1, seq2.complement()))
+    alignments.extend(Bio.pairwise2.align.globalxx(seq1, seq2.reverse_complement()))
+    if not alignments:
+        return False
+
+    max_score = max(map(lambda x: x.score, alignments))
+    if (max_score / len(seq1)) <= 0.75:
+        return False
+
+    return True
 
 
 def greedy_model(df: pd.DataFrame) -> List[str]:

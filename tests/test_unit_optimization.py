@@ -2,8 +2,9 @@ import pandas as pd
 import pytest
 
 from eFISHent.optimization import OptimizeProbeCoverage
-from eFISHent.optimization import is_overlapping
 from eFISHent.optimization import greedy_model
+from eFISHent.optimization import is_binding
+from eFISHent.optimization import is_overlapping
 from eFISHent.optimization import optimal_model
 
 
@@ -57,3 +58,17 @@ def test_run_optimal_as_block(df, optimal_solution):
     assigned = task.run_optimal(1, 1)
     assert assigned == optimal_solution
     assert task.df["block"].nunique() == 2
+
+
+@pytest.mark.parametrize(
+    "seq1,seq2,binding",
+    [
+        ("ATGC", "ATGC", False),  # same seq
+        ("ATGC", "ATGCA", False),  # same but longer
+        ("ATGC", "TACG", True),  # complement
+        ("ATGC", "GCAT", True),  # reverse complement
+        ("ATGCA", "TAGGT", True),  # partially complement (>0.75)
+    ],
+)
+def test_is_binding(seq1, seq2, binding):
+    assert is_binding(seq1, seq2) == binding
