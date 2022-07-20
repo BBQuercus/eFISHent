@@ -90,4 +90,5 @@ CLI_SHORTFORM = {
     "kmer_length": "kl",
     "max_kmers": "km",
     "max_deltag": "dg",
+    "sequence_similarity": "sim",
 }

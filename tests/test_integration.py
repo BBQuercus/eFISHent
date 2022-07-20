@@ -62,8 +62,7 @@ def test_index_only():
         "--build-indices",
         "True",
     ]
-    process = subprocess.run(args)
-    assert process.returncode == 0
+    subprocess.run(args, check=True)
     bowtie_files = glob.glob("./tests/data/sacCer3*.ebwt")
     assert len(bowtie_files) == 6
     assert os.path.isfile("./tests/data/sacCer3_15.jf")
@@ -89,12 +88,12 @@ def test_passed_exogenous():
         "45",
         "--max-tm",
         "55",
+        "--sequence-similarity",
+        "95",
+        "--debug",
     ]
-    tic = time.time()
-    process = subprocess.run(args)
-    assert time.time() - tic < 60
+    subprocess.run(args, check=True)
 
-    assert process.returncode == 0
     csv_files = glob.glob("./renilla_*.csv")
     assert len(csv_files) == 1
     verify_csv(csv_files[0], args)
@@ -130,10 +129,9 @@ def test_downloaded_endogenous_optimal():
         "--debug",
     ]
     tic = time.time()
-    process = subprocess.run(args)
+    subprocess.run(args, check=True)
     assert time.time() - tic < 60
 
-    assert process.returncode == 0
     files = sorted(glob.glob("./Saccharomyces_cerevisiae_AAD4_*"))
     assert len(files) == 4  # log, csv, fasta-probes, fasta-ensembl
     verify_csv(files[0], args)
@@ -158,8 +156,7 @@ def test_counttable_full_output():
         "390",
         "--debug",
     ]
-    process = subprocess.run(args)
-    assert process.returncode == 0
+    subprocess.run(args, check=True)
     files = glob.glob("./YKL185W_*")
     assert len(files) == 4  # log, csv, fasta-probes, fasta-ensembl
     [os.remove(f) for f in files]  # type: ignore

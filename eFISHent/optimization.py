@@ -71,6 +71,29 @@ class OptimizeProbeCoverage(luigi.Task):
         """Run sequential greedy model."""
         return greedy_model(self.df)
 
+    def filter_binding_probes(
+        self, assigned: List[str], match_percentage: float
+    ) -> List[str]:
+        """Remove probes of too high rev/comp sequence similarity."""
+        assigned_sequences = self.df.loc[
+            self.df["name"].isin(assigned), "sequence"
+        ].values
+
+        # Create probe vs probe matrix that could bind
+        binding_matrix = np.array(
+            [
+                [is_binding(x, y, match_percentage) for x in assigned_sequences]
+                for y in assigned_sequences
+            ]
+        )
+
+        trouble_makers = np.unique(np.where(binding_matrix)[1])
+        self.logger.debug(f"Found {len(trouble_makers)} trouble makers to be removed.")
+        assigned = [
+            name for idx, name in enumerate(assigned) if idx not in trouble_makers
+        ]
+        return assigned
+
     def run(self):
         sequences = list(Bio.SeqIO.parse(self.input().path, "fasta"))
         self.df = util.create_data_table(sequences)
@@ -88,6 +111,9 @@ class OptimizeProbeCoverage(luigi.Task):
                 f"Invalid optimization method: {RunConfig().optimization_method}"
                 "Must be greedy or optimal."
             )
+        if ProbeConfig().sequence_similarity > 0:
+            match_percentage = ProbeConfig().sequence_similarity / 100
+            assigned = self.filter_binding_probes(assigned, match_percentage)
 
         visualize_assignment(self.df, assigned, self.output()["coverage"].path)
 
@@ -104,19 +130,22 @@ def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
     return len(x_set.intersection(range(y[0], y[1] + 1))) != 0
 
 
-def is_binding(seq1: str, seq2: str) -> bool:
+def is_binding(seq1: str, seq2: str, match_percentage: float = 0.75) -> bool:
     """Check if seq1 is similar to (rev) complement of seq2 / if would bind."""
-    seq1 = Bio.Seq.Seq(seq1)
-    seq2 = Bio.Seq.Seq(seq2)
-
-    alignments = []
-    alignments.extend(Bio.pairwise2.align.globalxx(seq1, seq2.complement()))
-    alignments.extend(Bio.pairwise2.align.globalxx(seq1, seq2.reverse_complement()))
+    if 0 > match_percentage > 1:
+        raise ValueError(
+            "Matching percentage must be between 0 and 100. "
+            f"Found `{match_percentage * 100}`"
+        )
+    alignments = [
+        *Bio.pairwise2.align.globalxx(seq1, Bio.Seq.Seq(seq2).complement()),
+        *Bio.pairwise2.align.globalxx(seq1, Bio.Seq.Seq(seq2).reverse_complement()),
+    ]
     if not alignments:
         return False
 
-    max_score = max(map(lambda x: x.score, alignments))
-    if (max_score / len(seq1)) <= 0.75:
+    max_score = max(map(lambda x: x.score, alignments))  # type: ignore
+    if (max_score / len(seq1)) <= match_percentage:
         return False
 
     return True

@@ -13,6 +13,15 @@ def df():
     return pd.DataFrame(
         {
             "name": ["seq1", "seq2", "seq3", "seq4", "seq5", "seq6", "seq7"],
+            "sequences": [
+                "GTAATTACAAAATAAGCAACG",
+                "GCTTGCTTTGAGATTTTGTTC",
+                "TCAATTCTCTACTGTCTCAGT",
+                "GTAATTACAAAATAAGCAACG",
+                "GGGACGAATTCTTTGTCTATTC",
+                "TGGATTTCATAATGTTTATTTCAC",
+                "GGGATCTTACGACATAAATCG",
+            ],
             "start": [0, 2, 4, 5, 8, 10, 20],
             "end": [3, 5, 7, 9, 11, 14, 25],
         }
@@ -61,14 +70,26 @@ def test_run_optimal_as_block(df, optimal_solution):
 
 
 @pytest.mark.parametrize(
-    "seq1,seq2,binding",
+    "seq1,seq2,percentage,binding",
     [
-        ("ATGC", "ATGC", False),  # same seq
-        ("ATGC", "ATGCA", False),  # same but longer
-        ("ATGC", "TACG", True),  # complement
-        ("ATGC", "GCAT", True),  # reverse complement
-        ("ATGCA", "TAGGT", True),  # partially complement (>0.75)
+        ("ATGC", "ATGC", 0.75, False),  # same seq
+        ("ATGC", "ATGCA", 0.75, False),  # same but longer
+        ("ATGC", "TACG", 0.75, True),  # complement
+        ("ATGC", "GCAT", 0.75, True),  # reverse complement
+        ("ATGCA", "TAGGT", 0.75, True),  # partially complement
+        ("ATGCA", "TAGGT", 0.95, False),  # partially complement
     ],
 )
-def test_is_binding(seq1, seq2, binding):
-    assert is_binding(seq1, seq2) == binding
+def test_is_binding(seq1, seq2, percentage, binding):
+    assert is_binding(seq1, seq2, percentage) == binding
+
+
+def test_filter_binding_probes(df):
+    task = OptimizeProbeCoverage()
+    task.df = df
+    assigned = df["name"].values
+
+    filtered = task.filter_binding_probes(assigned, 0.75)
+
+    assert len(filtered) <= len(assigned)
+    assert all([f in assigned for f in filtered])

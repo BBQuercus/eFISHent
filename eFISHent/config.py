@@ -160,3 +160,13 @@ class ProbeConfig(luigi.Config):
         ),
         default=-10.0,
     )
+    sequence_similarity = luigi.IntParameter(
+        description=(
+            "Maximum percentage probes can be similar. "
+            "Applied to their complements and reverse complements only. "
+            "Ensures probes don't falsely bind to eachother. "
+            "Setting any value above 0 could add ~1 minute of runtime. "
+            "The lower the value (above 0) the fewer potential probes."
+        ),
+        default=0,
+    )
