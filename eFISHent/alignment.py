@@ -139,16 +139,11 @@ class AlignProbeCandidates(luigi.Task):
             args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
         )
 
-    def filter_unique_probes(self, is_endogenous: bool) -> pd.DataFrame:
-        """Filter sam file with probes based on alignment score and uniqueness."""
-        # 60 - uniquely mapped read, regardless of number of mismatches / indels
-        # 4 – flag for unmapped read
-        flags = ["--min-MQ", "60"] if is_endogenous else ["--require-flags", "4"]
-        self.logger.debug(f"Running samtools with - {' '.join(flags)}")
-        filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
-
+    @staticmethod
+    def parse_raw_pysam(sam: str, is_endogenous: bool) -> pd.DataFrame:
+        """Convert string based pysam output to a DataFrame."""
         # Parse tab and newline delimited pysam output
-        data = [row.split("\t") for row in filtered_sam.split("\n")]
+        data = [row.split("\t") for row in sam.split("\n")]
         end = 14 if is_endogenous else 12
         columns = constants.SAMFILE_COLUMNS[:end]
 
@@ -159,6 +154,15 @@ class AlignProbeCandidates(luigi.Task):
         if data[0][0]:
             return pd.DataFrame(data, columns=columns).dropna()
         return pd.DataFrame(columns=columns)
+
+    def filter_unique_probes(self, is_endogenous: bool) -> pd.DataFrame:
+        """Filter sam file with probes based on alignment score and uniqueness."""
+        # 60 - uniquely mapped read, regardless of number of mismatches / indels
+        # 4 – flag for unmapped read
+        flags = ["--min-MQ", "60"] if is_endogenous else ["--require-flags", "4"]
+        self.logger.debug(f"Running samtools with - {' '.join(flags)}")
+        filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
+        return self.parse_raw_pysam(filtered_sam, is_endogenous)
 
     def exclude_gene_of_interest(
         self, df: pd.DataFrame, ensembl_id: str, fname_full_gene: str, threads: int

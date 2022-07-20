@@ -74,7 +74,12 @@ class OptimizeProbeCoverage(luigi.Task):
     def filter_binding_probes(
         self, assigned: List[str], match_percentage: float
     ) -> List[str]:
-        """Remove probes of too high rev/comp sequence similarity."""
+        """Remove probes of too high rev/comp sequence similarity.
+
+        It would be cleaner to have it evaluated at run time / not have them included
+        to begin with but that'd be O(n2) with potentially 1k+ probes leading to a
+        runtime of multiple hours (with 20ms per `is_binding` call).
+        """
         assigned_sequences = self.df.loc[
             self.df["name"].isin(assigned), "sequence"
         ].values
