@@ -85,7 +85,11 @@ def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> No
         is_required = name in REQUIRED_PARAMS
         default = (
             "-"
-            if (not param._default and param_type != string_to_bool)
+            if (
+                param._default is None
+                or param._default == ""
+                and param_type != string_to_bool
+            )
             else param._default
         )
         group.add_argument(
