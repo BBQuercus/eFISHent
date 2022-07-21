@@ -75,7 +75,8 @@ Probe filtering workflow:
   * [x] Create function to check if probes could bind
   * [ ] Greedy model - skip if probe rev complement is in set
   * [ ] Optimal model - add constraint between similar probes to not get assigned
-* [ ] Add probe set analysis visualization
-  * [ ] Input probe set fasta
-  * [ ] All filtering step components as graphs (tm, gc, length, # off targets)
-  * [ ] Save output as pdf?
+* [x] Add probe set analysis visualization
+  * [x] Input probe set fasta
+  * [x] All filtering step components as graphs (tm, gc, length, # off targets)
+  * [x] Save output as pdf?
+* [ ] Add probe set analysis txt file with off-target locations / potentially harmful probes

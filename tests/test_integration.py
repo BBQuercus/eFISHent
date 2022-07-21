@@ -162,6 +162,24 @@ def test_counttable_full_output():
     [os.remove(f) for f in files]  # type: ignore
 
 
+def test_analyze():
+    """Analysis of probes with provided file."""
+    args = [
+        "efishent",
+        "--reference-genome",
+        "./tests/data/sacCer3.fa",
+        "--analyze-probeset",
+        "./tests/data/aad4_subset.fasta",
+        "--sequence-file",
+        "./tests/data/aad4.fasta",
+        "--debug",
+    ]
+    subprocess.run(args, check=True)
+    fname = "./aad4_subset_analysis.pdf"
+    assert os.path.exists(fname)
+    os.remove(fname)
+
+
 def test_error():
     """No reference genome passed, bad values (too short length, non-bools)."""
     # Wrong argument names

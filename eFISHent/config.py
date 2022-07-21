@@ -27,6 +27,15 @@ class RunConfig(luigi.Config):
     build_indices = luigi.BoolParameter(
         description="Build indices for reference genome only.", default=False
     )
+    analyze_probeset = luigi.Parameter(
+        description=(
+            "Path to the workflow's output fasta file. "
+            "Will analyze the probe set in more detail and create a PDF. "
+            "Note: reference genome, target gene of interest, "
+            "and (optional) count table will still have to be provided!"
+        ),
+        default="",
+    )
     save_intermediates = luigi.BoolParameter(
         description="Save intermediate files?", default=False
     )
@@ -165,7 +174,7 @@ class ProbeConfig(luigi.Config):
             "Maximum percentage probes can be similar. "
             "Applied to their complements and reverse complements only. "
             "Ensures probes don't falsely bind to eachother. "
-            "Setting any value above 0 could add ~1 minute of runtime. "
+            "Setting any value above 0 could add multiple minute of runtime! "
             "The lower the value (above 0) the fewer potential probes."
         ),
         default=0,

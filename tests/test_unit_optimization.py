@@ -13,7 +13,7 @@ def df():
     return pd.DataFrame(
         {
             "name": ["seq1", "seq2", "seq3", "seq4", "seq5", "seq6", "seq7"],
-            "sequences": [
+            "sequence": [
                 "GTAATTACAAAATAAGCAACG",
                 "GCTTGCTTTGAGATTTTGTTC",
                 "TCAATTCTCTACTGTCTCAGT",

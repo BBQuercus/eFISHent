@@ -8,6 +8,7 @@ import logging
 logging.getLogger("luigi-interface").setLevel(level=logging.CRITICAL)
 
 from . import alignment
+from . import analyze
 from . import basic_filtering
 from . import cleanup
 from . import cli

@@ -1,16 +1,17 @@
 """Command line interface."""
 
 from pathlib import Path
+from typing import Any, List
 import argparse
 import configparser
 import logging
 import os
 import sys
 import tempfile
-from typing import Any, List
 
 import luigi
 
+from .analyze import AnalyzeProbeset
 from .cleanup import CleanUpOutput
 from .constants import CLI_SHORTFORM
 from .constants import CONFIG_CLASSES
@@ -204,6 +205,8 @@ def main():
         tasks: List[luigi.Task] = []
         if args.build_indices:
             tasks = [BuildJellyfishIndex(), BuildBowtieIndex(), BuildBlastDatabase()]
+        elif args.analyze_probeset:
+            tasks = [AnalyzeProbeset()]
         else:
             tasks = [CleanUpOutput()]
 
