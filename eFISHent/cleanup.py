@@ -12,6 +12,7 @@ import luigi
 import pandas as pd
 import Bio.SeqIO
 
+from . import util
 from .alignment import AlignProbeCandidates
 from .basic_filtering import get_gc_content
 from .basic_filtering import get_melting_temp
@@ -22,7 +23,6 @@ from .kmers import BuildJellyfishIndex
 from .kmers import get_max_kmer_count
 from .optimization import OptimizeProbeCoverage
 from .secondary_structure import get_free_energy
-from . import util
 
 
 class CleanUpOutput(luigi.Task):

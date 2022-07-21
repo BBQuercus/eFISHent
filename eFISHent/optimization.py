@@ -15,11 +15,11 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pe
 
+from . import util
 from .config import GeneralConfig
 from .config import ProbeConfig
 from .config import RunConfig
 from .secondary_structure import SecondaryStructureFiltering
-from . import util
 
 
 class OptimizeProbeCoverage(luigi.Task):
@@ -90,9 +90,9 @@ class OptimizeProbeCoverage(luigi.Task):
                 [is_binding(x, y, match_percentage) for x in assigned_sequences]
                 for y in assigned_sequences
             ]
-        )
+        )  # type: ignore
 
-        trouble_makers = np.unique(np.where(binding_matrix)[1])
+        trouble_makers = np.unique(np.where(binding_matrix)[1])  # type: ignore
         self.logger.debug(f"Found {len(trouble_makers)} trouble makers to be removed.")
         assigned = [
             name for idx, name in enumerate(assigned) if idx not in trouble_makers

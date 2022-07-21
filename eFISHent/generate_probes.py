@@ -10,9 +10,9 @@ import Bio.SeqUtils
 import Bio.SeqUtils.MeltingTemp
 import luigi
 
+from . import util
 from .config import ProbeConfig
 from .prepare_sequence import PrepareSequence
-from . import util
 
 
 class GenerateAllProbes(luigi.Task):
