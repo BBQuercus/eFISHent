@@ -71,10 +71,10 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
         help="Show %(prog)s's version number.",
     )
     utility.add_argument(
-        "-v",
-        "--verbose",
+        "-s",
+        "--silent",
         action="store_true",
-        help="Set program output to verbose printing all important steps.",
+        help="Change the program output to silent hiding information on progress.",
     )
     utility.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
@@ -160,9 +160,11 @@ def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
         config.write(f)
 
 
-def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
+def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
     """Set the logging level of luigi and custom logger."""
     log_format = "%(asctime)s %(levelname)-4s - %(message)s"
+    luigi_level = "WARNING"
+    logfile = None
 
     if debug:
         log_format = (
@@ -172,14 +174,10 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
         luigi_level = "DEBUG"
         custom_level = logging.DEBUG
         logfile = "efishent.log"
-    elif verbose:
-        luigi_level = "WARNING"
-        custom_level = logging.INFO
-        logfile = None
-    else:
-        luigi_level = "WARNING"
+    elif silent:
         custom_level = logging.WARNING
-        logfile = None
+    else:
+        custom_level = logging.INFO
 
     logging.basicConfig(filename=logfile, format=log_format, force=True)  # type: ignore
     logging.getLogger("luigi").setLevel(luigi_level)
@@ -194,7 +192,7 @@ def set_logging_level(verbose: bool, debug: bool) -> logging.Logger:
 def main():
     """Run eFISHent tasks."""
     args = _parse_args()
-    logger = set_logging_level(args.verbose, args.debug)
+    logger = set_logging_level(args.silent, args.debug)
     logger.info(f"{UniCode.fishing} eFISHent has started running...")
 
     with tempfile.TemporaryDirectory() as tmp_dir:

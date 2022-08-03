@@ -4,8 +4,9 @@ __version__ = "0.0.1"
 
 import logging
 
-# Silence luigi-interface
+# Silence some troublemakers
 logging.getLogger("luigi-interface").setLevel(level=logging.CRITICAL)
+logging.getLogger("matplotlib.font_manager").setLevel(level=logging.CRITICAL)
 
 from . import alignment
 from . import analyze
