@@ -135,5 +135,5 @@ class PrepareSequence(luigi.Task):
         sequences = list(Bio.SeqIO.parse(input_file, format="fasta"))
         sequence = self.select_sequence(sequences)
         sequence = self.select_strand(sequence, SequenceConfig().is_plus_strand)
-        self.logger.info(f"Selected sequence and strand called '{sequence.id}'.")
+        self.logger.info(f'Selected sequence and strand called "{sequence.id}".')
         Bio.SeqIO.write(sequence, self.output().path, format="fasta")

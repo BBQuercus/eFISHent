@@ -146,12 +146,12 @@ class CleanUpOutput(luigi.Task):
         sequences = self.prettify_sequences(df)
         config = self.prettify_configuration()
 
-        self.logger.info(f'Saving all files using hash "{util.get_gene_name()}"')
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
         df.to_csv(self.output()["table"].path, index=False)
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, "fasta")
         with open(self.output()["config"].path, "w") as f:
             f.write(config)
+        self.logger.info(f'Saving all files using hash "{util.get_gene_name()}"')
 
         # Files to be deleted
         if not RunConfig().save_intermediates:
