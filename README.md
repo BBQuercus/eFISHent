@@ -11,11 +11,11 @@
 
 # eFISHent
 
-A command-line based tool to facilitate the creation of eFISHent RNA fluorescence in-situ hybridization (RNA FISH) oligonucleotide probes.
+A command-line based tool to facilitate the creation of eFISHent single-molecule RNA fluorescence in-situ hybridization (RNA smFISH) oligonucleotide probes.
 
 ## Description
 
-eFISHent is a tool to facilitate the creation of eFISHent RNA FISH oligonucleotide probes. Some of the key features of eFISHent are:
+eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleotide probes. Some of the key features of eFISHent are:
 
 * One-line installation using conda (available through bioconda)
 * Automatic gene sequence download from NCBI when providing a gene and species name (or pass a FASTA file)
@@ -28,7 +28,7 @@ eFISHent is a tool to facilitate the creation of eFISHent RNA FISH oligonucleoti
 
 ## Installation
 
-eFISHent can be installed using the [conda](https://conda.io/) package manager.
+eFISHent is being tested on MacOS and Linux. Unfortunately, due to the bioinformatics dependencies Windows is not supported. For Windows users, we reccommend installing "Windows Subsystem for Linux (WSL)" ([Windows 10](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10#1-overview), [Windows 11](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview)) or using a fully fledged [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview). eFISHent can be installed using the [conda](https://conda.io/) package manager.
 
 ```bash
 conda install -c bioconda efishent
@@ -64,6 +64,11 @@ Probe filtering workflow:
 * Create final list of probes (`optimization.py`)
 * Write final list of probes to file with report (`cleanup.py`)
 
+Probe set analysis plotting:
+
+* Create a simple overview over the key parameters (`analyze.py`)
+* (Using inputs from most other files)
+
 ## TODO
 
 * [ ] Add more detailed documentation as wiki page(s)
@@ -71,10 +76,10 @@ Probe filtering workflow:
   * [x] Add examples from multiple sources
   * [ ] Add benchmarks for deltaG, counts
 * [ ] Add mathematical description for model (in wiki?)
-* [ ] Add filtering step to prevent off chance of probes hybridizing with themselves
+* [x] Add filtering step to prevent off chance of probes hybridizing with themselves
   * [x] Create function to check if probes could bind
-  * [ ] Greedy model - skip if probe rev complement is in set
-  * [ ] Optimal model - add constraint between similar probes to not get assigned
+  * [x] Greedy model - skip if probe rev complement is in set
+  * [x] Optimal model - add constraint between similar probes to not get assigned
 * [x] Add probe set analysis visualization
   * [x] Input probe set fasta
   * [x] All filtering step components as graphs (tm, gc, length, # off targets)
