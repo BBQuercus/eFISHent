@@ -125,7 +125,7 @@ class ProbeConfig(luigi.Config):
     )
     formamide_concentration = luigi.FloatParameter(
         description="Formamide concentration as a percentage of the total buffer.",
-        default=0.0,
+        default=10.0,
     )
     na_concentration = luigi.FloatParameter(
         description="Na concentration in mM.", default=330.0
