@@ -22,7 +22,7 @@ class BuildBlastDatabase(luigi.Task):
             for extension in ["nhr", "nin", "nsq"]
         ]
 
-    def build_index(self, fname: str, genome: str) -> None:
+    def build_blast_index(self, fname: str, genome: str) -> None:
         args_blast = ["makeblastdb", "-dbtype", "nucl", "-in", fname, "-out", genome]
         self.logger.debug(f"Running bowtie with - {''.join(args_blast)}")
         subprocess.check_call(
@@ -30,8 +30,8 @@ class BuildBlastDatabase(luigi.Task):
         )
 
     def run(self):
-        self.build_blast(
-            fname=os.path.abspath(GeneralConfig.reference_genome),
+        self.build_blast_index(
+            fname=os.path.abspath(GeneralConfig().reference_genome),
             genome=util.get_genome_name(),
         )
         self.logger.info("Finished building blast database.")
@@ -55,7 +55,7 @@ class BuildBowtieIndex(luigi.Task):
             ]
         ]
 
-    def build_index(self, fname: str, genome: str) -> None:
+    def build_bowtie_index(self, fname: str, genome: str) -> None:
         """Build bowtie index for file fname titled genome."""
         args_bowtie = ["bowtie-build", fname, genome]
         self.logger.debug(f"Running bowtie with - {''.join(args_bowtie)}")
@@ -64,7 +64,7 @@ class BuildBowtieIndex(luigi.Task):
         )
 
     def run(self):
-        self.build_index(
+        self.build_bowtie_index(
             fname=os.path.abspath(GeneralConfig().reference_genome),
             genome=util.get_genome_name(),
         )
@@ -93,3 +93,4 @@ class PrepareAnnotationFile(luigi.Task):
     def run(self):
         self.prepare_gtf_file(GeneralConfig().reference_annotation, self.output().path)
         self.logger.info("Finished parsing GTF annotation file.")
+
