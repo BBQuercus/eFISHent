@@ -27,7 +27,7 @@ def get_free_energy(sequence: Bio.SeqRecord.SeqRecord) -> float:
     file_path = Path(__file__).resolve().parent.as_posix()
     data_table = os.path.join(file_path, "data_tables/")
     if sys.platform == "linux" or sys.platform == "linux2":
-        fold_path = os.path.join(file_path, "Fold_linux")
+        fold_path = "Fold"
     if sys.platform == "darwin":
         fold_path = os.path.join(file_path, "Fold_osx")
 
