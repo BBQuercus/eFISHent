@@ -148,7 +148,7 @@ class CleanUpOutput(luigi.Task):
 
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
         df.to_csv(self.output()["table"].path, index=False)
-        Bio.SeqIO.write(sequences, self.output()["fasta"].path, "fasta")
+        Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")
         with open(self.output()["config"].path, "w") as f:
             f.write(config)
         self.logger.info(f'Saving all files using hash "{util.get_gene_name()}"')

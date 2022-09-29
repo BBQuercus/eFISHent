@@ -62,4 +62,4 @@ class GenerateAllProbes(luigi.Task):
             sequence, ProbeConfig().min_length, ProbeConfig().max_length
         )
         util.log_and_check_candidates(self.logger, "GenerateAllProbes", len(candidates))
-        Bio.SeqIO.write(candidates, self.output().path, "fasta")
+        Bio.SeqIO.write(candidates, self.output().path, format="fasta")

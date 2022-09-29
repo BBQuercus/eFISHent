@@ -103,4 +103,4 @@ class BasicFiltering(luigi.Task):
         util.log_and_check_candidates(
             self.logger, "BasicFiltering", len(candidates), len(sequences)
         )
-        Bio.SeqIO.write(candidates, self.output().path, "fasta")
+        Bio.SeqIO.write(candidates, self.output().path, format="fasta")

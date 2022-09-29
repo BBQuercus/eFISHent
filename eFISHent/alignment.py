@@ -117,7 +117,7 @@ class AlignProbeCandidates(luigi.Task):
         with open(self.fname_fasta, "r") as fasta, open(fname_fastq, "w") as fastq:
             for record in Bio.SeqIO.parse(fasta, "fasta"):
                 record.letter_annotations["phred_quality"] = [40] * len(record)
-                Bio.SeqIO.write(record, fastq, "fastq")
+                Bio.SeqIO.write(record, fastq, format="fastq")
         self.logger.debug(f"Converted fasta to fastq - {fname_fastq}")
 
         # Actual alignment with -m to only return alignments with >m hits
@@ -131,7 +131,6 @@ class AlignProbeCandidates(luigi.Task):
             str(threads),
             *endo_exo_param,
             "--sam",
-            "-S",
             self.fname_sam,
         ]
         self.logger.debug(f"Running bowtie with - {' '.join(args_bowtie)}")
@@ -143,12 +142,12 @@ class AlignProbeCandidates(luigi.Task):
     def parse_raw_pysam(sam: str, is_endogenous: bool) -> pd.DataFrame:
         """Convert string based pysam output to a DataFrame."""
         # Parse tab and newline delimited pysam output
-        data = [row.split("\t") for row in sam.split("\n")]
-        end = 14 if is_endogenous else 12
-        columns = constants.SAMFILE_COLUMNS[:end]
+        data = [row.split("\t")[:10] for row in sam.split("\n")]
+        # end = 14 if is_endogenous else 12
+        columns = constants.SAMFILE_COLUMNS[:10]
 
         # Padding in case some samfiles are larger, first cols will stay the same
-        columns.extend(["" for _ in range(len(columns) - len(data[0]))])
+        # columns.extend(["" for _ in range(len(columns) - len(data[0]))])
 
         # If empty [['']]
         if data[0][0]:
@@ -306,7 +305,6 @@ class AlignProbeCandidates(luigi.Task):
         self.fname_fasta = self.input()["probes"].path
         self.fname_sam = os.path.splitext(self.fname_fasta)[0] + ".sam"
         self.fname_genome = util.get_genome_name()
-        self.fname_gene = util.get_gene_name()
 
         # Alignment and filtering
         self.align_probes(
@@ -327,4 +325,4 @@ class AlignProbeCandidates(luigi.Task):
         util.log_and_check_candidates(
             self.logger, "AlignProbeCandidates", len(candidates), len(sequences)
         )
-        Bio.SeqIO.write(candidates, self.output()["fasta"].path, "fasta")
+        Bio.SeqIO.write(candidates, self.output()["fasta"].path, format="fasta")
