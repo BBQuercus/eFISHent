@@ -7,6 +7,7 @@ from typing import List, Optional
 import glob
 import logging
 import os
+import sys
 
 import luigi
 import pandas as pd
@@ -111,6 +112,8 @@ class CleanUpOutput(luigi.Task):
         """Create a pretty file with all set/default configuration."""
         self.config = luigi.configuration.get_config()
         pretty = [self.prettify_section(section) for section in self.config.sections()]
+        command = " ".join(sys.argv[1:])
+        pretty.append(f"Command:\n  efishent {command}")
         return "\n\n".join(pretty)
 
     def remove_intermediates(self) -> None:
