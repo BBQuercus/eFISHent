@@ -19,23 +19,23 @@ def test_prettify_table(task_cleanup):
 
     sequences = [
         Bio.SeqRecord.SeqRecord(
-            Bio.Seq.Seq("ATGCATGCATGCATGCATGCATGC"), id="candidate-0-20"
+            Bio.Seq.Seq("ATGCATGCATTAGCGCATGCATGC"), id="candidate-1-4"
         ),
         Bio.SeqRecord.SeqRecord(
-            Bio.Seq.Seq("ATGCATGCATGCATGCATGCATGC"), id="candidate-1-20"
+            Bio.Seq.Seq("ATGCATGCATGCATGCATGCATGC"), id="candidate-0-1"
         ),
         Bio.SeqRecord.SeqRecord(
-            Bio.Seq.Seq("ATGCATGCATGCATGCATGCATGC"), id="candidate-6-20"
+            Bio.Seq.Seq("ATGCATGCATTTTTTTATGCATGC"), id="candidate-6-5"
         ),
         Bio.SeqRecord.SeqRecord(
-            Bio.Seq.Seq("ATGCATGCATGCATGCATGCATGC"), id="candidate-8-20"
+            Bio.Seq.Seq("ATGCATGGGGGGGGGCATGCATGC"), id="candidate-8-20"
         ),
     ]
     output = task_cleanup.prettify_table(
         sequences,
         jellyfish_path="./tests/data/sacCer3_15.jf",
         basename="test",
-        config=Config
+        config=Config,
     )
     columns = [
         "name",
@@ -53,6 +53,8 @@ def test_prettify_table(task_cleanup):
     assert len(output) == len(sequences)
     assert output.loc[0, "name"] == "test-1"
     assert output.loc[len(sequences) - 1, "name"] == f"test-{len(sequences)}"
+    assert output.loc[0, "GC"] == 50
+    assert output.loc[3, "GC"] == 66.67
 
 
 def test_prettify_sequences(task_cleanup):

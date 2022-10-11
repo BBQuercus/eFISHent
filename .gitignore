@@ -168,3 +168,4 @@ cython_debug/
 *.png
 *.ipynb
 .DS_Store
+notebooks/

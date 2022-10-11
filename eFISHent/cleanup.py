@@ -67,6 +67,7 @@ class CleanUpOutput(luigi.Task):
         """Create table with probe information."""
         # Create basic table with probe start/end positions and name
         df = util.create_data_table(sequences)
+        sequences = sorted(sequences, key=lambda x: int(x.id.split("-")[-1]))
 
         # Add data columns
         df["GC"] = [round(get_gc_content(seq.seq), 2) for seq in sequences]
