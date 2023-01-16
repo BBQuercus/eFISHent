@@ -71,6 +71,14 @@ class DownloadEntrezGeneSequence(luigi.Task):
         return fasta
 
     def run(self):
+        if not SequenceConfig().is_plus_strand:
+            self.logger.warning(
+                (
+                    "Downloading from entrez but using negative strand as target! "
+                    "Entrez usually provides sequences 5'-3'. "
+                    "Proceed with caution."
+                )
+            )
         query = self.get_entrez_query(
             SequenceConfig().ensembl_id,
             SequenceConfig().gene_name,
