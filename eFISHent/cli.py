@@ -202,7 +202,7 @@ def main():
 
         tasks: List[luigi.Task] = []
         if args.build_indices:
-            tasks = [BuildJellyfishIndex(), BuildBowtieIndex(), BuildBlastDatabase()]
+            tasks = [BuildJellyfishIndex(), BuildBowtieIndex()]
         elif args.analyze_probeset:
             tasks = [AnalyzeProbeset()]
         else:
