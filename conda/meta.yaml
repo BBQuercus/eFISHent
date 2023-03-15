@@ -1,13 +1,15 @@
+{% set version = "0.0.3" %}
+
 package:
-    name: "efishent"
-    version: 0.0.3
+    name: efishent
+    version: {{ version }}
 source:
     path: ..
 
 build:
     build: 1
     preserve_egg_dir: True
-    script: python -m pip install --ignore-installed .
+    script: python -m pip install --no-deps --ignore-installed .
     entry_points:
       - efishent = eFISHent.cli:main
       - eFISHent = eFISHent.cli:main
@@ -15,16 +17,24 @@ build:
 requirements:
   host:
     - pip
-    - python >=3.8
+    - python>=3.8
     - llvm-openmp  # [osx]
   run:
+    - biopython
     - blast
-    - bowtie
+    - bowtie==1.3.1
     - entrez-direct
+    - gtfparse
     - jellyfish
     - libgomp      # [linux]
     - llvm-openmp  # [osx]
-    - python >=3.8
+    - luigi
+    - matplotlib-base
+    - numpy>=1.21
+    - pandas>1.0
+    - pyarrow>=8.0.0
+    - pyomo
+    - python>=3.8
 
 test:
   commands:
