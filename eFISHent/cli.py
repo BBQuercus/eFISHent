@@ -11,11 +11,11 @@ import tempfile
 
 import luigi
 
+# from .indexing import BuildBlastDatabase
 from .analyze import AnalyzeProbeset
 from .cleanup import CleanUpOutput
 from .constants import CLI_SHORTFORM
 from .constants import CONFIG_CLASSES
-from .indexing import BuildBlastDatabase
 from .indexing import BuildBowtieIndex
 from .kmers import BuildJellyfishIndex
 from .util import UniCode

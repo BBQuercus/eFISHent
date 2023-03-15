@@ -6,35 +6,36 @@ import warnings
 
 import gtfparse
 import luigi
+import pandas as pd
 
 from . import util
 from .config import GeneralConfig
 
 
-class BuildBlastDatabase(luigi.Task):
-    """Build local nucleotide blast database."""
+# class BuildBlastDatabase(luigi.Task):
+#     """Build local nucleotide blast database."""
 
-    logger = logging.getLogger("custom-logger")
+#     logger = logging.getLogger("custom-logger")
 
-    def output(self):
-        return [
-            luigi.LocalTarget(f"{util.get_genome_name()}.{extension}")
-            for extension in ["nhr", "nin", "nsq"]
-        ]
+#     def output(self):
+#         return [
+#             luigi.LocalTarget(f"{util.get_genome_name()}.{extension}")
+#             for extension in ["nhr", "nin", "nsq"]
+#         ]
 
-    def build_blast_index(self, fname: str, genome: str) -> None:
-        args_blast = ["makeblastdb", "-dbtype", "nucl", "-in", fname, "-out", genome]
-        self.logger.debug(f"Running bowtie with - {''.join(args_blast)}")
-        subprocess.check_call(
-            args_blast, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
-        )
+#     def build_blast_index(self, fname: str, genome: str) -> None:
+#         args_blast = ["makeblastdb", "-dbtype", "nucl", "-in", fname, "-out", genome]
+#         self.logger.debug(f"Running bowtie with - {''.join(args_blast)}")
+#         subprocess.check_call(
+#             args_blast, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+#         )
 
-    def run(self):
-        self.build_blast_index(
-            fname=os.path.abspath(GeneralConfig().reference_genome),
-            genome=util.get_genome_name(),
-        )
-        self.logger.info("Finished building blast database.")
+#     def run(self):
+#         self.build_blast_index(
+#             fname=os.path.abspath(GeneralConfig().reference_genome),
+#             genome=util.get_genome_name(),
+#         )
+#         self.logger.info("Finished building blast database.")
 
 
 class BuildBowtieIndex(luigi.Task):
@@ -93,4 +94,3 @@ class PrepareAnnotationFile(luigi.Task):
     def run(self):
         self.prepare_gtf_file(GeneralConfig().reference_annotation, self.output().path)
         self.logger.info("Finished parsing GTF annotation file.")
-
