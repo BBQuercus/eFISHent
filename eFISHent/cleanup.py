@@ -84,9 +84,10 @@ class CleanUpOutput(luigi.Task):
         df["kmers"] = [get_max_kmer_count(seq, jellyfish_path) for seq in sequences]
         if alignment_path is not None:
             df_counts = pd.read_csv(alignment_path)
+            df_counts = df_counts.groupby("qname", as_index=False).size()
             df["count"] = pd.merge(
                 df, df_counts, how="left", left_on="name", right_on="qname"
-            )["count"].fillna(0)
+            )["size"].fillna(0)
 
         # Create new/clean names
         df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]
@@ -103,7 +104,7 @@ class CleanUpOutput(luigi.Task):
 
     def prettify_section(self, section: str) -> str:
         """Prettify a single configuration section."""
-        pretty = [f"{section.rstrip('Config')} configuration:"]
+        pretty = [f"{section.replace('Config', '')} configuration:"]
         for key, value in self.config[section].items():
             if value and value != '""':
                 pretty.append(f"  {key.replace('_', '-')}: {value}")
