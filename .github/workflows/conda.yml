@@ -1,18 +1,16 @@
-name: main
+name: Upload to conda
 
 on:
   - push
-  # release:
-  #   types: [published]
 
 jobs:
-  # Direct upload to conda
   conda:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: publish-to-conda
-      uses: ./actions/conda
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Publish to conda
+      uses: ./.github/actions/conda
       with:
         subdir: "conda"
         anacondatoken: ${{ secrets.ANACONDA_TOKEN }}
