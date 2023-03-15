@@ -10,9 +10,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
     - name: Publish to conda
-      uses: ./.github/actions/conda
+      uses: ./actions/conda
       with:
-        subdir: "conda"
         anacondatoken: ${{ secrets.ANACONDA_TOKEN }}
-        channels: 'conda-forge bioconda'
-        platforms: "osx linux"

@@ -1,0 +1,18 @@
+name: Publish Conda
+description: Build and Publish Conda package to Anaconda
+author: Fatih C Akyon
+inputs: 
+  subdir:
+    description: Sub-directory with conda recipe
+    default: conda
+  anacondatoken:
+    description: Anaconda access token
+  channels:
+    description: Channels on which the package will be build ['conda-forge/pytorch/fcakyon/districtdatalabs]
+    default: conda-forge bioconda
+  platforms:
+    description: Platforms to publish [osx/linux/win]
+    default: osx linux
+runs:
+  using: docker
+  image: Dockerfile
