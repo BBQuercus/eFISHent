@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: publish-to-conda
-      uses: actions/conda
+      uses: ./actions/conda
       with:
         subdir: "conda"
         anacondatoken: ${{ secrets.ANACONDA_TOKEN }}
