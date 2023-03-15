@@ -1,5 +1,5 @@
 package:
-    name: "eFISHent"
+    name: "efishent"
     version: 0.0.3
 source:
     path: ..
