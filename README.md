@@ -17,22 +17,31 @@ A command-line based tool to facilitate the creation of eFISHent single-molecule
 
 eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleotide probes. Some of the key features of eFISHent are:
 
-* One-line installation using conda (available through bioconda)
+* One-line installation using conda (available through bioconda*)
 * Automatic gene sequence download from NCBI when providing a gene and species name (or pass a FASTA file)
-* Filtering steps to remove low-quality probes:
-  * Basics such as melting temperature, GC content, and length
-  * Off-target bindings (based on raw count or weighted through RNAseq count tables)
-  * Frequently occuring short-mers in the genome
-  * Predicted free energy in the secondary structure
+* Filtering steps to remove low-quality probes including off-targets, frequently occuring short-mers, secondary structures, etc.
 * Mathematical or greedy optimization to ensure highest coverage
+
+\* The release on bioconda is always associated with waiting times. Therefore, the easiest approach is to install conda dependencies and install eFISHent using pip.
 
 ## Installation
 
-eFISHent is being tested on MacOS and Linux. Unfortunately, due to the bioinformatics dependencies Windows is not supported. For Windows users, we reccommend installing "Windows Subsystem for Linux (WSL)" ([Windows 10](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10#1-overview), [Windows 11](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview)) or using a fully fledged [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview). eFISHent can be installed using the [conda](https://conda.io/) package manager.
+eFISHent is being tested on MacOS and Linux with Python versions 3.8 - 3.10. Unfortunately, due to the bioinformatics dependencies Windows is not supported. For Windows users, we reccommend installing "Windows Subsystem for Linux (WSL)" ([Windows 10](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10#1-overview), [Windows 11](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview)) or using a fully fledged [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview). In a new [conda](https://conda.io/) environment, install eFISHent as follows:
+<!-- eFISHent can be installed using the [conda](https://conda.io/) package manager. -->
 
 ```bash
-conda install -c bioconda efishent
+# Install other conda based dependencies
+conda install -c bioconda bowtie blast jellyfish entrez-direct
+
+# ONLY on linux!
+conda install -c bioconda rnastructure
+
+pip install efishent
 ```
+
+<!-- ```bash
+conda install -c bioconda efishent
+``` -->
 
 ## Usage
 
@@ -76,12 +85,4 @@ Probe set analysis plotting:
   * [x] Add examples from multiple sources
   * [ ] Add benchmarks for deltaG, counts
 * [ ] Add mathematical description for model (in wiki?)
-* [x] Add filtering step to prevent off chance of probes hybridizing with themselves
-  * [x] Create function to check if probes could bind
-  * [x] Greedy model - skip if probe rev complement is in set
-  * [x] Optimal model - add constraint between similar probes to not get assigned
-* [x] Add probe set analysis visualization
-  * [x] Input probe set fasta
-  * [x] All filtering step components as graphs (tm, gc, length, # off targets)
-  * [x] Save output as pdf?
 * [ ] Add probe set analysis txt file with off-target locations / potentially harmful probes

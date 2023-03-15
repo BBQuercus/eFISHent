@@ -1,8 +1,9 @@
 name: main
 
 on:
-  release:
-    types: [published]
+  - push
+  # release:
+  #   types: [published]
 
 jobs:
   # Direct upload to conda
