@@ -1,43 +1,30 @@
-{% set name = "eFISHent" %}
-{% set version = "0.0.1" %}
-
 package:
-  name: {{ name|lower }}
-  version: {{ version }}
-
+    name: "eFISHent"
+    version: 0.0.3
 source:
-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/eFISHent-{{ version }}.tar.gz
-  sha256: 6c10f608b078a8085dabaf2f8e58c62499fe6afd1aa7536fbdb2050cb34ff601
+    path: ..
 
 build:
-  number: 0
-  noarch: python
-  script: {{ PYTHON }} -m pip install . -vv
-  entry_points:
-    - efishent = eFISHent.cli:main
-    - eFISHent = eFISHent.cli:main
+    build: 1
+    preserve_egg_dir: True
+    script: python -m pip install --ignore-installed .
+    entry_points:
+      - efishent = eFISHent.cli:main
+      - eFISHent = eFISHent.cli:main
 
 requirements:
   host:
     - pip
-    - python >=3.7
+    - python >=3.8
     - llvm-openmp  # [osx]
   run:
-    - biopython
     - blast
     - bowtie
     - entrez-direct
-    - gtfparse
     - jellyfish
     - libgomp      # [linux]
     - llvm-openmp  # [osx]
-    - luigi
-    - matplotlib-base
-    - numpy
-    - pandas
-    - pyarrow
-    - pyomo
-    - python >=3.7
+    - python >=3.8
 
 test:
   commands:
