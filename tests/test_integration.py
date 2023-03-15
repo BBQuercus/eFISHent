@@ -94,8 +94,8 @@ def test_passed_exogenous():
     ]
     subprocess.run(args, check=True)
 
-    csv_files = glob.glob("./renilla_*.csv")
-    assert len(csv_files) == 1
+    csv_files = sorted(glob.glob("./renilla_*.csv"))
+    assert len(csv_files) == 2  # _counts and output
     verify_csv(csv_files[0], args)
     [os.remove(f) for f in glob.glob("./renilla_*")]  # type: ignore
 
