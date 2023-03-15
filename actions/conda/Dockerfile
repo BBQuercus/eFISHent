@@ -1,6 +1,3 @@
-LABEL "repository"="https://github.com/fcakyon/conda-publish-action"
-LABEL "maintainer"="Fatih C Akyon"
-
 FROM ubuntu:16.04
 ENV PATH="/root/miniconda3/bin:${PATH}"
 ARG PATH="/root/miniconda3/bin:${PATH}"
