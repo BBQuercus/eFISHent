@@ -87,6 +87,9 @@ class PrepareAnnotationFile(luigi.Task):
         """Save GTF file as parquet."""
         warnings.filterwarnings("ignore")
         df = gtfparse.read_gtf(fname_input)
+        # Newer gtfparse versions using polars
+        if type(df) != pd.DataFrame:
+            df = df.to_pandas()
         warnings.filterwarnings("default")
         self.logger.debug("Read gtf file with gtfparse")
         df.to_parquet(fname_output)
