@@ -143,15 +143,11 @@ class AnalyzeProbeset(luigi.Task):
         task.fname_sam = os.path.splitext(task.fname_fasta)[0] + ".sam"
         task.fname_genome = util.get_genome_name()
         task.fname_gene = util.get_gene_name()
+        task.is_endogenous = SequenceConfig().is_endogenous
+        task.max_off_targets = 20
 
-        task.align_probes(
-            max_off_targets=20,
-            is_endogenous=SequenceConfig().is_endogenous,
-            threads=GeneralConfig().threads,
-        )
-        df_sam = task.parse_raw_pysam(
-            pysam.view(task.fname_sam), SequenceConfig().is_endogenous  # type: ignore
-        )
+        task.align_probes(threads=GeneralConfig().threads)
+        df_sam = task.parse_raw_pysam(pysam.view(task.fname_sam))  # type: ignore
         counts = df_sam.groupby("qname").size().values - 1
         self.histplot(ax, counts, "Off target count", -1)
 
