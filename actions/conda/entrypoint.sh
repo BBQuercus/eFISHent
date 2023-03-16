@@ -34,7 +34,7 @@ build_package(){
 
     # Build for Linux
     channels=($(echo "${INPUT_CHANNELS}" |  tr " " " -c "))
-    conda build -c "${channels[@]}" --output-folder . .
+    conda build -c "${channels[@]}" --output-folder . meta.yaml
 
     # Convert to other platforms: OSX, WIN
     if [[ "${INPUT_PLATFORMS}" == *"osx"* ]]; then

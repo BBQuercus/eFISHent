@@ -9,10 +9,10 @@ inputs:
     description: Anaconda access token
   channels:
     description: Channels on which the package will be built
-    default: conda-forge bioconda
+    default: "conda-forge bioconda"
   platforms:
     description: Platforms to publish [osx/linux/win]
-    default: osx linux
+    default: "osx linux"
 runs:
   using: docker
   image: Dockerfile
