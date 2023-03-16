@@ -25,5 +25,5 @@ jobs:
     - name: Upload to PyPI using twine
       run: twine upload dist/*
       env:
-        TWINE_USERNAME: bbquercus
+        TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
