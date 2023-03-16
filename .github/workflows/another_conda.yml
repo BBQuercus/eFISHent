@@ -3,29 +3,14 @@ on:
   push:
     branches:
       - main
-
+    
 jobs:
-  build-and-publish:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+  publish:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          conda-version: '4.10.x'
-
-      - name: Build Conda package
-        run: conda build -c conda-forge -c bioconda .
-
-      - name: Publish Conda package to Anaconda
-        uses: conda-incubator/anaconda-client-publish@v1
-        with:
-          anaconda-token: ${{ secrets.ANACONDA_TOKEN }}
-          packages: |
-            ./path/to/linux/*.tar.bz2
-            ./path/to/macos/*.tar.bz2
+    - uses: actions/checkout@v1
+    - name: publish-to-conda
+      uses: maxibor/conda-package-publish-action@v1.1
+      with:
+        subDir: 'conda'
+        AnacondaToken: ${{ secrets.ANACONDA_TOKEN }}
