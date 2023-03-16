@@ -26,22 +26,21 @@ eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleo
 
 ## Installation
 
-eFISHent is being tested on MacOS and Linux with Python versions 3.8 - 3.10. Unfortunately, due to the bioinformatics dependencies Windows is not supported. For Windows users, we reccommend installing "Windows Subsystem for Linux (WSL)" ([Windows 10](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10#1-overview), [Windows 11](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview)) or using a fully fledged [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview). In a new [conda](https://conda.io/) environment, install eFISHent as follows:
-<!-- eFISHent can be installed using the [conda](https://conda.io/) package manager. -->
+eFISHent is being tested on MacOS and Linux with Python versions 3.8 - 3.10. Unfortunately, due to the bioinformatics dependencies Windows is not supported. For Windows users, we reccommend installing "Windows Subsystem for Linux (WSL)" ([Windows 10](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10#1-overview), [Windows 11](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview)) or using a fully fledged [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview). Using [conda](https://conda.io/) environment, install eFISHent as follows:
 
 ```bash
-# Install other conda based dependencies
-conda install -c bioconda bowtie blast jellyfish entrez-direct
+# Create an environment and install all dependencies (e.g. python)
+conda env create bbquercus/efishent  
 
-# ONLY on linux!
-conda install -c bioconda rnastructure
+# Activate environment
+conda activate efishent
 
+# Install efishent via pypi
 pip install efishent
+
 ```
 
-<!-- ```bash
-conda install -c bioconda efishent
-``` -->
+Any updates can then simply be done via pypi (`pip install --upgrade efishent`).
 
 ## Usage
 

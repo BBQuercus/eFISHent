@@ -23,7 +23,7 @@ jobs:
       run: python -m build --sdist --wheel --outdir dist/ .
 
     - name: Upload to PyPI using twine
-      run: twine upload dist/*
+      run: twine upload --skip-existing --verbose dist/*
       env:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
