@@ -8,7 +8,7 @@ inputs:
   anacondatoken:
     description: Anaconda access token
   channels:
-    description: Channels on which the package will be build ['conda-forge/pytorch/fcakyon/districtdatalabs]
+    description: Channels on which the package will be built
     default: conda-forge bioconda
   platforms:
     description: Platforms to publish [osx/linux/win]

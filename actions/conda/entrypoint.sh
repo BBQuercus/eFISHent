@@ -33,9 +33,8 @@ build_package(){
     }
 
     # Build for Linux
-    channels=($(echo "${INPUT_CHANNELS}" | tr ',' '\n'))
-    build_args=(-c "${channels[@]}" --output-folder .)
-    conda build "${build_args[@]}"
+    channels=($(echo "${INPUT_CHANNELS}" |  tr " " " -c "))
+    conda build -c "${channels[@]}" --output-folder . .
 
     # Convert to other platforms: OSX, WIN
     if [[ "${INPUT_PLATFORMS}" == *"osx"* ]]; then
