@@ -5,10 +5,11 @@ channels:
   - defaults
 dependencies:
   - blast
-  - bowtie==1.3.1
+  - bowtie
   - entrez-direct
   - jellyfish
   - libgomp      # [linux]
   - llvm-openmp  # [osx]
   - pip
-  - python>=3.8,<3.11
+  - pysam
+  - python=3.9

@@ -3,8 +3,11 @@ prune dist
 
 exclude .*
 recursive-include eFISHent/data_tables *.dg *.dh *.dat
+recursive-include eFISHent *.cfg
 recursive-include conda *.yaml
 
 include *.md
+include Fold_osx
 include LICENSE
-include requirements.txt environment.yml
+include environment.yml
+include requirements.txt
