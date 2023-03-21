@@ -10,7 +10,7 @@ from setuptools import setup
 setup(
     # Description
     name="eFISHent",
-    version="0.0.3",
+    version="0.0.4",
     license="MIT",
     description="RNA FISH oligos/probes design tool.",
     long_description_content_type="text/plain",
@@ -22,7 +22,7 @@ setup(
     """
     ),
     # Installation
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
@@ -35,7 +35,6 @@ setup(
         "pandas",
         "pyarrow",
         "pyomo",
-        "pysam",
     ],
     entry_points={
         "console_scripts": [
