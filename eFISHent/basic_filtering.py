@@ -21,8 +21,14 @@ from .generate_probes import GenerateAllProbes
 def get_melting_temp(
     sequence: Bio.Seq.Seq, na_concentration: float, formamide_concentration: float
 ) -> float:
-    """Get melting temperature of candidate."""
-    tm_raw = Bio.SeqUtils.MeltingTemp.Tm_NN(sequence, Na=na_concentration)
+    """Get melting temperature of candidate assuming DNA/RNA hybrid."""
+    rna_sequence = sequence.transcribe()
+    tm_raw = Bio.SeqUtils.MeltingTemp.Tm_NN(
+        rna_sequence,
+        c_seq=rna_sequence.complement_rna(),
+        nn_table=Bio.SeqUtils.MeltingTemp.R_DNA_NN1,
+        Na=na_concentration,
+    )
     melting_temp = Bio.SeqUtils.MeltingTemp.chem_correction(
         tm_raw, fmd=formamide_concentration
     )
@@ -31,7 +37,7 @@ def get_melting_temp(
 
 def get_gc_content(sequence: Bio.Seq.Seq) -> float:
     """Get GC content of candidate."""
-    return float(Bio.SeqUtils.GC(sequence))
+    return float(Bio.SeqUtils.gc_fraction(sequence))
 
 
 def get_g_quadruplet_count(sequence: Bio.Seq.Seq) -> int:
