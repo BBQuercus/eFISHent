@@ -37,7 +37,6 @@ conda activate efishent
 
 # Install efishent via pypi
 pip install efishent
-
 ```
 
 Any updates can then simply be done via pypi (`pip install --upgrade efishent`).
@@ -56,26 +55,24 @@ eFISHent is built up modularly using the following components...
 
 Index creation workflow:
 
-* Bowtie index (`indexing.py`)
-* Blast database (`indexing.py`)
-* Jellyfish indices (`kmers.py`)
+* Bowtie index
+* Jellyfish indices
 
 Probe filtering workflow:
 
-* Download / prepare sequences (`prepare_sequences.py`)
-* Generate candidate probes (`generate_probes.py`)
-* Filter with basic filters (`basic_filtering.py`)
-* Align probes to reference genome (`alignment.py`)
-* Filter based on alignment score and uniqueness (`alignment.py`)
-* Filter reoccuring k-mers (`kmers.py`)
-* Filter based on secondary structure prediction (`secondary_structure.py`)
-* Create final list of probes (`optimization.py`)
-* Write final list of probes to file with report (`cleanup.py`)
+* Download / prepare sequences
+* Generate candidate probes
+* Filter with basic filters
+* Align probes to reference genome
+* Filter based on alignment score and uniqueness
+* Filter reoccuring k-mers
+* Filter based on secondary structure prediction
+* Create final list of probes
+* Write final list of probes to file with report
 
 Probe set analysis plotting:
 
-* Create a simple overview over the key parameters (`analyze.py`)
-* (Using inputs from most other files)
+* Create a simple overview over the key parameters
 
 ## TODO
 

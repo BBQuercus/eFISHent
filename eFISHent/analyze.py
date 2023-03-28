@@ -204,7 +204,7 @@ class AnalyzeProbeset(luigi.Task):
         )
         shape = (4, 3)
 
-        # Row 1
+        # Row 1 - length, TM, GC
         ax = plt.subplot2grid(shape, (0, 0))
         self.add_length(ax)
         ax = plt.subplot2grid(shape, (0, 1))
@@ -212,7 +212,7 @@ class AnalyzeProbeset(luigi.Task):
         ax = plt.subplot2grid(shape, (0, 2))
         self.add_gc_content(ax)
 
-        # Row 2
+        # Row 2 - G-quadruplet, kmer, deltaG
         ax = plt.subplot2grid(shape, (1, 0))
         self.add_g_quadruplet(ax)
         ax = plt.subplot2grid(shape, (1, 1))
@@ -220,18 +220,13 @@ class AnalyzeProbeset(luigi.Task):
         ax = plt.subplot2grid(shape, (1, 2))
         self.add_free_energy(ax)
 
-        # Row 3
+        # Row 3 - off target count, affinity
         ax = plt.subplot2grid(shape, (2, 0))
         self.add_off_targets(ax)
         ax = plt.subplot2grid(shape, (2, 1))
         self.add_binding_affinity(ax, fig)
 
-        # TODO add a way to display off target expression percentages?
-        # if ProbeConfig().encode_count_table:
-        #     ax = plt.subplot2grid(shape, (2, 2))
-        #     self.add_expression_percentages(ax)
-
-        # Row 4
+        # Row 4 - coverage
         ax = plt.subplot2grid(shape, (3, 0), colspan=3)
         self.add_probe_coverage(ax)
 
