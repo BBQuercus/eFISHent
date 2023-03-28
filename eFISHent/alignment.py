@@ -11,9 +11,6 @@ import luigi
 import pandas as pd
 import pysam
 
-# from .indexing import BuildBlastDatabase
-# from .indexing import PrepareAnnotationFile
-# from .prepare_sequence import PrepareSequence
 from . import constants
 from . import util
 from .basic_filtering import BasicFiltering
@@ -30,18 +27,11 @@ class AlignProbeCandidates(luigi.Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.is_blast_required = (
-        #     ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
-        # )
         self.is_endogenous = SequenceConfig().is_endogenous
         self.max_off_targets = ProbeConfig().max_off_targets
 
     def requires(self):
         tasks = {"probes": BasicFiltering(), "bowtie": BuildBowtieIndex()}
-        # if self.is_blast_required:
-        #     tasks["blastseq"] = PrepareSequence()
-        #     tasks["gtf"] = PrepareAnnotationFile()
-        #     tasks["blast"] = BuildBlastDatabase()
         return tasks
 
     def output(self):
@@ -173,143 +163,6 @@ class AlignProbeCandidates(luigi.Task):
             ]
         return df
 
-    # def exclude_gene_of_interest(
-    #     self, df: pd.DataFrame, ensembl_id: str, fname_full_gene: str, threads: int
-    # ) -> pd.DataFrame:
-    #     """Filter count table to exclude the gene of interest."""
-    #     # Filter using provided EnsemblID directly
-    #     if ensembl_id:
-    #         self.logger.debug(f"Filtering directly using EmsembleID {ensembl_id}")
-    #         return df[df["gene_id"] != ensembl_id]
-
-    #     # Filter using blast
-    #     args_blast = [
-    #         "blastn",
-    #         "-db",
-    #         self.fname_genome,
-    #         "-query",
-    #         fname_full_gene,
-    #         "-task",
-    #         "megablast",
-    #         "-outfmt",
-    #         "6",
-    #         "-num_threads",
-    #         str(threads),
-    #     ]
-    #     self.logger.debug(f"Running blast with - {' '.join(args_blast)}")
-    #     process = subprocess.run(args_blast, capture_output=True, text=True)
-    #     data = [row.split("\t") for row in process.stdout.split("\n") if row]
-    #     df_blast = pd.DataFrame(data, columns=constants.BLAST_COLUMNS).astype(
-    #         {name: float for name in ["pident", "sstart", "send", "evalue"]}
-    #     )
-
-    #     # Arbirary identity values to ensure similar targets aren't falsely selected
-    #     df_blast = df_blast[
-    #         (df_blast["pident"] >= 98)
-    #         & (df_blast["evalue"] <= 1e-5)
-    #         & (df_blast["sseqid"] == df_blast.loc[0, "sseqid"])
-    #     ]
-
-    #     # Pad blast start/end results in case not everything was found/isoforms/etc.
-    #     # Set to an arbitrary maximum value of 100 to not include other genes
-    #     # Account for forward and reverse direction
-    #     for buffer in range(0, 110, 10):
-    #         gene_ids = []
-    #         for _, row in df_blast.iterrows():
-    #             gene_ids.extend(
-    #                 df[
-    #                     (
-    #                         (df["seqname"] == row["sseqid"])
-    #                         | (df["seqname"] == f"chr{row['sseqid']}")
-    #                     )
-    #                     & ((df["start"] >= row["sstart"]) & (df["end"] <= row["send"]))
-    #                     | ((df["start"] >= row["send"]) & (df["end"] <= row["sstart"]))
-    #                 ]["gene_id"].values
-    #             )
-    #         if not gene_ids:
-    #             self.logger.debug(f"No genes found using a buffer of {buffer}")
-    #             continue
-
-    #         most_frequent_gene_id = max(set(gene_ids), key=gene_ids.count)
-    #         self.logger.debug(
-    #             f"Filtering out most frequent gene {most_frequent_gene_id}"
-    #         )
-    #         df = df[df["gene_id"] != most_frequent_gene_id].reset_index(drop=True)
-    #         break
-
-    #     return df
-
-    # def join_alignment_with_annotation(
-    #     self, df_sam: pd.DataFrame, df_norm: pd.DataFrame
-    # ) -> pd.DataFrame:
-    #     """Merge probe alignment with normalized count table based on start/end positions."""
-    #     dfs = []
-
-    #     for sequence, df_sequence in df_sam.groupby("rname"):
-    #         df_count_sequence = df_norm[
-    #             (df_norm["seqname"] == sequence)
-    #             | (df_norm["seqname"] == sequence.lstrip("chr"))
-    #         ]
-    #         gene_start = df_count_sequence["start"].astype(int).values
-    #         gene_end = df_count_sequence["end"].astype(int).values
-    #         align_start = df_sequence["pos"].astype(int).values
-    #         align_length = df_sequence["seq"].apply(len).values
-    #         align_strand = (
-    #             (df_sequence["flag"] == constants.SAM_FLAG_REVERSE)
-    #             .replace({True: -1, False: 1})
-    #             .values
-    #         )
-    #         align_end = align_start + align_strand * align_length
-
-    #         # Create n*m matrix of which alignments(n) match up with which annotations(m)
-    #         i, j = np.where(
-    #             (
-    #                 (align_start[:, None] >= gene_start)
-    #                 & (align_start[:, None] <= gene_end)
-    #             )
-    #             | (
-    #                 (align_end[:, None] >= gene_start)
-    #                 & (align_end[:, None] <= gene_end)
-    #             )
-    #         )
-
-    #         # Join columns to merge alignment information with count values
-    #         df_sequence = pd.concat(
-    #             [
-    #                 df_sequence.reset_index(drop=True).iloc[i].reset_index(drop=True),
-    #                 df_count_sequence.reset_index(drop=True)
-    #                 .iloc[j]
-    #                 .reset_index(drop=True),
-    #             ],
-    #             axis=1,
-    #         )
-    #         dfs.append(df_sequence)
-    #     dfs = pd.concat(dfs, ignore_index=True)
-    #     return dfs
-
-    # def get_most_expressed_genes(self, df: pd.DataFrame, percentage: float) -> Any:
-    #     """Find the most highly expressed genes based on normalized count."""
-    #     quantile = df["count"].quantile(percentage / 100)
-    #     most_expressed = df[df["count"] > quantile].reset_index(drop=True)
-    #     return most_expressed["gene_id"].values.tolist()
-
-    # # TODO allow filtering if exogenous?
-    # def filter_using_count(self, df_sam: pd.DataFrame) -> pd.DataFrame:
-    #     """Filter candidates binding off targets above a expression percentage threshold."""
-    #     df = self.join_alignment_with_annotation(df_sam=df_sam, df_norm=self.norm_table)
-    #     df.to_csv(self.output()["table"].path, index=False)
-    #     df_off_targets = self.exclude_gene_of_interest(
-    #         df,
-    #         ensembl_id=SequenceConfig().ensembl_id,
-    #         fname_full_gene=self.input()["blastseq"].path,
-    #         threads=GeneralConfig().threads,
-    #     )
-    #     most_expressed = self.get_most_expressed_genes(
-    #         df=df_off_targets, percentage=ProbeConfig().max_expression_percentage
-    #     )
-    #     df_sam = df[~df["gene_id"].isin(most_expressed)].reset_index(drop=True)
-    #     return df_sam
-
     def run(self):
         # Naming
         self.fname_fasta = self.input()["probes"].path
@@ -320,11 +173,6 @@ class AlignProbeCandidates(luigi.Task):
         self.align_probes(threads=GeneralConfig().threads)
         df_sam = self.filter_unique_probes()
         df_sam.to_csv(self.output()["table"].path, index=False)
-
-        # if self.is_blast_required:
-        #     self.fname_gtf = self.input()["gtf"].path
-        #     self.fname_count = ProbeConfig().encode_count_table
-        #     df_sam = self.filter_using_count(df_sam)
 
         # Save output
         sequences = list(Bio.SeqIO.parse(self.fname_fasta, "fasta"))

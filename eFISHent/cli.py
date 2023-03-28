@@ -11,7 +11,6 @@ import tempfile
 
 import luigi
 
-# from .indexing import BuildBlastDatabase
 from .analyze import AnalyzeProbeset
 from .cleanup import CleanUpOutput
 from .constants import CLI_SHORTFORM
