@@ -37,7 +37,7 @@ def get_melting_temp(
 
 def get_gc_content(sequence: Bio.Seq.Seq) -> float:
     """Get GC content of candidate."""
-    return float(Bio.SeqUtils.gc_fraction(sequence))
+    return float(Bio.SeqUtils.gc_fraction(sequence)) * 100
 
 
 def get_g_quadruplet_count(sequence: Bio.Seq.Seq) -> int:
@@ -71,7 +71,9 @@ class BasicFiltering(luigi.Task):
         gc_content = get_gc_content(sequence)
         g_quadruplets = get_g_quadruplet_count(sequence)
         melting_temp = get_melting_temp(
-            sequence, config.na_concentration, config.formamide_concentration
+            Bio.Seq.Seq(sequence),
+            config.na_concentration,
+            config.formamide_concentration,
         )
 
         if (

@@ -61,11 +61,11 @@ def test_quadruplet_count(seq, output):
 @pytest.mark.parametrize(
     "seq,tm,gc,valid",
     [
-        ("AGGGGGGGA", (20, 30), (0, 100), False),
-        ("AGGGAGGGA", (20, 30), (0, 100), True),
-        ("ATCGATGC", (10, 20), (40, 60), True),
-        ("ATCGATGC", (0, 10), (0, 100), False),
-        ("ATCGATGC", (10, 20), (60, 70), False),
+        ("AGAGAGAGA", (10, 20), (0, 100), True),
+        ("AGAGAGGGA", (10, 20), (0, 100), False),
+        ("ATCGATGCAC", (20, 30), (40, 60), True),
+        ("ATCGATGCAC", (0, 10), (0, 100), False),
+        ("ATCGATGCAC", (20, 30), (60, 70), False),
     ],
 )
 def test_is_valid(seq, tm, gc, valid):
