@@ -3,8 +3,10 @@
 __version__ = "0.0.4"
 
 import logging
+import warnings
 
 # Silence some troublemakers
+warnings.filterwarnings("ignore")
 logging.getLogger("luigi-interface").setLevel(level=logging.CRITICAL)
 logging.getLogger("matplotlib.font_manager").setLevel(level=logging.CRITICAL)
 
