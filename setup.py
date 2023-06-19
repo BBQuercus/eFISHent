@@ -10,7 +10,7 @@ from setuptools import setup
 setup(
     # Description
     name="eFISHent",
-    version="0.0.4",
+    version="0.0.5",
     license="MIT",
     description="RNA FISH oligos/probes design tool.",
     long_description_content_type="text/plain",
