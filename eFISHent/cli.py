@@ -11,6 +11,7 @@ import tempfile
 
 import luigi
 
+from . import __version__
 from .analyze import AnalyzeProbeset
 from .cleanup import CleanUpOutput
 from .constants import CLI_SHORTFORM
@@ -66,7 +67,7 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
         "-V",
         "--version",
         action="version",
-        version="%(prog)s 0.0.1",
+        version="%(prog)s " + str(__version__),
         help="Show %(prog)s's version number.",
     )
     utility.add_argument(
