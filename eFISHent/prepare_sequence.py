@@ -134,12 +134,34 @@ class PrepareSequence(luigi.Task):
             self.logger.debug("Converted sequence to reverse complement.")
         return sequence
 
+    @staticmethod
+    def is_fasta_formatted(fname):
+        if not os.path.exists(fname):
+            return False
+
+        with open(fname, "r") as fasta_file:
+            in_sequence = False
+            for line in fasta_file:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith(">"):
+                    in_sequence = True
+                elif not in_sequence or not all(base in "ATCGN" for base in line):
+                    return False
+            return True
+
     def run(self):
         input_file = (
             self.input()["entrez"].path
             if "entrez" in self.input()
             else SequenceConfig().sequence_file
         )
+        if not self.is_fasta_formatted(input_file):
+            raise ValueError(
+                "Fasta file is incorrectly formatted. "
+                "Check wikipedia: https://en.wikipedia.org/wiki/FASTA_format"
+            )
         sequences = list(Bio.SeqIO.parse(input_file, format="fasta"))
         sequence = self.select_sequence(sequences)
         sequence = self.select_strand(sequence, SequenceConfig().is_plus_strand)

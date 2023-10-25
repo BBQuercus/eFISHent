@@ -101,3 +101,32 @@ def test_get_strand_minus(task_prepare, sequence):
     assert task_prepare.select_strand(
         sequence, is_plus_strand=False
     ).seq == Bio.Seq.Seq("ATCGATCG")
+
+
+def test_properly_formatted_fasta_single(task_prepare, tmpdir):
+    fasta_file = tmpdir.join("proper_fasta.fasta")
+    fasta_file.write(">Sequence1\nATCGATCGANNN\nAGTGGGGATGTAAA")
+    assert task_prepare.is_fasta_formatted(fasta_file) is True
+
+
+def test_properly_formatted_fasta_multiple(task_prepare, tmpdir):
+    fasta_file = tmpdir.join("proper_fasta.fasta")
+    fasta_file.write(">Sequence1\nATCGATCGANNN\n>Sequence2\nAGCTAGCTAGCT")
+    assert task_prepare.is_fasta_formatted(fasta_file) is True
+
+
+def test_improperly_formatted_fasta(task_prepare, tmpdir):
+    fasta_file = tmpdir.join("improper_fasta.fasta")
+    fasta_file.write(">Sequence1\nATCGATCGATCG\nSequence2\nAGCTAGCTAGCT")
+    assert task_prepare.is_fasta_formatted(fasta_file) is False
+
+
+def test_wrong_characters_in_fasta(task_prepare, tmpdir):
+    fasta_file = tmpdir.join("improper_fasta.fasta")
+    fasta_file.write(">Sequence1\nATCGANNXYZ")
+    assert task_prepare.is_fasta_formatted(fasta_file) is False
+
+
+def test_non_existent_file(task_prepare, tmpdir):
+    non_existent_file = str(tmpdir.join("non_existent.fasta"))
+    assert task_prepare.is_fasta_formatted(non_existent_file) is False
