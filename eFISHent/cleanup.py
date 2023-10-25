@@ -43,9 +43,8 @@ class CleanUpOutput(luigi.Task):
         tasks = {
             "optimize": OptimizeProbeCoverage(),
             "jellyfish": BuildJellyfishIndex(),
+            "alignment": AlignProbeCandidates(),
         }
-        if self.is_blast_required:
-            tasks["alignment"] = AlignProbeCandidates()
         return tasks
 
     def output(self):
@@ -84,12 +83,12 @@ class CleanUpOutput(luigi.Task):
         ]
         df["deltaG"] = [get_free_energy(seq) for seq in sequences]
         df["kmers"] = [get_max_kmer_count(seq, jellyfish_path) for seq in sequences]
-        if alignment_path is not None:
-            df_counts = pd.read_csv(alignment_path)
-            df_counts = df_counts.groupby("qname", as_index=False).size()
-            df["count"] = pd.merge(
-                df, df_counts, how="left", left_on="name", right_on="qname"
-            )["size"].fillna(0)
+        df_counts = pd.read_csv(alignment_path)
+        df_counts = df_counts.groupby("qname", as_index=False).size()
+        df["count"] = pd.merge(
+            df, df_counts, how="left", left_on="name", right_on="qname"
+        )["size"].fillna(0)
+        df["count"] -= 1
 
         # Create new/clean names
         df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]
