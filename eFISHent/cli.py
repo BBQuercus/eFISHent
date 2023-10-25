@@ -81,7 +81,7 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
 
 def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> None:
     """Add a single configuration class/group to a parser."""
-    for name, param in config_class().get_params():
+    for name, param in config_class().get_params():  # type: ignore
         param_type = get_parameter_type(param)
         is_required = name in REQUIRED_PARAMS
         default = (
@@ -149,7 +149,7 @@ def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
     for section, config_class in zip(
         ["GeneralConfig", "RunConfig", "SequenceConfig", "ProbeConfig"], CONFIG_CLASSES
     ):
-        for name in config_class().get_param_names():
+        for name in config_class().get_param_names():  # type: ignore
             value = vars(args).get(name)
             config.set(section, name, str(value))
             if name == "threads":
@@ -182,7 +182,7 @@ def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
     logging.basicConfig(filename=logfile, format=log_format, force=True)  # type: ignore
     logging.getLogger("luigi").setLevel(luigi_level)
     logging.getLogger("luigi-interface").setLevel(luigi_level)
-    luigi.interface.core.log_level = luigi_level
+    luigi.interface.core.log_level = luigi_level  # type: ignore
 
     logger = logging.getLogger("custom-logger")
     logger.setLevel(custom_level)

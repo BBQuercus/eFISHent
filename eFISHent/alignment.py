@@ -1,11 +1,9 @@
 """Filter probes based on alignment score and uniqueness."""
 
-# from typing import Any
 import logging
 import os
 import subprocess
 
-# import numpy as np
 import Bio.SeqIO
 import luigi
 import pandas as pd

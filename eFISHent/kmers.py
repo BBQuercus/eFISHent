@@ -18,7 +18,7 @@ from .config import GeneralConfig
 from .config import ProbeConfig
 
 
-def get_max_kmer_count(sequence: Bio.SeqRecord, jellyfish_path: str) -> int:
+def get_max_kmer_count(sequence: Bio.SeqRecord.SeqRecord, jellyfish_path: str) -> int:
     """Count kmers in a sequence.
 
     Only keep the sequence if it has less than max_kmers kmers.

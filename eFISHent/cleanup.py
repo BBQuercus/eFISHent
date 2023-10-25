@@ -3,15 +3,17 @@
 Remove the files that are not needed and prettify the kept output.
 """
 
-from typing import List, Optional
+from typing import List
 import glob
 import logging
 import os
 import sys
 
+import Bio.Seq
+import Bio.SeqIO
+import Bio.SeqRecord
 import luigi
 import pandas as pd
-import Bio.SeqIO
 
 from . import util
 from .alignment import AlignProbeCandidates
@@ -61,8 +63,8 @@ class CleanUpOutput(luigi.Task):
         sequences: List[Bio.SeqRecord.SeqRecord],
         basename: str,
         jellyfish_path: str,
-        alignment_path: Optional[str] = None,
-        config: luigi.Config = ProbeConfig,
+        alignment_path: str,
+        config: luigi.Config = ProbeConfig,  # type: ignore
     ) -> pd.DataFrame:
         """Create table with probe information."""
         # Create basic table with probe start/end positions and name
@@ -74,7 +76,7 @@ class CleanUpOutput(luigi.Task):
         df["TM"] = [
             round(
                 get_melting_temp(
-                    seq.seq, config().na_concentration, config().formamide_concentration
+                    seq.seq, config().na_concentration, config().formamide_concentration  # type: ignore
                 ),
                 2,
             )
@@ -138,15 +140,13 @@ class CleanUpOutput(luigi.Task):
 
     def run(self):
         sequences = list(
-            Bio.SeqIO.parse(self.input()["optimize"]["probes"].path, "fasta")
+            Bio.SeqIO.parse(self.input()["optimize"]["probes"].path, "fasta")  # type: ignore
         )
         df = self.prettify_table(
             sequences,
             basename=util.get_gene_name(hashed=False),
-            jellyfish_path=self.input()["jellyfish"].path,
-            alignment_path=self.input()["alignment"]["table"].path
-            if self.is_blast_required
-            else None,
+            jellyfish_path=self.input()["jellyfish"].path,  # type: ignore
+            alignment_path=self.input()["alignment"]["table"].path,  # type: ignore
         )
         sequences = self.prettify_sequences(df)
         config = self.prettify_configuration()
