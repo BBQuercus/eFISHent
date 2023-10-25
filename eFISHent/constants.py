@@ -1,5 +1,5 @@
 """Common constants used in other methods."""
-from typing import List
+from typing import List, Tuple, Dict
 import luigi
 
 from .config import GeneralConfig
@@ -7,7 +7,7 @@ from .config import ProbeConfig
 from .config import RunConfig
 from .config import SequenceConfig
 
-SAMFILE_COLUMNS = [
+SAMFILE_COLUMNS: List[str] = [
     "qname",
     "flag",
     "rname",
@@ -24,7 +24,7 @@ SAMFILE_COLUMNS = [
     "NM",
 ]
 
-BLAST_COLUMNS = [
+BLAST_COLUMNS: List[str] = [
     "qseqid",
     "sseqid",
     "pident",
@@ -39,7 +39,7 @@ BLAST_COLUMNS = [
     "bitscore",
 ]
 
-GTF_COLUMNS = [
+GTF_COLUMNS: List[str] = [
     "gene_id",
     "seqname",
     "start",
@@ -56,11 +56,11 @@ CONFIG_CLASSES: List[luigi.Config] = [
     ProbeConfig,
 ]
 
-FASTA_EXT = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
+FASTA_EXT: Tuple[str] = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
 
-SAM_FLAG_REVERSE = "16"
+SAM_FLAG_REVERSE: str = "16"
 
-CLI_SHORTFORM = {
+CLI_SHORTFORM: Dict[str, str] = {
     "analyze_probeset": "ap",
     "build_indices": "idx",
     "encode_count_table": "ct",
@@ -81,6 +81,7 @@ CLI_SHORTFORM = {
     "min_length": "l",
     "min_tm": "tm",
     "na_concentration": "na",
+    "no_alternative_loci": "nal",
     "optimization_method": "om",
     "optimization_time_limit": "otl",
     "organism_name": "org",

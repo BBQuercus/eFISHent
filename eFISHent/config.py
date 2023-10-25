@@ -137,6 +137,13 @@ class ProbeConfig(luigi.Config):
         ),
         default=0,
     )
+    no_alternative_loci = luigi.BoolParameter(
+        description=(
+            "When aligning do not consider alternative loci. "
+            "These are all _alt labelled sequences in the reference genome."
+        ),
+        default=False,
+    )
     encode_count_table = luigi.Parameter(
         description=(
             "Path to the ENCODE RNAseq count table provided as TSV, CSV, or TXT format. "

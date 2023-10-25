@@ -27,6 +27,7 @@ class AlignProbeCandidates(luigi.Task):
         super().__init__(*args, **kwargs)
         self.is_endogenous = SequenceConfig().is_endogenous
         self.max_off_targets = ProbeConfig().max_off_targets
+        self.no_alternative_loci = ProbeConfig().no_alternative_loci
 
     def requires(self):
         tasks = {"probes": BasicFiltering(), "bowtie": BuildBowtieIndex()}
@@ -143,13 +144,19 @@ class AlignProbeCandidates(luigi.Task):
         return pd.DataFrame(columns=columns)
 
     def filter_unique_probes(self) -> pd.DataFrame:
-        """Filter sam file with probes based on alignment score and uniqueness."""
-        # 60 - uniquely mapped read, regardless of number of mismatches / indels
-        # 4 – flag for unmapped read
+        """Filter sam file with probes based on alignment score and uniqueness.
+
+        Filtering explanations:
+            * mapq 60: uniquely mapped read, regardless of number of mismatches / indels
+            * flag 4: unmapped read
+        """
         flags = ["--min-MQ", "60"] if self.is_endogenous else ["--require-flags", "4"]
         self.logger.debug(f"Running samtools with - {' '.join(flags)}")
         filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
         df = self.parse_raw_pysam(filtered_sam)
+
+        if self.no_alternative_loci:
+            df = df[~df["rname"].str.contains("_alt")]
 
         # Filter to remove off-target rates
         if self.is_endogenous:
