@@ -35,6 +35,7 @@ setup(
         "pandas",
         "pyarrow",
         "pyomo",
+        "pysam",
     ],
     entry_points={
         "console_scripts": [
