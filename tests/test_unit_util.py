@@ -112,6 +112,32 @@ def test_genome_name_invalid():
         get_genome_name(config=Config)
 
 
+def test_genome_name_nonexistent_with_valid_extension():
+    """Test that non-existent file with valid FASTA extension raises ValueError.
+
+    This test exposes the bug where the validation uses OR instead of AND,
+    allowing non-existent files with .fa extension to pass validation.
+    """
+    class Config(luigi.Config):
+        reference_genome = luigi.Parameter("./nonexistent_genome.fa")
+
+    with pytest.raises(ValueError):
+        get_genome_name(config=Config)
+
+
+def test_genome_name_exists_with_invalid_extension():
+    """Test that existing file with invalid extension raises ValueError.
+
+    This test ensures files must have BOTH valid existence AND valid extension.
+    """
+    class Config(luigi.Config):
+        # Use an existing file that doesn't have a FASTA extension
+        reference_genome = luigi.Parameter("./setup.py")
+
+    with pytest.raises(ValueError):
+        get_genome_name(config=Config)
+
+
 def test_genome_name_valid():
     class Config(luigi.Config):
         reference_genome = luigi.Parameter("./tests/data/sacCer3.fa")

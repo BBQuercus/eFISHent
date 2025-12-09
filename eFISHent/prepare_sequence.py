@@ -58,8 +58,8 @@ class DownloadEntrezGeneSequence(luigi.Task):
         self.logger.debug(f"Fetching from Entrez using query '{query}'.")
 
         search = subprocess.run(args_search, check=True, capture_output=True)
-        link = subprocess.run(args_link, input=search.stdout, capture_output=True)
-        fetch = subprocess.run(args_fetch, input=link.stdout, capture_output=True)
+        link = subprocess.run(args_link, input=search.stdout, check=True, capture_output=True)
+        fetch = subprocess.run(args_fetch, input=link.stdout, check=True, capture_output=True)
         fasta = fetch.stdout.decode()
 
         # Check for empty results or missing FASTA content

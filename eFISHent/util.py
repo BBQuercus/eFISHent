@@ -126,7 +126,7 @@ def get_genome_name(config: luigi.Config = GeneralConfig) -> Any:
 
     if not (
         os.path.exists(config().reference_genome)
-        or os.path.splitext(config().reference_genome)[1] in FASTA_EXT
+        and os.path.splitext(config().reference_genome)[1] in FASTA_EXT
     ):
         raise ValueError("The passed reference genome must be a valid .fa file.")
 

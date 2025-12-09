@@ -47,7 +47,8 @@ class OptimizeProbeCoverage(luigi.Task):
 
         for _, probe in self.df.iterrows():
             if not is_overlapping(
-                prev_probe[["start", "end"]], probe[["start", "end"]]
+                (prev_probe["start"], prev_probe["end"]),
+                (probe["start"], probe["end"]),
             ):
                 index_block += 1
             prev_probe = probe
@@ -131,14 +132,13 @@ class OptimizeProbeCoverage(luigi.Task):
 
 
 def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
-    """Check if two ranges overlap."""
-    x_set = set(range(x[0], x[1] + 1))
-    return len(x_set.intersection(range(y[0], y[1] + 1))) != 0
+    """Check if two ranges overlap. O(1) complexity."""
+    return x[0] <= y[1] and y[0] <= x[1]
 
 
 def is_binding(seq1: str, seq2: str, match_percentage: float = 0.75) -> bool:
     """Check if seq1 is similar to (rev) complement of seq2 / if would bind."""
-    if 0 > match_percentage > 1:
+    if not (0 <= match_percentage <= 1):
         raise ValueError(
             "Matching percentage must be between 0 and 100. "
             f"Found `{match_percentage * 100}`"
@@ -167,11 +167,12 @@ def greedy_model(df: pd.DataFrame) -> List[str]:
     matrix = vect(rec_array[:, None], rec_array)
     overlap = {probe: row for probe, row in zip(probes, matrix)}
 
-    # Assign non-ovelapping probes to the first probe
+    # Assign non-overlapping probes - must check ALL assigned probes, not just last
     assign = {}
     assigned = [probes[0]]
-    for idx, probe in enumerate(probes):
-        if not overlap[assigned[-1]][idx]:
+    for idx, probe in enumerate(probes[1:], start=1):
+        # Check if probe overlaps with ANY already assigned probe
+        if all(not overlap[assigned_probe][idx] for assigned_probe in assigned):
             assigned.append(probe)
         assign[probe] = probe in assigned
     return assigned

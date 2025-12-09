@@ -32,8 +32,13 @@ def get_free_energy(sequence: Bio.SeqRecord.SeqRecord) -> float:
     data_table = os.path.join(file_path, "data_tables/")
     if sys.platform == "linux" or sys.platform == "linux2":
         fold_path = "Fold"
-    if sys.platform == "darwin":
+    elif sys.platform == "darwin":
         fold_path = os.path.join(file_path, "Fold_osx")
+    else:
+        raise NotImplementedError(
+            f"Platform '{sys.platform}' is not supported. "
+            "eFISHent requires Linux or macOS for secondary structure prediction."
+        )
 
     os.environ["DATAPATH"] = data_table
 
