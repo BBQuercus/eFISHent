@@ -1,3 +1,60 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eFISHent"
+version = "0.0.5"
+description = "RNA FISH oligos/probes design tool."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "Bastian Eichenberger", email = "bastian@eichenbergers.ch" }
+]
+keywords = ["biomedical", "bioinformatics", "RNA probe design"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "biopython",
+    "gtfparse",
+    "luigi",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pyarrow>=18.0.0",
+    "pyomo",
+    "pysam",
+]
+
+[project.urls]
+Homepage = "https://github.com/bbquercus/efishent/"
+Documentation = "https://github.com/BBQuercus/efishent/wiki"
+Changelog = "https://github.com/BBQuercus/efishent/releases"
+"Issue Tracker" = "https://github.com/bbquercus/efishent/issues"
+
+[project.scripts]
+efishent = "eFISHent.cli:main"
+eFISHent = "eFISHent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["eFISHent*"]
+
+[tool.ruff.lint.per-file-ignores]
+"eFISHent/cli.py" = ["E402", "F401"]
+
 [tool.mypy]
 mypy_path = "eFISHent"
 check_untyped_defs = true

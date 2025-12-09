@@ -26,20 +26,61 @@ eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleo
 
 ## Installation
 
-eFISHent is being tested on MacOS and Linux with Python versions 3.8 - 3.10. Unfortunately, due to the bioinformatics dependencies Windows is not supported. For Windows users, we reccommend installing "Windows Subsystem for Linux (WSL)" ([Windows 10](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10#1-overview), [Windows 11](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview)) or using a fully fledged [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview). Using [conda](https://conda.io/) environment, install eFISHent as follows:
+eFISHent is tested on macOS and Linux with Python 3.9+. Windows is not supported due to bioinformatics dependencies. For Windows users, we recommend [WSL](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview) or a [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview).
+
+### Quick Install (Recommended)
+
+Use the provided installation scripts to install all external dependencies:
 
 ```bash
-# Create an environment and install all dependencies (e.g. python)
-conda env create bbquercus/efishent  
+# macOS
+curl -sL https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install_macos.sh | bash
 
-# Activate environment
-conda activate efishent
+# Linux
+curl -sL https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install_linux.sh | bash
+```
 
-# Install efishent via pypi
+Then add the activation script to your shell profile and install eFISHent:
+
+```bash
+# Add to ~/.zshrc (macOS) or ~/.bashrc (Linux)
+echo 'source ~/.local/efishent-deps/activate.sh' >> ~/.zshrc  # or ~/.bashrc
+
+# Reload shell
+source ~/.zshrc  # or ~/.bashrc
+
+# Install eFISHent
 pip install efishent
 ```
 
-Any updates can then simply be done via pypi (`pip install --upgrade efishent`).
+### Custom Installation Path
+
+To install dependencies to a custom location:
+
+```bash
+# Download and run with custom path
+curl -sL https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install_macos.sh -o install.sh
+chmod +x install.sh
+./install.sh /path/to/custom/location
+
+# Then add the custom activation script to your profile
+echo 'source /path/to/custom/location/activate.sh' >> ~/.zshrc
+```
+
+### Using Conda
+
+Alternatively, use [conda](https://conda.io/) to manage dependencies:
+
+```bash
+# Create environment with dependencies
+conda env create bbquercus/efishent
+
+# Activate and install
+conda activate efishent
+pip install efishent
+```
+
+Updates can be done via pip: `pip install --upgrade efishent`
 
 ## Usage
 
