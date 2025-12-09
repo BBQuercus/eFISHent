@@ -90,6 +90,50 @@ def test_is_binding(seq1, seq2, percentage, binding):
     assert is_binding(seq1, seq2, percentage) == binding
 
 
+@pytest.mark.parametrize(
+    "invalid_percentage",
+    [
+        -0.5,  # negative
+        -0.01,  # slightly negative
+        1.01,  # slightly over 1
+        1.5,  # over 1
+        2.0,  # way over 1
+    ],
+)
+def test_is_binding_invalid_percentage(invalid_percentage):
+    """Test that invalid match_percentage values raise ValueError."""
+    with pytest.raises(ValueError, match="between 0 and 100"):
+        is_binding("ATGC", "GCAT", invalid_percentage)
+
+
+def test_greedy_model_no_overlapping_assignments():
+    """Test that greedy model doesn't assign overlapping probes.
+
+    This test exposes the bug where greedy only checks the LAST assigned probe,
+    not ALL assigned probes. In this case:
+    - seq1 (0-10) is assigned first
+    - seq2 (20-30) doesn't overlap with seq1, so it's assigned
+    - seq3 (5-15) doesn't overlap with seq2 (last assigned), but DOES overlap with seq1
+    - The buggy algorithm would incorrectly add seq3
+
+    The correct result should NOT include seq3 since it overlaps with seq1.
+    """
+    df = pd.DataFrame(
+        {
+            "name": ["seq1", "seq2", "seq3"],
+            "sequence": ["A" * 11, "T" * 11, "G" * 11],
+            "start": [0, 20, 5],
+            "end": [10, 30, 15],
+        }
+    )
+    assigned = greedy_model(df)
+
+    # seq3 overlaps with seq1 (positions 5-10), so should NOT be in result
+    assert "seq1" in assigned
+    assert "seq2" in assigned
+    assert "seq3" not in assigned, "seq3 overlaps with seq1 and should not be assigned"
+
+
 def test_filter_binding_probes(df):
     task = OptimizeProbeCoverage()
     task.df = df

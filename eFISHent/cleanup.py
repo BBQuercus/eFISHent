@@ -23,7 +23,7 @@ from .config import ProbeConfig
 from .config import RunConfig
 from .config import SequenceConfig
 from .kmers import BuildJellyfishIndex
-from .kmers import get_max_kmer_count
+from .kmers import get_max_kmer_counts_batch
 from .optimization import OptimizeProbeCoverage
 from .secondary_structure import get_free_energy
 
@@ -82,7 +82,7 @@ class CleanUpOutput(luigi.Task):
             for seq in sequences
         ]
         df["deltaG"] = [get_free_energy(seq) for seq in sequences]
-        df["kmers"] = [get_max_kmer_count(seq, jellyfish_path) for seq in sequences]
+        df["kmers"] = get_max_kmer_counts_batch(sequences, jellyfish_path)
         df_counts = pd.read_csv(alignment_path)
         df_counts = df_counts.groupby("qname", as_index=False).size()
         df["count"] = pd.merge(

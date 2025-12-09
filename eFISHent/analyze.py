@@ -24,7 +24,7 @@ from .config import RunConfig
 from .config import SequenceConfig
 from .indexing import BuildBowtieIndex
 from .kmers import BuildJellyfishIndex
-from .kmers import get_max_kmer_count
+from .kmers import get_max_kmer_counts_batch
 from .prepare_sequence import PrepareSequence
 from .secondary_structure import get_free_energy
 
@@ -117,15 +117,10 @@ class AnalyzeProbeset(luigi.Task):
         self.histplot(ax, quads, "G quadruplet", -1)
         self.logger.debug("Added G quadruplets to axis.")
 
-    def _get_max_kmer_count(self, seq):
-        return get_max_kmer_count(seq, self.jellyfish_path)
-        # return get_max_kmer_count(seq, "./tests/data/sacCer3_15.jf")
-
     def add_kmers(self, ax: plt.Axes):
         """Add highest number of sub-kmers in probes to axis."""
-        self.jellyfish_path = self.input()["jellyfish"].path
-        with multiprocessing.Pool(GeneralConfig().threads) as pool:
-            kmers = pool.map(self._get_max_kmer_count, self.sequences)
+        jellyfish_path = self.input()["jellyfish"].path
+        kmers = get_max_kmer_counts_batch(self.sequences, jellyfish_path)
         self.histplot(ax, kmers, "K-mer count (len)", -1)
         self.logger.debug("Added kmers to axis.")
 

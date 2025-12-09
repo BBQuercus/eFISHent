@@ -4,9 +4,10 @@ Filter probes based on jellyfish indices.
 """
 
 import logging
-import multiprocessing
 import os
 import subprocess
+import tempfile
+from typing import List
 
 import Bio.SeqIO
 import Bio.SeqRecord
@@ -19,29 +20,117 @@ from .config import ProbeConfig
 
 
 def get_max_kmer_count(sequence: Bio.SeqRecord.SeqRecord, jellyfish_path: str) -> int:
-    """Count kmers in a sequence.
+    """Count kmers in a sequence and return the maximum count.
 
-    Only keep the sequence if it has less than max_kmers kmers.
+    Uses file-based input to jellyfish for handling of all k-mers.
+
+    Args:
+        sequence: SeqRecord object to analyze
+        jellyfish_path: Path to the jellyfish index file
+
+    Returns:
+        Maximum kmer count found in the sequence
     """
-    if len(sequence.seq) < ProbeConfig().kmer_length:
+    kmer_length = ProbeConfig().kmer_length
+    if len(sequence.seq) < kmer_length:
         raise ValueError(
-            f"Probe length must be larger than kmer length ({ProbeConfig().kmer_length})."
+            f"Probe length must be larger than kmer length ({kmer_length})."
         )
 
     sub_kmers = [
-        str(sequence.seq[i : i + ProbeConfig().kmer_length])
-        for i in range(len(sequence) - ProbeConfig().kmer_length + 1)
+        str(sequence.seq[i : i + kmer_length])
+        for i in range(len(sequence) - kmer_length + 1)
     ]
-    args_jellyfish = ["jellyfish", "query", jellyfish_path, " ".join(sub_kmers)]
-    kmer_counts_raw = subprocess.check_output(
-        args_jellyfish, stderr=subprocess.STDOUT
-    ).decode()
 
-    # Format of jellyfish output: "kmer1 count1\nkmer2 count2\n..."
-    kmer_counts = list(
-        map(lambda x: int(x.split(" ")[1]), kmer_counts_raw.split("\n")[:-1])
-    )
+    # Write k-mers to temp file in FASTA format (required by jellyfish -s)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".fa", delete=False) as f:
+        for i, kmer in enumerate(sub_kmers):
+            f.write(f">kmer{i}\n{kmer}\n")
+        temp_path = f.name
+
+    try:
+        args_jellyfish = ["jellyfish", "query", jellyfish_path, "-s", temp_path]
+        kmer_counts_raw = subprocess.check_output(
+            args_jellyfish, stderr=subprocess.STDOUT
+        ).decode()
+    finally:
+        os.unlink(temp_path)
+
+    # Format of jellyfish output: "KMER COUNT\n"
+    kmer_counts = [
+        int(line.split(" ")[1]) for line in kmer_counts_raw.strip().split("\n") if line
+    ]
     return max(kmer_counts) if kmer_counts else 0
+
+
+def get_max_kmer_counts_batch(
+    sequences: List[Bio.SeqRecord.SeqRecord], jellyfish_path: str
+) -> List[int]:
+    """Count kmers for multiple sequences in a single jellyfish query.
+
+    This is more efficient than calling get_max_kmer_count for each sequence
+    individually, as it reduces subprocess overhead by batching all k-mers
+    into a single jellyfish query using a temp file.
+
+    Args:
+        sequences: List of SeqRecord objects to analyze
+        jellyfish_path: Path to the jellyfish index file
+
+    Returns:
+        List of max kmer counts, one per input sequence
+    """
+    if not sequences:
+        return []
+
+    kmer_length = ProbeConfig().kmer_length
+
+    # Validate all sequences have sufficient length
+    for seq in sequences:
+        if len(seq.seq) < kmer_length:
+            raise ValueError(
+                f"Probe length must be larger than kmer length ({kmer_length})."
+            )
+
+    # Extract all kmers from all sequences, tracking which sequence each belongs to
+    all_kmers = []
+    kmer_counts_per_seq = []  # Number of kmers per sequence
+
+    for sequence in sequences:
+        seq_kmers = [
+            str(sequence.seq[i : i + kmer_length])
+            for i in range(len(sequence) - kmer_length + 1)
+        ]
+        all_kmers.extend(seq_kmers)
+        kmer_counts_per_seq.append(len(seq_kmers))
+
+    # Write all kmers to temp file in FASTA format (required by jellyfish -s)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".fa", delete=False) as f:
+        for i, kmer in enumerate(all_kmers):
+            f.write(f">kmer{i}\n{kmer}\n")
+        temp_path = f.name
+
+    try:
+        args_jellyfish = ["jellyfish", "query", jellyfish_path, "-s", temp_path]
+        kmer_counts_raw = subprocess.check_output(
+            args_jellyfish, stderr=subprocess.STDOUT
+        ).decode()
+    finally:
+        os.unlink(temp_path)
+
+    # Parse all counts (format: "KMER COUNT\n")
+    all_counts = [
+        int(line.split(" ")[1]) for line in kmer_counts_raw.strip().split("\n") if line
+    ]
+
+    # Split counts back per sequence and find max for each
+    result = []
+    idx = 0
+    for count in kmer_counts_per_seq:
+        seq_counts = all_counts[idx : idx + count]
+        result.append(max(seq_counts) if seq_counts else 0)
+        idx += count
+
+    return result
 
 
 class BuildJellyfishIndex(luigi.Task):
@@ -96,21 +185,14 @@ class KMerFiltering(luigi.Task):
             os.path.join(util.get_output_dir(), f"{util.get_gene_name()}_kmer.fasta")
         )
 
-    def _get_kmer_count(self, sequence: Bio.SeqRecord) -> int:
-        return get_max_kmer_count(sequence, self.path)
-
     def run(self):
         util.log_stage_start(self.logger, "KMerFiltering")
         sequences = list(
             Bio.SeqIO.parse(self.input()["probes"]["fasta"].path, format="fasta")
         )
 
-        # TODO WTF... if this is passed as reference and not as variable
-        # multiprocessing will fk things up so that GeneralConfig() is reset...
-        self.path = self.input()["jellyfish"].path
-
-        with multiprocessing.Pool(GeneralConfig().threads) as pool:
-            counts = pool.map(self._get_kmer_count, sequences)
+        jellyfish_path = self.input()["jellyfish"].path
+        counts = get_max_kmer_counts_batch(sequences, jellyfish_path)
 
         candidates = [
             seq

@@ -2,17 +2,52 @@
 
 import logging
 import os
-from typing import List
+from typing import Generator, List
 
 import Bio.SeqIO
 import Bio.SeqRecord
-import Bio.SeqUtils
-import Bio.SeqUtils.MeltingTemp
 import luigi
 
 from . import util
 from .config import ProbeConfig
 from .prepare_sequence import PrepareSequence
+
+
+def create_candidate_probes_generator(
+    sequence: Bio.SeqRecord.SeqRecord, min_length: int, max_length: int
+) -> Generator[Bio.SeqRecord.SeqRecord, None, None]:
+    """Create a generator of all subsequences of sequence with the right lengths.
+
+    This is a memory-efficient alternative to create_candidate_probes that yields
+    probes one at a time instead of accumulating them all in memory.
+
+    Args:
+        sequence: The source sequence to generate probes from
+        min_length: Minimum probe length
+        max_length: Maximum probe length
+
+    Yields:
+        SeqRecord objects for each candidate probe
+    """
+    if min_length > max_length:
+        raise ValueError(
+            "Minimum probe length must be smaller or equal to maximum length. "
+            f"{min_length} > {max_length}!"
+        )
+    if min_length >= len(sequence):
+        raise ValueError(
+            "Minimum probe length must be shorter than the sequence length. "
+            f"{min_length} >= {len(sequence)}!"
+        )
+
+    idx = 1
+    for length in range(min_length, max_length + 1):
+        for start_pos in range(0, len(sequence) - length + 1):
+            yield Bio.SeqRecord.SeqRecord(
+                sequence.seq[start_pos : start_pos + length],
+                id=f"candidate-{idx}-{start_pos}",
+            )
+            idx += 1
 
 
 class GenerateAllProbes(luigi.Task):
@@ -59,8 +94,14 @@ class GenerateAllProbes(luigi.Task):
     def run(self):
         util.log_stage_start(self.logger, "GenerateAllProbes")
         sequence = Bio.SeqIO.read(self.input().path, format="fasta")
-        candidates = self.create_candidate_probes(
-            sequence, ProbeConfig().min_length, ProbeConfig().max_length
-        )
-        util.log_and_check_candidates(self.logger, "GenerateAllProbes", len(candidates))
-        Bio.SeqIO.write(candidates, self.output().path, format="fasta")
+
+        # Use generator for memory-efficient streaming to file
+        count = 0
+        with open(self.output().path, "w") as f:
+            for candidate in create_candidate_probes_generator(
+                sequence, ProbeConfig().min_length, ProbeConfig().max_length
+            ):
+                Bio.SeqIO.write(candidate, f, format="fasta")
+                count += 1
+
+        util.log_and_check_candidates(self.logger, "GenerateAllProbes", count)
