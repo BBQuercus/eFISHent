@@ -138,6 +138,7 @@ class CleanUpOutput(luigi.Task):
             os.remove(filename)
 
     def run(self):
+        util.log_stage_start(self.logger, "CleanUpOutput")
         sequences = list(
             Bio.SeqIO.parse(self.input()["optimize"]["probes"].path, "fasta")  # type: ignore
         )

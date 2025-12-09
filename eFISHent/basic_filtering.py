@@ -106,6 +106,7 @@ class BasicFiltering(luigi.Task):
         return candidates
 
     def run(self):
+        util.log_stage_start(self.logger, "BasicFiltering")
         sequences = list(Bio.SeqIO.parse(self.input().path, "fasta"))
         candidates = self.screen_sequences(sequences)
         util.log_and_check_candidates(

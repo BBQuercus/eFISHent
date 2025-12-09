@@ -71,6 +71,7 @@ class DownloadEntrezGeneSequence(luigi.Task):
         return fasta
 
     def run(self):
+        util.log_stage_start(self.logger, "DownloadEntrezGeneSequence")
         if not SequenceConfig().is_plus_strand:
             self.logger.warning(
                 (
@@ -152,6 +153,7 @@ class PrepareSequence(luigi.Task):
             return True
 
     def run(self):
+        util.log_stage_start(self.logger, "PrepareSequence")
         input_file = (
             self.input()["entrez"].path
             if "entrez" in self.input()

@@ -18,7 +18,7 @@ from .prepare_sequence import PrepareSequence
 class GenerateAllProbes(luigi.Task):
     """Create all possible probes in a gene given length ranges."""
 
-    logger = logging.getLogger("luigi-interface")
+    logger = logging.getLogger("custom-logger")
 
     def requires(self):
         return PrepareSequence()
@@ -57,6 +57,7 @@ class GenerateAllProbes(luigi.Task):
         return candidates
 
     def run(self):
+        util.log_stage_start(self.logger, "GenerateAllProbes")
         sequence = Bio.SeqIO.read(self.input().path, format="fasta")
         candidates = self.create_candidate_probes(
             sequence, ProbeConfig().min_length, ProbeConfig().max_length

@@ -1,4 +1,5 @@
 """Index creating step for the alignment."""
+
 import logging
 import os
 import subprocess
@@ -39,6 +40,7 @@ class BuildBowtieIndex(luigi.Task):
         )
 
     def run(self):
+        util.log_stage_start(self.logger, "BuildBowtieIndex")
         self.build_bowtie_index(
             fname=os.path.abspath(GeneralConfig().reference_genome),
             genome=util.get_genome_name(),
@@ -62,7 +64,7 @@ class PrepareAnnotationFile(luigi.Task):
         warnings.filterwarnings("ignore")
         df = gtfparse.read_gtf(fname_input)
         # Newer gtfparse versions using polars
-        if type(df) != pd.DataFrame:
+        if not isinstance(df, pd.DataFrame):
             df = df.to_pandas()
         warnings.filterwarnings("default")
         self.logger.debug("Read gtf file with gtfparse")

@@ -100,6 +100,7 @@ class OptimizeProbeCoverage(luigi.Task):
         return assigned
 
     def run(self):
+        util.log_stage_start(self.logger, "OptimizeProbeCoverage")
         sequences = list(Bio.SeqIO.parse(self.input().path, "fasta"))
         self.df = util.create_data_table(sequences)
         self.df["end"] += ProbeConfig().spacing

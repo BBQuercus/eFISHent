@@ -69,6 +69,7 @@ class SecondaryStructureFiltering(luigi.Task):
         )
 
     def run(self):
+        util.log_stage_start(self.logger, "SecondaryStructureFiltering")
         sequences = list(Bio.SeqIO.parse(self.input().path, format="fasta"))
 
         with multiprocessing.Pool(GeneralConfig().threads) as pool:

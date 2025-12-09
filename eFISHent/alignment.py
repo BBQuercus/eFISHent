@@ -169,6 +169,7 @@ class AlignProbeCandidates(luigi.Task):
         return df
 
     def run(self):
+        util.log_stage_start(self.logger, "AlignProbeCandidates")
         # Naming
         self.fname_fasta = self.input()["probes"].path
         self.fname_sam = os.path.splitext(self.fname_fasta)[0] + ".sam"

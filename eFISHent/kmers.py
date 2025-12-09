@@ -55,6 +55,7 @@ class BuildJellyfishIndex(luigi.Task):
         )
 
     def run(self):
+        util.log_stage_start(self.logger, "BuildJellyfishIndex")
         if ProbeConfig().max_kmers <= 2:
             self.logger.warning(
                 f"{util.UniCode.warn} Jellyfish index will be created but not used because max_kmers <= 2."
@@ -99,6 +100,7 @@ class KMerFiltering(luigi.Task):
         return get_max_kmer_count(sequence, self.path)
 
     def run(self):
+        util.log_stage_start(self.logger, "KMerFiltering")
         sequences = list(
             Bio.SeqIO.parse(self.input()["probes"]["fasta"].path, format="fasta")
         )
