@@ -1,24 +1,52 @@
 """Command line interface."""
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, TYPE_CHECKING
 import argparse
 import configparser
 import logging
 import os
 import sys
 import tempfile
+import warnings
+
+# Silence some troublemakers before heavy imports
+warnings.filterwarnings("ignore")
+logging.getLogger("luigi-interface").setLevel(level=logging.CRITICAL)
+logging.getLogger("matplotlib.font_manager").setLevel(level=logging.CRITICAL)
 
 import luigi
 
 from . import __version__
-from .analyze import AnalyzeProbeset
-from .cleanup import CleanUpOutput
 from .constants import CLI_SHORTFORM
 from .constants import CONFIG_CLASSES
-from .indexing import BuildBowtieIndex
-from .kmers import BuildJellyfishIndex
-from .util import UniCode
+
+if TYPE_CHECKING:
+    from .analyze import AnalyzeProbeset
+    from .cleanup import CleanUpOutput
+    from .indexing import BuildBowtieIndex
+    from .kmers import BuildJellyfishIndex
+
+
+class UniCode:
+    """Addition of fancy colors in help text."""
+
+    ispos = os.name == "posix"
+    blue = "\033[34m" if ispos else ""
+    bold = "\033[1m" if ispos else ""
+    cyan = "\033[36m" if ispos else ""
+    green = "\033[32m" if ispos else ""
+    magenta = "\033[35m" if ispos else ""
+    red = "\033[31m" if ispos else ""
+    yellow = "\033[33m" if ispos else ""
+    end = "\033[0m" if ispos else ""
+    dash = "\U0001f4a8"
+    dna = "\U0001f9ec"
+    error = "\U0001f6d1"
+    fishing = "\U0001f3a3"
+    happy = "\U0001f603"
+    party = "\U0001f973"
+    warn = "\u26a0"
 
 
 GROUP_DESCRIPTIONS = {
@@ -194,6 +222,12 @@ def main():
     args = _parse_args()
     logger = set_logging_level(args.silent, args.debug)
     logger.info(f"{UniCode.fishing} eFISHent has started running...")
+
+    # Lazy imports - only load heavy modules after arg parsing
+    from .analyze import AnalyzeProbeset
+    from .cleanup import CleanUpOutput
+    from .indexing import BuildBowtieIndex
+    from .kmers import BuildJellyfishIndex
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         config_file = os.path.join(tmp_dir, "luigi.cfg")
