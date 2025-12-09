@@ -7,7 +7,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 
 import Bio.SeqIO
 import Bio.SeqRecord
@@ -42,11 +41,17 @@ def get_free_energy(sequence: Bio.SeqRecord.SeqRecord) -> float:
 
     os.environ["DATAPATH"] = data_table
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        fname = os.path.join(tmp_dir, "input.fasta")
-        Bio.SeqIO.write(sequence, fname, format="fasta")
-        args_fold = [fold_path, fname, "-", "--bracket", "--MFE"]
-        sec = subprocess.check_output(args_fold, stderr=subprocess.STDOUT).decode()
+    # Use stdin/stdout to avoid temp file creation overhead
+    fasta_input = f">{sequence.id}\n{str(sequence.seq)}\n"
+    args_fold = [fold_path, "-", "-", "--bracket", "--MFE"]
+    result = subprocess.run(
+        args_fold,
+        input=fasta_input,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    sec = result.stdout
 
     # Format with secondary structure:
     # >ENERGY = -deltaG NAME DESCRIPTION\nSEQENCE\nDOT-BRACKET

@@ -6,6 +6,7 @@ Remove the files that are not needed and prettify the kept output.
 from typing import List
 import glob
 import logging
+import multiprocessing
 import os
 import sys
 
@@ -19,6 +20,7 @@ from . import util
 from .alignment import AlignProbeCandidates
 from .basic_filtering import get_gc_content
 from .basic_filtering import get_melting_temp
+from .config import GeneralConfig
 from .config import ProbeConfig
 from .config import RunConfig
 from .config import SequenceConfig
@@ -81,7 +83,8 @@ class CleanUpOutput(luigi.Task):
             )
             for seq in sequences
         ]
-        df["deltaG"] = [get_free_energy(seq) for seq in sequences]
+        with multiprocessing.Pool(GeneralConfig().threads) as pool:
+            df["deltaG"] = pool.map(get_free_energy, sequences)
         df["kmers"] = get_max_kmer_counts_batch(sequences, jellyfish_path)
         df_counts = pd.read_csv(alignment_path)
         df_counts = df_counts.groupby("qname", as_index=False).size()
