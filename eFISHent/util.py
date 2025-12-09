@@ -55,14 +55,25 @@ PIPELINE_STAGES = {
 
 def log_stage_start(logger: logging.Logger, stage_name: str) -> None:
     """Log the start of a pipeline stage with progress indicator."""
+    from .config import RunConfig
+    from .console import is_silent, print_stage
+
+    # Skip normal pipeline stage output during analyze mode
+    # (analyze mode has its own progress reporting)
+    if RunConfig().analyze_probeset:
+        return
+
     stage = PIPELINE_STAGES.get(stage_name, {})
     order = stage.get("order", 0)
     total = stage.get("total", 0)
     desc = stage.get("desc", stage_name)
 
     if order > 0 and total > 0:
-        progress = f"[{order}/{total}]"
-        logger.info(f"{progress} {desc}...")
+        # Use Rich progress display
+        print_stage(order, total, desc)
+        # Also log for debug/file output
+        if is_silent():
+            logger.info(f"[{order}/{total}] {desc}...")
     else:
         logger.info(f"{desc}...")
 
@@ -166,9 +177,21 @@ def log_and_check_candidates(
     logger: logging.Logger, name: str, count: int, count_prev: int = 0
 ) -> None:
     """Log candidate count before/after filtering."""
+    from .console import (
+        is_silent,
+        print_candidate_count,
+        print_error_panel,
+        print_warning,
+    )
+
     stage_desc = get_stage_description(name)
-    previous = f" (from {count_prev})" if count_prev else ""
-    logger.info(f"Writing {count}{previous} candidates in {name}.")
+
+    # Use Rich output for candidate counts
+    if not is_silent():
+        print_candidate_count(name, count, count_prev)
+    else:
+        previous = f" (from {count_prev})" if count_prev else ""
+        logger.info(f"Writing {count}{previous} candidates in {name}.")
 
     if count == 0:
         # Provide stage-specific error messages with hints
@@ -182,15 +205,25 @@ def log_and_check_candidates(
         hint = hints.get(
             name, "Please check your gene sequence and parameter stringency."
         )
+        if not is_silent():
+            print_error_panel(
+                "Pipeline Failed",
+                f"No probes remaining at '{stage_desc}'",
+                hint,
+            )
         raise ValueError(
             f"{UniCode.error} Pipeline failed at '{stage_desc}': No probes remaining.\n"
             f"   Hint: {hint}"
         )
     if count < 10:
-        logger.warning(
-            f"{UniCode.warn} Only {count} candidates remain after {stage_desc}. "
+        msg = (
+            f"Only {count} candidates remain after {stage_desc}. "
             "Consider relaxing your filter parameters."
         )
+        if not is_silent():
+            print_warning(msg)
+        else:
+            logger.warning(f"{UniCode.warn} {msg}")
 
 
 def create_data_table(sequences: List[Bio.SeqRecord.SeqRecord]) -> pd.DataFrame:
@@ -208,17 +241,8 @@ def create_data_table(sequences: List[Bio.SeqRecord.SeqRecord]) -> pd.DataFrame:
 
 
 class UniCode:
-    """Addition of fancy colors in help text."""
+    """Unicode symbols for output messages."""
 
-    ispos = os.name == "posix"
-    blue = "\033[34m" if ispos else ""
-    bold = "\033[1m" if ispos else ""
-    cyan = "\033[36m" if ispos else ""
-    green = "\033[32m" if ispos else ""
-    magenta = "\033[35m" if ispos else ""
-    red = "\033[31m" if ispos else ""
-    yellow = "\033[33m" if ispos else ""
-    end = "\033[0m" if ispos else ""
     dash = "\U0001f4a8"
     dna = "\U0001f9ec"
     error = "\U0001f6d1"

@@ -168,7 +168,10 @@ class BuildJellyfishIndex(luigi.Task):
             GeneralConfig().reference_genome,
         ]
         self.logger.debug(f"Running jellyfish with - {' '.join(args_jellyfish)}")
-        subprocess.check_call(args_jellyfish)
+        from .console import spinner
+
+        with spinner("Building k-mer index..."):
+            subprocess.check_call(args_jellyfish)
         self.logger.info(f"Finished building kmer ({ProbeConfig().kmer_length}) index.")
 
 

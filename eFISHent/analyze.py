@@ -22,6 +22,7 @@ from .config import GeneralConfig
 from .config import ProbeConfig
 from .config import RunConfig
 from .config import SequenceConfig
+from .console import print_analysis_stage
 from .indexing import BuildBowtieIndex
 from .kmers import BuildJellyfishIndex
 from .kmers import get_max_kmer_counts_batch
@@ -51,9 +52,7 @@ class AnalyzeProbeset(luigi.Task):
     @property
     def gene(self):
         """Parse gene sequence file depending on parameters passed."""
-        return Bio.SeqIO.read(
-            self.input()["sequence"].path, format="fasta"
-        ).reverse_complement()
+        return Bio.SeqIO.read(self.input()["sequence"].path, format="fasta")
 
     @staticmethod
     def histplot(ax: plt.Axes, data: List[int], title: str, min_value: int):
@@ -181,18 +180,37 @@ class AnalyzeProbeset(luigi.Task):
     def add_probe_coverage(self, ax: plt.Axes):
         """Add coverage along gene to axis."""
         coverage = np.zeros(len(self.gene))
+        gene_seq = str(self.gene.seq)
+        gene_rc = str(self.gene.seq.reverse_complement())
+        probes_found = 0
 
         for probe in self.sequences:
-            idx = self.gene.seq.find(str(probe.seq))
-            coverage[idx : idx + len(probe)] = 1
+            probe_seq = str(probe.seq)
+            # Try finding probe in gene sequence
+            idx = gene_seq.find(probe_seq)
+            if idx == -1:
+                # Try reverse complement of gene
+                idx = gene_rc.find(probe_seq)
+            if idx >= 0:
+                coverage[idx : idx + len(probe)] = 1
+                probes_found += 1
+
+        if probes_found == 0:
+            self.logger.warning(
+                "No probes found in gene sequence. "
+                "Coverage plot may be incorrect."
+            )
 
         ax.set_title("Gene coverage")
         ax.bar(range(len(self.gene)), coverage)
         ax.set(ylabel="Assigned", xlabel="Position")
-        self.logger.debug("Added probe coverage to axis.")
+        self.logger.debug(
+            f"Added probe coverage to axis ({probes_found}/{len(self.sequences)} found)."
+        )
 
     def build_figure(self):
         """Layout to build the figure."""
+        total_steps = 9
         fig = plt.figure(figsize=(15, 18))
         plt.suptitle(
             f"Analysis of probe set - {util.get_gene_name(False)}", y=1, fontsize=20
@@ -200,35 +218,47 @@ class AnalyzeProbeset(luigi.Task):
         shape = (4, 3)
 
         # Row 1 - length, TM, GC
+        print_analysis_stage(2, total_steps, "Probe lengths")
         ax = plt.subplot2grid(shape, (0, 0))
         self.add_length(ax)
+
+        print_analysis_stage(3, total_steps, "Melting temperatures")
         ax = plt.subplot2grid(shape, (0, 1))
         self.add_melting_temperature(ax)
         ax = plt.subplot2grid(shape, (0, 2))
         self.add_gc_content(ax)
 
         # Row 2 - G-quadruplet, kmer, deltaG
+        print_analysis_stage(4, total_steps, "K-mer frequencies")
         ax = plt.subplot2grid(shape, (1, 0))
         self.add_g_quadruplet(ax)
         ax = plt.subplot2grid(shape, (1, 1))
         self.add_kmers(ax)
+
+        print_analysis_stage(5, total_steps, "Secondary structure")
         ax = plt.subplot2grid(shape, (1, 2))
         self.add_free_energy(ax)
 
         # Row 3 - off target count, affinity
+        print_analysis_stage(6, total_steps, "Off-target alignments")
         ax = plt.subplot2grid(shape, (2, 0))
         self.add_off_targets(ax)
+
+        print_analysis_stage(7, total_steps, "Binding affinity matrix")
         ax = plt.subplot2grid(shape, (2, 1))
         self.add_binding_affinity(ax, fig)
 
         # Row 4 - coverage
+        print_analysis_stage(8, total_steps, "Gene coverage")
         ax = plt.subplot2grid(shape, (3, 0), colspan=3)
         self.add_probe_coverage(ax)
 
+        print_analysis_stage(9, total_steps, "Saving PDF")
         plt.tight_layout()
         plt.savefig(self.output().path)
 
     def run(self):
+        print_analysis_stage(1, 9, f"Loading {len(list(Bio.SeqIO.parse(RunConfig().analyze_probeset, format='fasta')))} probes")
         self.sequences = list(
             Bio.SeqIO.parse(RunConfig().analyze_probeset, format="fasta")
         )

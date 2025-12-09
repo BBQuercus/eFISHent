@@ -219,6 +219,33 @@ There are a few additional options:
 | `--save-intermediates` | Save all intermediary files. Can be used to gauge which filtering steps are set too aggressively |
 | `--verbose` | Set to get some more information on progress |
 
+### Probe Set Analysis
+
+After generating a probe set, you can analyze it in more detail using the `--analyze-probeset` option. This creates a PDF report with visualizations of various probe characteristics:
+
+```bash
+eFISHent \
+    --reference-genome <path to genome fasta file> \
+    --sequence-file <path to gene fasta file> \
+    --analyze-probeset <path to probe set fasta file>
+```
+
+The analysis includes:
+
+| Plot | Description |
+|------|-------------|
+| Lengths | Distribution of probe lengths |
+| Melting temperatures | Boxplot of calculated Tm values |
+| GC Content | Boxplot of GC percentages |
+| G quadruplet | Count of G-quadruplet motifs per probe |
+| K-mer count | Maximum k-mer frequency in genome |
+| Free energy | Predicted secondary structure stability (ΔG) |
+| Off target count | Number of off-target binding sites per probe |
+| Binding affinity | Probe-to-probe similarity matrix (potential cross-hybridization) |
+| Gene coverage | Visual map of probe positions along the target sequence |
+
+The output is saved as `<probeset_name>_analysis.pdf` in the current directory.
+
 ## Output
 
 By default eFISHent will output three unique files:
@@ -264,7 +291,7 @@ eFISHent \
     --threads 8
 ```
 
-Lastly, an example with off-target weighting:
+An example with off-target weighting:
 
 ```bash
 eFISHent \
@@ -277,6 +304,15 @@ eFISHent \
     --encode-count-table ./count_table.tsv \
     --max-expression-percentage 20 \
     --threads 8
+```
+
+Lastly, an example to analyze an existing probe set:
+
+```bash
+eFISHent \
+    --reference-genome ./hg-38.fa \
+    --sequence-file ./my_gene.fasta \
+    --analyze-probeset ./my_gene_probes.fasta
 ```
 
 ## FAQ

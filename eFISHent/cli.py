@@ -31,10 +31,10 @@ if TYPE_CHECKING:
 
 
 GROUP_DESCRIPTIONS = {
-    f"{UniCode.blue} General": "General configuration that will be used for all tasks.",
-    f"{UniCode.green} Run": "Options that change the behavior of the workflow.",
-    f"{UniCode.red} Sequence": "Details about the sequences the probe design will be performed on.",
-    f"{UniCode.magenta} Probe": "Probe filtering and design options.",
+    "General": "General configuration that will be used for all tasks.",
+    "Run": "Options that change the behavior of the workflow.",
+    "Sequence": "Details about the sequences the probe design will be performed on.",
+    "Probe": "Probe filtering and design options.",
 }
 REQUIRED_PARAMS = ["reference_genome"]
 
@@ -192,6 +192,12 @@ PARAM_METAVAR = {
     "organism_name": "NAME",
     "ensembl_id": "ID",
     "optimization_method": "METHOD",
+    # Boolean parameters - show yes/no
+    "build_indices": "yes/no",
+    "save_intermediates": "yes/no",
+    "is_plus_strand": "yes/no",
+    "is_endogenous": "yes/no",
+    "no_alternative_loci": "yes/no",
 }
 
 
@@ -208,7 +214,7 @@ def get_parameter_type(param: luigi.Parameter) -> Any:
 
 def _add_utilities(parser: argparse.ArgumentParser) -> None:
     """Add the utility arguments to the parser."""
-    utility = parser.add_argument_group(f"{UniCode.cyan}General utilities{UniCode.end}")
+    utility = parser.add_argument_group("General utilities")
     utility.add_argument(
         "-h",
         "--help",
@@ -242,22 +248,21 @@ def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> No
             param_type = get_parameter_type(param)
 
         is_required = name in REQUIRED_PARAMS
-        default = (
-            "none"
-            if (
-                param._default is None
-                or param._default == ""
-                and param_type != string_to_bool
-            )
-            else param._default
-        )
+
+        # Format default value display
+        if param._default is None or param._default == "":
+            default_str = ""
+        elif isinstance(param, luigi.BoolParameter):
+            default_str = f" (default: {'yes' if param._default else 'no'})"
+        else:
+            default_str = f" (default: {param._default})"
 
         # Build argument kwargs
         kwargs = {
             "type": param_type,
             "required": is_required,
             "default": param._default,
-            "help": f"{param.description} [default: {default}]",
+            "help": f"{param.description}{default_str}",
         }
 
         # Add metavar for cleaner help output
@@ -279,9 +284,7 @@ def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> No
 def _add_groups(parser: argparse.ArgumentParser) -> None:
     """Add the main option groups to the parser."""
     groups = [
-        parser.add_argument_group(
-            f"{name} options{UniCode.end}", description=description
-        )
+        parser.add_argument_group(f"{name} options", description=description)
         for name, description in GROUP_DESCRIPTIONS.items()
     ]
 
@@ -350,14 +353,30 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
 
 def _parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
+    import shutil
+
+    from rich_argparse import RichHelpFormatter
+
+    # Configure RichHelpFormatter for better alignment
+    RichHelpFormatter.styles["argparse.metavar"] = "cyan italic"
+    RichHelpFormatter.styles["argparse.args"] = "green"
+    RichHelpFormatter.styles["argparse.groups"] = "bold blue"
+    RichHelpFormatter.group_name_formatter = str.upper
+
+    # Get terminal width, default to 120 if not available
+    terminal_width = shutil.get_terminal_size((120, 24)).columns
+
     parser = argparse.ArgumentParser(
         prog="eFISHent",
-        description=f"{UniCode.bold}eFISHent v{__version__} {UniCode.fishing} {UniCode.dna} to design all your probes.{UniCode.end}",
+        description=f"eFISHent v{__version__} {UniCode.fishing} {UniCode.dna} - RNA FISH probe designer",
         epilog=(
-            'See the online wiki at "https://github.com/BBQuercus/eFISHent/wiki" for an overview.\n'
+            'See the wiki at https://github.com/BBQuercus/eFISHent/wiki for details.\n'
             f"We hope you enjoy using eFISHent {UniCode.party}!"
         ),
         add_help=False,
+        formatter_class=lambda prog: RichHelpFormatter(
+            prog, max_help_position=40, width=terminal_width
+        ),
     )
     _add_groups(parser)
     _add_utilities(parser)
@@ -395,24 +414,38 @@ def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
 
 def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
     """Set the logging level of luigi and custom logger."""
-    log_format = "%(asctime)s %(levelname)-4s - %(message)s"
+    from .console import get_rich_handler, set_silent_mode
+
+    set_silent_mode(silent)
     luigi_level = "WARNING"
-    logfile = None
+    handlers: list = []
 
     if debug:
-        log_format = (
-            "%(asctime)s %(levelname)-4s [%(name)s] "
-            "%(filename)s %(funcName)s %(lineno)d / %(thread)d - %(message)s"
-        )
         luigi_level = "DEBUG"
         custom_level = logging.DEBUG
-        logfile = "efishent.log"
+        # File handler for debug mode
+        file_handler = logging.FileHandler("efishent.log")
+        file_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)-4s [%(name)s] "
+                "%(filename)s %(funcName)s %(lineno)d / %(thread)d - %(message)s"
+            )
+        )
+        handlers.append(file_handler)
+        # Also use Rich handler for console
+        handlers.append(get_rich_handler())
     elif silent:
         custom_level = logging.WARNING
+        # Use standard handler in silent mode
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        handlers.append(stream_handler)
     else:
         custom_level = logging.INFO
+        # Use Rich handler for nice console output
+        handlers.append(get_rich_handler())
 
-    logging.basicConfig(filename=logfile, format=log_format, force=True)  # type: ignore
+    logging.basicConfig(handlers=handlers, force=True)  # type: ignore
     logging.getLogger("luigi").setLevel(luigi_level)
     logging.getLogger("luigi-interface").setLevel(luigi_level)
     luigi.interface.core.log_level = luigi_level  # type: ignore
@@ -438,10 +471,17 @@ def format_duration(seconds: float) -> str:
 
 def main():
     """Run eFISHent tasks."""
+    from .console import pipeline_progress, print_completion, print_header
+
     start_time = time.time()
     args = _parse_args()
     logger = set_logging_level(args.silent, args.debug)
-    logger.info(f"{UniCode.fishing} eFISHent v{__version__} starting...")
+
+    # Print header banner
+    if not args.silent:
+        print_header(__version__)
+    else:
+        logger.info(f"{UniCode.fishing} eFISHent v{__version__} starting...")
 
     # Lazy imports - only load heavy modules after arg parsing
     from .analyze import AnalyzeProbeset
@@ -462,11 +502,27 @@ def main():
         else:
             tasks = [CleanUpOutput()]
 
-        luigi.build(tasks, local_scheduler=True)
+        # Run with progress tracking
+        if not args.silent:
+            if args.analyze_probeset:
+                # Analysis has 9 steps (preparing + 8 analysis plots)
+                with pipeline_progress(total_stages=9, mode="analyze"):
+                    luigi.build(tasks, local_scheduler=True)
+            elif args.build_indices:
+                with pipeline_progress(total_stages=2, mode="pipeline"):
+                    luigi.build(tasks, local_scheduler=True)
+            else:
+                with pipeline_progress(total_stages=8):
+                    luigi.build(tasks, local_scheduler=True)
+        else:
+            luigi.build(tasks, local_scheduler=True)
 
     duration = time.time() - start_time
 
     if tasks[-1].complete():
-        logger.info(
-            f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
-        )
+        if not args.silent:
+            print_completion(format_duration(duration))
+        else:
+            logger.info(
+                f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
+            )

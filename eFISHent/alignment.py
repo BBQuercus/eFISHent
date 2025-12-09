@@ -126,9 +126,12 @@ class AlignProbeCandidates(luigi.Task):
             "--all",
         ]
         self.logger.debug(f"Running bowtie with - {' '.join(args_bowtie)}")
-        subprocess.check_call(
-            args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
-        )
+        from .console import spinner
+
+        with spinner("Aligning probes to genome..."):
+            subprocess.check_call(
+                args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            )
 
     @staticmethod
     def parse_raw_pysam(sam: str) -> pd.DataFrame:

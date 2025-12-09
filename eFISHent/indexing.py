@@ -33,11 +33,14 @@ class BuildBowtieIndex(luigi.Task):
 
     def build_bowtie_index(self, fname: str, genome: str) -> None:
         """Build bowtie index for file fname titled genome."""
+        from .console import spinner
+
         args_bowtie = ["bowtie-build", fname, genome]
         self.logger.debug(f"Running bowtie with - {''.join(args_bowtie)}")
-        subprocess.check_call(
-            args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
-        )
+        with spinner("Building Bowtie index..."):
+            subprocess.check_call(
+                args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            )
 
     def run(self):
         util.log_stage_start(self.logger, "BuildBowtieIndex")

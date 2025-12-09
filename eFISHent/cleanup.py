@@ -155,6 +155,12 @@ class CleanUpOutput(luigi.Task):
         config = self.prettify_configuration()
 
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
+
+        # Display probe summary table
+        from .console import print_probe_table
+
+        print_probe_table(df)
+
         df.to_csv(self.output()["table"].path, index=False)
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")
         with open(self.output()["config"].path, "w") as f:

@@ -82,8 +82,11 @@ class SecondaryStructureFiltering(luigi.Task):
         util.log_stage_start(self.logger, "SecondaryStructureFiltering")
         sequences = list(Bio.SeqIO.parse(self.input().path, format="fasta"))
 
-        with multiprocessing.Pool(GeneralConfig().threads) as pool:
-            free_energies = pool.map(get_free_energy, sequences)
+        from .console import spinner
+
+        with spinner(f"Predicting secondary structures ({len(sequences)} probes)..."):
+            with multiprocessing.Pool(GeneralConfig().threads) as pool:
+                free_energies = pool.map(get_free_energy, sequences)
 
         # Filter out candidates with low free energy
         candidates = [
