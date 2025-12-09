@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import tempfile
+import time
 import warnings
 
 # Silence some troublemakers before heavy imports
@@ -47,7 +48,151 @@ def string_to_bool(value) -> bool:
     elif value.lower() in ("no", "false", "f", "n", "0"):
         return False
 
-    raise argparse.ArgumentTypeError("Boolean value expected.")
+    raise argparse.ArgumentTypeError(
+        f"Invalid boolean value '{value}'. Use: true/false, yes/no, 1/0"
+    )
+
+
+def positive_int(value) -> int:
+    """Validate that value is a positive integer."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid integer value: '{value}'")
+    if ivalue < 1:
+        raise argparse.ArgumentTypeError(f"Value must be >= 1, got {ivalue}")
+    return ivalue
+
+
+def non_negative_int(value) -> int:
+    """Validate that value is a non-negative integer."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid integer value: '{value}'")
+    if ivalue < 0:
+        raise argparse.ArgumentTypeError(f"Value must be >= 0, got {ivalue}")
+    return ivalue
+
+
+def percentage(value) -> float:
+    """Validate that value is a percentage (0-100)."""
+    try:
+        fvalue = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid number: '{value}'")
+    if not 0 <= fvalue <= 100:
+        raise argparse.ArgumentTypeError(f"Percentage must be 0-100, got {fvalue}")
+    return fvalue
+
+
+def existing_file(value) -> str:
+    """Validate that file exists."""
+    if not value:
+        return value
+    if not os.path.isfile(value):
+        raise argparse.ArgumentTypeError(f"File not found: '{value}'")
+    return value
+
+
+def existing_fasta_file(value) -> str:
+    """Validate that file exists and has fasta extension."""
+    if not value:
+        return value
+    if not os.path.isfile(value):
+        raise argparse.ArgumentTypeError(f"File not found: '{value}'")
+    valid_ext = (".fa", ".fasta", ".fna", ".fa.gz", ".fasta.gz")
+    if not value.lower().endswith(valid_ext):
+        raise argparse.ArgumentTypeError(
+            f"Expected FASTA file (.fa, .fasta), got: '{value}'"
+        )
+    return value
+
+
+def existing_gtf_file(value) -> str:
+    """Validate that file exists and has GTF extension."""
+    if not value:
+        return value
+    if not os.path.isfile(value):
+        raise argparse.ArgumentTypeError(f"File not found: '{value}'")
+    valid_ext = (".gtf", ".gtf.gz", ".gff", ".gff3")
+    if not value.lower().endswith(valid_ext):
+        raise argparse.ArgumentTypeError(
+            f"Expected GTF/GFF file (.gtf, .gff), got: '{value}'"
+        )
+    return value
+
+
+def existing_count_table(value) -> str:
+    """Validate that file exists and has valid count table extension."""
+    if not value:
+        return value
+    if not os.path.isfile(value):
+        raise argparse.ArgumentTypeError(f"File not found: '{value}'")
+    valid_ext = (".csv", ".tsv", ".txt")
+    if not value.lower().endswith(valid_ext):
+        raise argparse.ArgumentTypeError(
+            f"Expected count table (.csv, .tsv, .txt), got: '{value}'"
+        )
+    return value
+
+
+# Parameter-specific type validators
+PARAM_VALIDATORS = {
+    # File validators
+    "reference_genome": existing_fasta_file,
+    "reference_annotation": existing_gtf_file,
+    "sequence_file": existing_fasta_file,
+    "encode_count_table": existing_count_table,
+    "analyze_probeset": existing_fasta_file,
+    # Positive integers
+    "threads": positive_int,
+    "min_length": positive_int,
+    "max_length": positive_int,
+    "kmer_length": positive_int,
+    "max_kmers": positive_int,
+    "optimization_time_limit": positive_int,
+    # Non-negative integers
+    "spacing": non_negative_int,
+    "max_off_targets": non_negative_int,
+    "sequence_similarity": non_negative_int,
+    # Percentages
+    "min_gc": percentage,
+    "max_gc": percentage,
+    "formamide_concentration": percentage,
+    "max_expression_percentage": percentage,
+}
+
+# Metavar hints for cleaner help output
+PARAM_METAVAR = {
+    "reference_genome": "FILE",
+    "reference_annotation": "FILE",
+    "sequence_file": "FILE",
+    "encode_count_table": "FILE",
+    "analyze_probeset": "FILE",
+    "output_dir": "DIR",
+    "threads": "N",
+    "min_length": "N",
+    "max_length": "N",
+    "spacing": "N",
+    "min_tm": "°C",
+    "max_tm": "°C",
+    "min_gc": "%",
+    "max_gc": "%",
+    "formamide_concentration": "%",
+    "na_concentration": "mM",
+    "max_off_targets": "N",
+    "max_expression_percentage": "%",
+    "kmer_length": "N",
+    "max_kmers": "N",
+    "max_deltag": "kcal/mol",
+    "sequence_similarity": "%",
+    "optimization_time_limit": "SEC",
+    "gene_name": "NAME",
+    "organism_name": "NAME",
+    "ensembl_id": "ID",
+    "optimization_method": "METHOD",
+}
 
 
 def get_parameter_type(param: luigi.Parameter) -> Any:
@@ -90,10 +235,15 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
 def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> None:
     """Add a single configuration class/group to a parser."""
     for name, param in config_class().get_params():  # type: ignore
-        param_type = get_parameter_type(param)
+        # Use custom validator if available, otherwise default type
+        if name in PARAM_VALIDATORS:
+            param_type = PARAM_VALIDATORS[name]
+        else:
+            param_type = get_parameter_type(param)
+
         is_required = name in REQUIRED_PARAMS
         default = (
-            "-"
+            "none"
             if (
                 param._default is None
                 or param._default == ""
@@ -101,15 +251,28 @@ def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> No
             )
             else param._default
         )
+
+        # Build argument kwargs
+        kwargs = {
+            "type": param_type,
+            "required": is_required,
+            "default": param._default,
+            "help": f"{param.description} [default: {default}]",
+        }
+
+        # Add metavar for cleaner help output
+        if name in PARAM_METAVAR:
+            kwargs["metavar"] = PARAM_METAVAR[name]
+
+        # Add choices for specific parameters
+        if name == "optimization_method":
+            kwargs["choices"] = ["greedy", "optimal"]
+            kwargs["type"] = str  # Override type when using choices
+
         group.add_argument(
             f"-{CLI_SHORTFORM.get(name)}",
             f"--{name.replace('_', '-')}",
-            type=param_type,
-            required=is_required,
-            default=param._default,
-            help=f"{param.description} "
-            f"[default: {default}, "
-            f"required: {is_required}]",
+            **kwargs,
         )
 
 
@@ -126,11 +289,70 @@ def _add_groups(parser: argparse.ArgumentParser) -> None:
         _add_group(group, config_class)
 
 
+def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Validate cross-parameter constraints after parsing."""
+    errors = []
+
+    # Check min/max pairs
+    if args.min_length > args.max_length:
+        errors.append(
+            f"--min-length ({args.min_length}) must be <= --max-length ({args.max_length})"
+        )
+    if args.min_tm > args.max_tm:
+        errors.append(f"--min-tm ({args.min_tm}) must be <= --max-tm ({args.max_tm})")
+    if args.min_gc > args.max_gc:
+        errors.append(f"--min-gc ({args.min_gc}) must be <= --max-gc ({args.max_gc})")
+
+    # Check kmer_length vs probe length
+    if args.kmer_length >= args.min_length:
+        errors.append(
+            f"--kmer-length ({args.kmer_length}) must be < --min-length ({args.min_length})"
+        )
+
+    # Check sequence input is provided (unless build_indices or analyze_probeset)
+    if not args.build_indices and not args.analyze_probeset:
+        has_sequence = (
+            args.sequence_file
+            or args.ensembl_id
+            or (args.gene_name and args.organism_name)
+        )
+        if not has_sequence:
+            errors.append(
+                "Must provide gene sequence via one of:\n"
+                "  --sequence-file FILE, or\n"
+                "  --ensembl-id ID, or\n"
+                "  --gene-name NAME --organism-name NAME"
+            )
+
+    # Check that gene_name requires organism_name and vice versa (for NCBI download)
+    if (
+        args.gene_name
+        and not args.organism_name
+        and not args.sequence_file
+        and not args.ensembl_id
+    ):
+        errors.append("--gene-name requires --organism-name for NCBI download")
+    if (
+        args.organism_name
+        and not args.gene_name
+        and not args.sequence_file
+        and not args.ensembl_id
+    ):
+        errors.append("--organism-name requires --gene-name for NCBI download")
+
+    # Check encode_count_table requires reference_annotation
+    if args.encode_count_table and not args.reference_annotation:
+        errors.append("--encode-count-table requires --reference-annotation")
+
+    if errors:
+        parser.error("\n  " + "\n  ".join(errors))
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         prog="eFISHent",
-        description=f"{UniCode.bold}eFISHent {UniCode.fishing} {UniCode.dna} to design all your probes.{UniCode.end}",
+        description=f"{UniCode.bold}eFISHent v{__version__} {UniCode.fishing} {UniCode.dna} to design all your probes.{UniCode.end}",
         epilog=(
             'See the online wiki at "https://github.com/BBQuercus/eFISHent/wiki" for an overview.\n'
             f"We hope you enjoy using eFISHent {UniCode.party}!"
@@ -145,7 +367,10 @@ def _parse_args() -> argparse.Namespace:
             parser.exit(0)
     except Exception as e:
         print(e)
-    return parser.parse_args()
+
+    args = parser.parse_args()
+    validate_args(args, parser)
+    return args
 
 
 def create_custom_config(args: argparse.Namespace, config_file: str) -> None:
@@ -197,8 +422,23 @@ def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
     return logger
 
 
+def format_duration(seconds: float) -> str:
+    """Format duration in human-readable format."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes}m {secs}s"
+    else:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        return f"{hours}h {minutes}m"
+
+
 def main():
     """Run eFISHent tasks."""
+    start_time = time.time()
     args = _parse_args()
     logger = set_logging_level(args.silent, args.debug)
     logger.info(f"{UniCode.fishing} eFISHent v{__version__} starting...")
@@ -224,5 +464,9 @@ def main():
 
         luigi.build(tasks, local_scheduler=True)
 
+    duration = time.time() - start_time
+
     if tasks[-1].complete():
-        logger.info(f"{UniCode.party} eFISHent has finished running!")
+        logger.info(
+            f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
+        )

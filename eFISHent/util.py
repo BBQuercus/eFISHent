@@ -16,6 +16,57 @@ from .config import SequenceConfig
 from .constants import FASTA_EXT
 
 
+# Pipeline stage definitions for progress tracking
+PIPELINE_STAGES = {
+    "PrepareSequence": {"order": 1, "total": 8, "desc": "Preparing gene sequence"},
+    "GenerateAllProbes": {
+        "order": 2,
+        "total": 8,
+        "desc": "Generating candidate probes",
+    },
+    "BasicFiltering": {"order": 3, "total": 8, "desc": "Filtering by TM/GC content"},
+    "AlignProbeCandidates": {
+        "order": 4,
+        "total": 8,
+        "desc": "Aligning probes to genome",
+    },
+    "KMerFiltering": {"order": 5, "total": 8, "desc": "Filtering by k-mer frequency"},
+    "SecondaryStructureFiltering": {
+        "order": 6,
+        "total": 8,
+        "desc": "Filtering by secondary structure",
+    },
+    "OptimizeProbeCoverage": {
+        "order": 7,
+        "total": 8,
+        "desc": "Optimizing probe coverage",
+    },
+    "CleanUpOutput": {"order": 8, "total": 8, "desc": "Finalizing output"},
+    # Index building (shown separately)
+    "BuildBowtieIndex": {"order": 0, "total": 0, "desc": "Building bowtie index"},
+    "BuildJellyfishIndex": {"order": 0, "total": 0, "desc": "Building k-mer index"},
+    "DownloadEntrezGeneSequence": {
+        "order": 0,
+        "total": 0,
+        "desc": "Downloading sequence from NCBI",
+    },
+}
+
+
+def log_stage_start(logger: logging.Logger, stage_name: str) -> None:
+    """Log the start of a pipeline stage with progress indicator."""
+    stage = PIPELINE_STAGES.get(stage_name, {})
+    order = stage.get("order", 0)
+    total = stage.get("total", 0)
+    desc = stage.get("desc", stage_name)
+
+    if order > 0 and total > 0:
+        progress = f"[{order}/{total}]"
+        logger.info(f"{progress} {desc}...")
+    else:
+        logger.info(f"{desc}...")
+
+
 def get_output_dir(config: luigi.Config = GeneralConfig) -> Any:
     """Return the output directory."""
     output_dir = config().output_dir
@@ -105,22 +156,40 @@ def secure_filename(filename: str) -> str:
     return filename
 
 
+def get_stage_description(name: str) -> str:
+    """Get the human-readable description for a stage."""
+    stage = PIPELINE_STAGES.get(name, {})
+    return stage.get("desc", name)
+
+
 def log_and_check_candidates(
     logger: logging.Logger, name: str, count: int, count_prev: int = 0
 ) -> None:
     """Log candidate count before/after filtering."""
+    stage_desc = get_stage_description(name)
     previous = f" (from {count_prev})" if count_prev else ""
     logger.info(f"Writing {count}{previous} candidates in {name}.")
 
     if count == 0:
+        # Provide stage-specific error messages with hints
+        hints = {
+            "BasicFiltering": "Try adjusting --min-tm, --max-tm, --min-gc, or --max-gc parameters.",
+            "AlignProbeCandidates": "Try increasing --max-off-targets or checking your reference genome.",
+            "KMerFiltering": "Try increasing --max-kmers parameter.",
+            "SecondaryStructureFiltering": "Try adjusting --max-deltag parameter (less negative = less strict).",
+            "OptimizeProbeCoverage": "Try reducing --spacing or --sequence-similarity parameters.",
+        }
+        hint = hints.get(
+            name, "Please check your gene sequence and parameter stringency."
+        )
         raise ValueError(
-            f"No more probes remaining after {name}. "
-            "Please check your gene sequence and the stringency of your parameters."
+            f"{UniCode.error} Pipeline failed at '{stage_desc}': No probes remaining.\n"
+            f"   Hint: {hint}"
         )
     if count < 10:
         logger.warning(
-            f"Only {count} candidates remain after {name}. "
-            "Possibly check the stringency of your parameters."
+            f"{UniCode.warn} Only {count} candidates remain after {stage_desc}. "
+            "Consider relaxing your filter parameters."
         )
 
 

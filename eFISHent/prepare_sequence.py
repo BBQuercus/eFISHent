@@ -62,7 +62,9 @@ class DownloadEntrezGeneSequence(luigi.Task):
         fetch = subprocess.run(args_fetch, input=link.stdout, capture_output=True)
         fasta = fetch.stdout.decode()
 
-        if not fasta:
+        # Check for empty results or missing FASTA content
+        # Valid FASTA must contain ">" header - error messages won't have this
+        if not fasta or ">" not in fasta:
             raise LookupError(
                 "No Entrez gene found. "
                 "Please check your gene name and organism and try again. "
@@ -148,7 +150,9 @@ class PrepareSequence(luigi.Task):
                     continue
                 if line.startswith(">"):
                     in_sequence = True
-                elif not in_sequence or not all(base in "ATCGN" for base in line):
+                elif not in_sequence or not all(
+                    base in "ATCGNatcgn" for base in line
+                ):
                     return False
             return True
 
