@@ -1,9 +1,59 @@
+import shutil
+import subprocess
+
 import Bio.Seq
 import Bio.SeqRecord
 import pytest
 
 from eFISHent.prepare_sequence import DownloadEntrezGeneSequence
 from eFISHent.prepare_sequence import PrepareSequence
+
+ESEARCH_AVAILABLE = shutil.which("esearch") is not None
+
+
+def _esearch_works():
+    """Check if esearch actually works (not just installed).
+
+    Tests the full pipeline (esearch | elink | efetch) with a known-good query
+    to verify it can actually retrieve FASTA data.
+    """
+    if not ESEARCH_AVAILABLE:
+        return False
+    try:
+        # Test full pipeline with a simple, reliable query
+        search = subprocess.run(
+            ["esearch", "-db", "gene", "-query", "human insulin"],
+            capture_output=True,
+            timeout=15,
+        )
+        link = subprocess.run(
+            ["elink", "-db", "gene", "-target", "nuccore", "-name", "gene_nuccore_refseqrna"],
+            input=search.stdout,
+            capture_output=True,
+            timeout=15,
+        )
+        fetch = subprocess.run(
+            ["efetch", "-format", "fasta"],
+            input=link.stdout,
+            capture_output=True,
+            timeout=15,
+        )
+        fasta = fetch.stdout.decode()
+
+        # Valid result must contain FASTA header and no error patterns
+        if ">" not in fasta:
+            return False
+        fasta_nospace = fasta.replace(" ", "")
+        if "Error" in fasta or "Failed" in fasta:
+            return False
+        if "Error" in fasta_nospace or "Failed" in fasta_nospace:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+ESEARCH_WORKS = _esearch_works()
 
 
 @pytest.fixture
@@ -21,16 +71,19 @@ def sequence():
     return Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCGATCG"), id="my_id")
 
 
+@pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
 def test_download_entrez_error(task_download):
     with pytest.raises(LookupError):
         task_download.fetch_entrez("asldkjfalsdkfalsdbfalsdif")
 
 
+@pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
 def test_download_entrez_gene_organism(task_download):
     query = "hr-38 [GENE] drosophila melanogaster [ORGN]"
     assert isinstance(task_download.fetch_entrez(query), str)
 
 
+@pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
 def test_download_entrez_ensembl(task_download):
     vimentin = task_download.fetch_entrez("ENSG00000026025")
     assert isinstance(vimentin, str)

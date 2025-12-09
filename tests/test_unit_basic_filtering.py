@@ -79,7 +79,7 @@ def test_is_valid(seq, tm, gc, valid):
 
     assert (
         BasicFiltering().is_candidate_valid(
-            Bio.SeqRecord.SeqRecord(seq, id="sequence"), Config()
+            Bio.SeqRecord.SeqRecord(Bio.Seq.Seq(seq), id="sequence"), Config()
         )
         == valid
     )

@@ -1,3 +1,7 @@
+import os
+import shutil
+import tempfile
+
 import Bio.Seq
 import Bio.SeqRecord
 import luigi
@@ -6,12 +10,15 @@ import pytest
 
 from eFISHent.cleanup import CleanUpOutput
 
+JELLYFISH_AVAILABLE = shutil.which("jellyfish") is not None
+
 
 @pytest.fixture
 def task_cleanup():
     return CleanUpOutput()
 
 
+@pytest.mark.skipif(not JELLYFISH_AVAILABLE, reason="jellyfish not installed")
 def test_prettify_table(task_cleanup):
     class Config(luigi.Config):
         na_concentration = luigi.FloatParameter(390)
@@ -31,30 +38,45 @@ def test_prettify_table(task_cleanup):
             Bio.Seq.Seq("ATGCATGGGGGGGGGCATGCATGC"), id="candidate-8-20"
         ),
     ]
-    output = task_cleanup.prettify_table(
-        sequences,
-        jellyfish_path="./tests/data/sacCer3_15.jf",
-        basename="test",
-        config=Config,
-    )
-    columns = [
-        "name",
-        "sequence",
-        "length",
-        "start",
-        "end",
-        "GC",
-        "TM",
-        "deltaG",
-        "kmers",
-    ]
-    for col in columns:
-        assert col in output.columns
-    assert len(output) == len(sequences)
-    assert output.loc[0, "name"] == "test-1"
-    assert output.loc[len(sequences) - 1, "name"] == f"test-{len(sequences)}"
-    assert output.loc[0, "GC"] == 50
-    assert output.loc[3, "GC"] == 66.67
+
+    # Create temp alignment CSV file with qname column
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        f.write("qname,flag,rname,pos\n")
+        f.write("candidate-1-4,0,chr1,100\n")
+        f.write("candidate-0-1,0,chr1,200\n")
+        f.write("candidate-6-5,0,chr1,300\n")
+        f.write("candidate-8-20,0,chr1,400\n")
+        alignment_path = f.name
+
+    try:
+        output = task_cleanup.prettify_table(
+            sequences,
+            basename="test",
+            jellyfish_path="./tests/data/sacCer3_15.jf",
+            alignment_path=alignment_path,
+            config=Config,
+        )
+        columns = [
+            "name",
+            "sequence",
+            "length",
+            "start",
+            "end",
+            "GC",
+            "TM",
+            "deltaG",
+            "kmers",
+            "count",
+        ]
+        for col in columns:
+            assert col in output.columns
+        assert len(output) == len(sequences)
+        assert output.loc[0, "name"] == "test-1"
+        assert output.loc[len(sequences) - 1, "name"] == f"test-{len(sequences)}"
+        assert output.loc[0, "GC"] == 50
+        assert output.loc[3, "GC"] == 66.67
+    finally:
+        os.unlink(alignment_path)
 
 
 def test_prettify_sequences(task_cleanup):

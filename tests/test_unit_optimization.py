@@ -1,3 +1,5 @@
+import shutil
+
 import pandas as pd
 import pytest
 
@@ -6,6 +8,8 @@ from eFISHent.optimization import greedy_model
 from eFISHent.optimization import is_binding
 from eFISHent.optimization import is_overlapping
 from eFISHent.optimization import optimal_model
+
+GLPK_AVAILABLE = shutil.which("glpsol") is not None
 
 
 @pytest.fixture
@@ -56,11 +60,13 @@ def test_greedy_model(df, sequential_solution):
     assert greedy_model(df) == sequential_solution
 
 
+@pytest.mark.skipif(not GLPK_AVAILABLE, reason="GLPK solver (glpsol) not installed")
 def test_optimal_model(df, optimal_solution):
     assert optimal_model(df, 1) == optimal_solution
     assert optimal_model(df, 10) == optimal_solution
 
 
+@pytest.mark.skipif(not GLPK_AVAILABLE, reason="GLPK solver (glpsol) not installed")
 def test_run_optimal_as_block(df, optimal_solution):
     task = OptimizeProbeCoverage()
     task.df = df
