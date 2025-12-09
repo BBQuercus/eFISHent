@@ -5,7 +5,7 @@ authors:
     given-names: "Bastian Th"
     orcid: "https://orcid.org/0000-0002-9892-5487"
 title: "eFISHent"
-version: 0.0.1
+version: 0.0.7
 doi: 10.5281/zenodo.6778238
-date-released: 2022-06-29
+date-released: 2025-12-09
 url: "https://github.com/bbquercus/efishent"

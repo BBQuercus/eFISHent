@@ -1,4 +1,4 @@
-{% set version = "0.0.3" %}
+{% set version = "0.0.7" %}
 
 package:
     name: efishent
@@ -17,7 +17,7 @@ build:
 requirements:
   host:
     - pip
-    - python>=3.8
+    - python>=3.9
     - setuptools
     - llvm-openmp  # [osx]
   run:
@@ -27,17 +27,19 @@ requirements:
     - jellyfish
     - libgomp      # [linux]
     - llvm-openmp  # [osx]
-    - python>=3.8
+    - python>=3.9
     - pip:
       - biopython
       - gtfparse
       - luigi
       - matplotlib
-      - numpy>=1.21
-      - pandas>1.0
-      - pyarrow>=8.0.0
+      - numpy
+      - pandas
+      - pyarrow>=18.0.0
       - pyomo
       - pysam
+      - rich>=13.0.0
+      - rich-argparse>=1.4.0
 
 test:
   commands:
