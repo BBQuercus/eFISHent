@@ -154,6 +154,7 @@ cython_debug/
 
 # Bioinfo
 *.ebwt
+*.bt2
 *.ndb
 *.nhr
 *.nin
@@ -162,6 +163,10 @@ cython_debug/
 *.ntf
 *.nto
 *.jf
+
+# Pipeline output
+test_output/
+*_analysis.pdf
 
 # Other
 .vscode/

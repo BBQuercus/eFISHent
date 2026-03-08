@@ -28,87 +28,89 @@ A command-line based tool to facilitate the creation of eFISHent single-molecule
 
 eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleotide probes. Some of the key features of eFISHent are:
 
-* One-line installation using conda (available through bioconda)
+* One-command installation — no sudo, Docker, or conda required
 * Automatic gene sequence download from NCBI when providing a gene and species name (or pass a FASTA file)
+* Parameter presets for common FISH protocols (`--preset smfish`, `merfish`, `dna-fish`, etc.)
 * Filtering steps to remove low-quality probes including off-targets, frequently occurring short-mers, secondary structures, etc.
 * Mathematical or greedy optimization to ensure highest coverage
 
 ## Installation
 
-eFISHent is tested on macOS and Linux with Python 3.9+. Windows is not supported due to bioinformatics dependencies. For Windows users, we recommend [WSL](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview) or a [Virtual Machine](https://ubuntu.com/tutorials/how-to-run-ubuntu-desktop-on-a-virtual-machine-using-virtualbox#1-overview).
+eFISHent is tested on macOS and Linux with Python 3.9+. Works on shared HPC/cluster servers via SSH — no sudo, Docker, or conda needed. For Windows users, we recommend [WSL](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview).
 
 ### Quick Install (Recommended)
 
-Use the provided installation scripts to install all external dependencies:
+A single command installs eFISHent and all dependencies:
 
 ```bash
-# macOS
-curl -sL https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install_macos.sh | bash
-
-# Linux
-curl -sL https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install_linux.sh | bash
+curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh
 ```
 
-Then add the activation script to your shell profile and install eFISHent:
+This will:
+1. Download pre-compiled binaries for bowtie, jellyfish, GLPK, and Entrez Direct
+2. Install Python and the eFISHent package in an isolated environment
+3. Create an `efishent` command that works without any activation
+
+After installation, restart your shell (or `source ~/.zshrc`) and you're ready:
 
 ```bash
-# Add to ~/.zshrc (macOS) or ~/.bashrc (Linux)
-echo 'source ~/.local/efishent-deps/activate.sh' >> ~/.zshrc  # or ~/.bashrc
-
-# Reload shell
-source ~/.zshrc  # or ~/.bashrc
-
-# Install eFISHent
-pip install efishent
+efishent --check    # Verify all dependencies
+efishent --help     # Show usage
 ```
 
 ### Custom Installation Path
 
-To install dependencies to a custom location:
+```bash
+curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --prefix /path/to/install
+```
+
+### Updating
 
 ```bash
-# Download and run with custom path
-curl -sL https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install_macos.sh -o install.sh
-chmod +x install.sh
-./install.sh /path/to/custom/location
-
-# Then add the custom activation script to your profile
-echo 'source /path/to/custom/location/activate.sh' >> ~/.zshrc
+efishent --update
 ```
+
+This updates both the Python package and verifies all external dependencies are still present and compatible.
+
+### Checking Dependencies
+
+```bash
+efishent --check
+```
+
+Shows the status of all required and optional dependencies with version info.
 
 ### Using Conda
 
 Alternatively, use [conda](https://conda.io/) to manage dependencies:
 
 ```bash
-# Create environment with dependencies
 conda env create bbquercus/efishent
-
-# Activate and install
 conda activate efishent
 pip install efishent
 ```
 
-Updates can be done via pip: `pip install --upgrade efishent`
-
 ### Development Installation
 
-To get the nightly build you can directly install eFISHent from this repository:
-
 ```bash
-# Install other conda based dependencies
-conda install -c bioconda bowtie blast jellyfish entrez-direct
-
-# ONLY on linux!
-conda install -c bioconda rnastructure
-
-# Clone the repository
 git clone https://github.com/BBQuercus/eFISHent.git
 cd eFISHent/
 
+# Install dependencies
+./install.sh --deps-only
+
 # Install development version
-pip install -e .
+uv venv && source .venv/bin/activate
+uv pip install -e .
 ```
+
+### Uninstalling
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall
+```
+
+Or simply remove the install directory: `rm -rf ~/.local/efishent`
 
 ## Getting Genomes, Annotations, Count Tables
 
