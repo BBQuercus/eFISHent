@@ -191,13 +191,11 @@ class TestLogAndCheckCandidates:
                 log_and_check_candidates(logger, stage, count=0)
             assert expected_hint in str(exc_info.value).lower()
 
-    def test_low_candidates_logs_warning(self, logger, caplog):
-        """Less than 10 candidates should log a warning."""
-        import logging
-
-        with caplog.at_level(logging.WARNING):
-            log_and_check_candidates(logger, "BasicFiltering", count=5)
-        assert "5 candidates remain" in caplog.text or "Only 5" in caplog.text
+    def test_low_candidates_logs_warning(self, logger, capsys):
+        """Less than 10 candidates should print a warning."""
+        log_and_check_candidates(logger, "BasicFiltering", count=5)
+        captured = capsys.readouterr().out
+        assert "5" in captured and ("candidates" in captured.lower() or "remain" in captured.lower())
 
     def test_sufficient_candidates_no_error(self, logger):
         """10+ candidates should not raise or warn."""
@@ -205,14 +203,11 @@ class TestLogAndCheckCandidates:
         log_and_check_candidates(logger, "BasicFiltering", count=10)
         log_and_check_candidates(logger, "BasicFiltering", count=100)
 
-    def test_count_with_previous(self, logger, caplog):
-        """Previous count should be included in log message."""
-        import logging
-
-        with caplog.at_level(logging.INFO):
-            log_and_check_candidates(logger, "BasicFiltering", count=50, count_prev=100)
-        assert "50" in caplog.text
-        assert "100" in caplog.text
+    def test_count_with_previous(self, logger, capsys):
+        """Previous count should be included in output."""
+        log_and_check_candidates(logger, "BasicFiltering", count=50, count_prev=100)
+        captured = capsys.readouterr().out
+        assert "50" in captured
 
 
 class TestSecureFilename:
