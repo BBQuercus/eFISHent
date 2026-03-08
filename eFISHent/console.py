@@ -100,8 +100,9 @@ def print_completion(
     duration: str,
     output_files: Optional[List[str]] = None,
     summary: Optional[Dict] = None,
+    probe_df: Optional[pd.DataFrame] = None,
 ) -> None:
-    """Print the completion message with design summary and output file locations.
+    """Print the completion panel with funnel, probe table, summary, and output files.
 
     Args:
         duration: Human-readable duration string.
@@ -109,86 +110,109 @@ def print_completion(
         summary: Optional dict with keys: gene_name, probe_count, initial_count,
                  coverage_pct, length_range, length_median, tm_range, tm_median,
                  gc_range, gc_median.
+        probe_df: Optional DataFrame with probe data to show in the table.
     """
     if _silent_mode:
         return
 
-    lines = []
+    from rich.console import Group
+    from rich.text import Text
 
+    renderables = []
+
+    # 1. Filtering funnel
+    funnel_table = _build_funnel_table()
+    if funnel_table is not None:
+        renderables.append(Text(""))
+        renderables.append(Text("Filtering Funnel", style="bold"))
+        renderables.append(funnel_table)
+
+    # 2. Probe table
+    if probe_df is not None and len(probe_df) > 0:
+        probe_table = _build_probe_table(probe_df)
+        renderables.append(Text(""))
+        renderables.append(probe_table)
+
+    # 3. Summary stats
     if summary:
+        renderables.append(Text(""))
+        summary_lines = []
         if summary.get("gene_name"):
-            lines.append(f"  [bold]Gene:[/bold]      {summary['gene_name']}")
+            summary_lines.append(f"  [bold]Gene:[/bold]      {summary['gene_name']}")
         if summary.get("probe_count") is not None:
             count_str = f"{summary['probe_count']}"
             if summary.get("initial_count"):
                 count_str += f" selected from {summary['initial_count']:,} candidates"
-            lines.append(f"  [bold]Probes:[/bold]    {count_str}")
+            summary_lines.append(f"  [bold]Probes:[/bold]    {count_str}")
         if summary.get("coverage_pct") is not None:
-            lines.append(
+            summary_lines.append(
                 f"  [bold]Coverage:[/bold]  {summary['coverage_pct']:.1f}% of gene sequence"
             )
         if summary.get("length_range"):
             lo, hi = summary["length_range"]
             med = summary.get("length_median", "")
             med_str = f" (median {med})" if med else ""
-            lines.append(f"  [bold]Length:[/bold]    {lo}-{hi} nt{med_str}")
+            summary_lines.append(f"  [bold]Length:[/bold]    {lo}-{hi} nt{med_str}")
         if summary.get("tm_range"):
             lo, hi = summary["tm_range"]
             med = summary.get("tm_median", "")
             med_str = f" (median {med:.1f}\u00b0C)" if med else ""
-            lines.append(f"  [bold]TM range:[/bold]  {lo:.1f}-{hi:.1f}\u00b0C{med_str}")
+            summary_lines.append(f"  [bold]TM range:[/bold]  {lo:.1f}-{hi:.1f}\u00b0C{med_str}")
         if summary.get("gc_range"):
             lo, hi = summary["gc_range"]
             med = summary.get("gc_median", "")
             med_str = f" (median {med:.1f}%)" if med else ""
-            lines.append(f"  [bold]GC range:[/bold]  {lo:.1f}-{hi:.1f}%{med_str}")
-        lines.append("")
+            summary_lines.append(f"  [bold]GC range:[/bold]  {lo:.1f}-{hi:.1f}%{med_str}")
+        renderables.append(Text.from_markup("\n".join(summary_lines)))
 
+    # 4. Output files
     if output_files:
-        lines.append("  [bold]Output:[/bold]")
+        renderables.append(Text(""))
+        file_lines = ["  [bold]Output:[/bold]"]
         for path in output_files:
-            lines.append(f"    [dim]\u2192[/dim] {path}")
-        lines.append("")
+            file_lines.append(f"    [dim]\u2192[/dim] {path}")
+        renderables.append(Text.from_markup("\n".join(file_lines)))
 
-    lines.append(f"  [dim]Completed in {duration}[/dim]")
+    # 5. Duration
+    renderables.append(Text(""))
+    renderables.append(Text.from_markup(f"  [dim]Completed in {duration}[/dim]"))
 
     console.print(
         Panel(
-            "\n".join(lines),
+            Group(*renderables),
             title="[success]eFISHent \u2014 Design Complete[/success]",
             border_style="green",
         )
     )
 
 
-def print_filtering_funnel() -> None:
-    """Print a filtering funnel visualization showing probe counts at each stage."""
-    if _silent_mode or not _funnel_data:
-        return
+# Short labels for funnel display
+_FUNNEL_SHORT_NAMES = {
+    "Generating candidate probes": "Generated",
+    "Filtering by TM/GC content": "TM/GC filter",
+    "Aligning probes to genome": "Genome alignment",
+    "Filtering by k-mer frequency": "K-mer filter",
+    "Filtering by secondary structure": "Secondary structure",
+    "Optimizing probe coverage": "Optimization",
+}
 
-    # Skip non-filtering stages (first = prepare, last = cleanup)
-    # Keep: Generated, TM/GC, Alignment, K-mer, Secondary structure, Optimization
+# Stages to skip in the funnel (non-filtering)
+_FUNNEL_SKIP_STAGES = {"Preparing gene sequence", "Finalizing output"}
+
+
+def _build_funnel_table() -> Optional[Table]:
+    """Build a Rich Table for the filtering funnel. Returns None if no data."""
     stages = [
         (name, count)
         for name, count in _funnel_data
-        if name not in ("Preparing gene sequence", "Finalizing output")
+        if name not in _FUNNEL_SKIP_STAGES
     ]
     if not stages:
-        return
+        return None
 
     max_count = max(count for _, count in stages)
     if max_count == 0:
-        return
-
-    # Short labels for compact display
-    _short_names = {
-        "Generating candidate probes": "Generated",
-        "Filtering by TM/GC content": "TM/GC filter",
-        "Aligning probes to genome": "Genome alignment",
-        "Filtering by k-mer frequency": "K-mer filter",
-        "Filtering by secondary structure": "Secondary structure",
-        "Optimizing probe coverage": "Optimization",
-    }
+        return None
 
     bar_width = 24
 
@@ -203,7 +227,7 @@ def print_filtering_funnel() -> None:
     for i, (stage_name, count) in enumerate(stages):
         filled = max(1, round(count / max_count * bar_width)) if max_count > 0 else 0
         bar = "\u2588" * filled
-        short_name = _short_names.get(stage_name, stage_name)
+        short_name = _FUNNEL_SHORT_NAMES.get(stage_name, stage_name)
 
         # Drop info
         if i == 0:
@@ -240,6 +264,16 @@ def print_filtering_funnel() -> None:
             drop_str,
         )
 
+    return table
+
+
+def print_filtering_funnel() -> None:
+    """Print a standalone filtering funnel visualization."""
+    if _silent_mode or not _funnel_data:
+        return
+    table = _build_funnel_table()
+    if table is None:
+        return
     console.print()
     console.print("[bold]Filtering Funnel[/bold]")
     console.print(table)
@@ -369,11 +403,8 @@ def _compute_probe_quality(row: pd.Series, df: pd.DataFrame) -> str:
     return "\u2605" * score + "\u2606" * (3 - score)
 
 
-def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
-    """Display probe data as a Rich table with quality scores."""
-    if _silent_mode:
-        return
-
+def _build_probe_table(df: pd.DataFrame, max_rows: int = 100) -> Table:
+    """Build a Rich Table for probe data. Returns the Table renderable."""
     title = f"Probe Summary ({len(df)} probes)"
 
     table = Table(
@@ -404,6 +435,14 @@ def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
     if len(df) > max_rows:
         table.add_row("...", f"({len(df) - max_rows} more)", "", "", "", "", "")
 
+    return table
+
+
+def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
+    """Display probe data as a Rich table with quality scores."""
+    if _silent_mode:
+        return
+    table = _build_probe_table(df, max_rows)
     console.print(table)
     console.print()
 

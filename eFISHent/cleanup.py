@@ -196,13 +196,9 @@ class CleanUpOutput(luigi.Task):
 
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
 
-        # Display probe summary table
-        from .console import print_probe_table
-
-        print_probe_table(df)
-
-        # Store summary stats for completion message
+        # Store summary stats and probe data for completion message
         self._summary = self._compute_summary(df)
+        self._probe_df = df
 
         df.to_csv(self.output()["table"].path, index=False)
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")

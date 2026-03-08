@@ -668,7 +668,6 @@ def main():
         pipeline_progress,
         print_completion,
         print_dependency_check,
-        print_filtering_funnel,
         print_header,
         print_missing_deps_error,
         print_parameter_warnings,
@@ -758,12 +757,12 @@ def main():
         elif hasattr(task_output, "path"):
             output_files = [task_output.path]
 
-        # Get summary stats from CleanUpOutput task if available
+        # Get summary stats and probe data from CleanUpOutput task if available
         summary = getattr(tasks[-1], "_summary", None)
+        probe_df = getattr(tasks[-1], "_probe_df", None)
 
         if not args.silent:
-            print_filtering_funnel()
-            print_completion(format_duration(duration), output_files, summary)
+            print_completion(format_duration(duration), output_files, summary, probe_df)
         else:
             logger.info(
                 f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
