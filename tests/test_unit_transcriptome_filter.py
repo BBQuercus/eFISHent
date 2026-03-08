@@ -1,7 +1,6 @@
 import shutil
 
 import pandas as pd
-import pytest
 
 BLAST_AVAILABLE = shutil.which("blastn") is not None
 

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from rich.console import Console
+from rich.text import Text
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -290,7 +291,7 @@ def _build_coverage_map(
     probe_df: pd.DataFrame,
     gene_length: int,
     coverage_pct: float,
-) -> Optional["Text"]:
+) -> Optional[Text]:
     """Build an ASCII coverage map showing probe binding positions on the gene.
 
     Returns a Rich Text renderable with a horizontal bar where filled blocks
@@ -353,7 +354,7 @@ def _build_coverage_map(
     return text
 
 
-def _build_verification_summary(verification: Dict) -> "Text":
+def _build_verification_summary(verification: Dict) -> Text:
     """Build a Rich Text summary of BLAST verification results."""
     from rich.text import Text
 
