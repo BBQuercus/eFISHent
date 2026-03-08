@@ -23,13 +23,13 @@ GLPK_VERSION="5.0"
 
 # Colors (disabled if not a terminal)
 if [ -t 1 ]; then
-    BOLD="\033[1m"
-    DIM="\033[2m"
-    GREEN="\033[32m"
-    YELLOW="\033[33m"
-    RED="\033[31m"
-    CYAN="\033[36m"
-    RESET="\033[0m"
+    BOLD=$(printf '\033[1m')
+    DIM=$(printf '\033[2m')
+    GREEN=$(printf '\033[32m')
+    YELLOW=$(printf '\033[33m')
+    RED=$(printf '\033[31m')
+    CYAN=$(printf '\033[36m')
+    RESET=$(printf '\033[0m')
 else
     BOLD="" DIM="" GREEN="" YELLOW="" RED="" CYAN="" RESET=""
 fi
@@ -488,15 +488,17 @@ fi
 printf "\n%s\n\n" "${BOLD}${GREEN}Installation complete!${RESET}"
 
 if [ "$RC_UPDATED" = true ]; then
-    printf "  Restart your shell or run:\n"
-    printf "    %s\n\n" "${CYAN}source ${RC_FILE}${RESET}"
+    printf "  Your PATH has been updated in ${CYAN}${RC_FILE}${RESET}.\n"
+    printf "  To use efishent in ${BOLD}this${RESET} terminal, run:\n\n"
+    printf "    ${CYAN}source ${RC_FILE}${RESET}\n\n"
+    printf "  New terminal windows will work automatically.\n\n"
 fi
 
-printf "  Then run:\n"
-printf "    %s       Verify all dependencies\n" "${CYAN}efishent --check${RESET}"
-printf "    %s        Show usage\n" "${CYAN}efishent --help${RESET}"
-printf "    %s  Show parameter presets\n" "${CYAN}efishent --preset list${RESET}"
+printf "  Get started:\n"
+printf "    ${CYAN}efishent --check${RESET}       Verify all dependencies\n"
+printf "    ${CYAN}efishent --help${RESET}        Show usage\n"
+printf "    ${CYAN}efishent --preset list${RESET}  Show parameter presets\n"
 printf "\n"
 printf "  To uninstall:\n"
-printf "    %s\n" "${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall${RESET}"
+printf "    ${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall${RESET}\n"
 printf "\n"

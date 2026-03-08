@@ -15,41 +15,28 @@ ESEARCH_AVAILABLE = shutil.which("esearch") is not None
 def _esearch_works():
     """Check if esearch actually works (not just installed).
 
-    Tests the full pipeline (esearch | elink | efetch) with a known-good query
-    to verify it can actually retrieve FASTA data.
+    Tests a simple nuccore query to verify it can retrieve FASTA data.
     """
     if not ESEARCH_AVAILABLE:
         return False
     try:
-        # Test full pipeline with a simple, reliable query
         search = subprocess.run(
-            ["esearch", "-db", "gene", "-query", "human insulin"],
-            capture_output=True,
-            timeout=15,
-        )
-        link = subprocess.run(
-            ["elink", "-db", "gene", "-target", "nuccore", "-name", "gene_nuccore_refseqrna"],
-            input=search.stdout,
+            [
+                "esearch", "-db", "nuccore", "-query",
+                "(actb[Gene Name]) AND mus musculus[Organism]"
+                " AND refseq[filter] AND (biomol_mrna[prop] OR biomol_rna[prop])",
+            ],
             capture_output=True,
             timeout=15,
         )
         fetch = subprocess.run(
             ["efetch", "-format", "fasta"],
-            input=link.stdout,
+            input=search.stdout,
             capture_output=True,
             timeout=15,
         )
         fasta = fetch.stdout.decode()
-
-        # Valid result must contain FASTA header and no error patterns
-        if ">" not in fasta:
-            return False
-        fasta_nospace = fasta.replace(" ", "")
-        if "Error" in fasta or "Failed" in fasta:
-            return False
-        if "Error" in fasta_nospace or "Failed" in fasta_nospace:
-            return False
-        return True
+        return ">" in fasta and "NM_" in fasta
     except Exception:
         return False
 
@@ -74,52 +61,50 @@ def sequence():
 
 @pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
 def test_download_entrez_error(task_download):
-    with pytest.raises(LookupError):
-        task_download.fetch_entrez("asldkjfalsdkfalsdbfalsdif")
+    with pytest.raises((LookupError, subprocess.CalledProcessError)):
+        task_download.fetch_entrez("", "asldkjfalsdkfalsdbf", "nonexistent organism")
 
 
 @pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
 def test_download_entrez_gene_organism(task_download):
-    query = "hr-38 [GENE] drosophila melanogaster [ORGN]"
-    assert isinstance(task_download.fetch_entrez(query), str)
+    fasta = task_download.fetch_entrez("", "actb", "mus musculus")
+    assert isinstance(fasta, str)
+    assert ">" in fasta
+    assert "NM_" in fasta
 
 
 @pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
 def test_download_entrez_ensembl(task_download):
-    vimentin = task_download.fetch_entrez("ENSG00000026025")
+    vimentin = task_download.fetch_entrez("ENSG00000026025", "", "")
     assert isinstance(vimentin, str)
-    assert vimentin.startswith(">NM_003380.5 Homo sapiens vimentin (VIM)")
+    assert "NM_" in vimentin
+    assert "vimentin" in vimentin.lower() or "VIM" in vimentin
 
 
-@pytest.mark.parametrize(
-    "ensembl,gene,organism,query",
-    [
-        ("ENSG00000026025", "", "", "(ENSG00000026025)"),
-        (
-            "ENSG00000128272",
-            "gene",
-            "homo sapiens",
-            "(ENSG00000128272) AND homo sapiens[Organism]",
-        ),
-    ],
-)
-def test_get_ensembl_query(ensembl, gene, organism, query, task_download):
-    assert task_download.get_entrez_query(ensembl, gene, organism) == query
+@pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
+def test_download_returns_only_refseq(task_download):
+    """Verify that downloads return only RefSeq transcripts, not genomic sequences."""
+    fasta = task_download.fetch_entrez("", "gapdh", "homo sapiens")
+    # All records should be NM_ or NR_ (RefSeq transcripts)
+    for line in fasta.split("\n"):
+        if line.startswith(">"):
+            accession = line.split()[0][1:]
+            assert accession.startswith(("NM_", "NR_")), (
+                f"Non-RefSeq record in download: {accession}"
+            )
 
 
-@pytest.mark.parametrize(
-    "gene,organism", [("hr-38", "drosophila melanogaster"), ("vim", "homo sapiens")]
-)
-def test_get_ensembl_gene_organism(gene, organism, task_download):
-    assert (
-        task_download.get_entrez_query("", gene, organism)
-        == f"({gene}[Gene Name]) AND {organism}[Organism]"
-    )
+def test_get_nuccore_query_gene_organism(task_download):
+    query = task_download.get_nuccore_query("", "vim", "homo sapiens")
+    assert "(vim[Gene Name])" in query
+    assert "homo sapiens[Organism]" in query
+    assert "refseq[filter]" in query
+    assert "biomol_mrna[prop]" in query
 
 
-def test_get_ensembl_error(task_download):
+def test_get_nuccore_query_error(task_download):
     with pytest.raises(ValueError):
-        task_download.get_entrez_query("", "", "")
+        task_download.get_nuccore_query("", "", "")
 
 
 def test_get_sequence_single(task_prepare, sequence):
@@ -128,16 +113,15 @@ def test_get_sequence_single(task_prepare, sequence):
     assert output.id == sequence.id
 
 
-def test_get_sequence_multiple(task_prepare, sequence, caplog):
-    sequences = [sequence for _ in range(10)]
+def test_get_sequence_multiple_selects_longest(task_prepare):
+    short = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCG"), id="short")
+    long = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCGATCGATCG"), id="long")
+    medium = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCGATCG"), id="medium")
 
-    output = task_prepare.select_sequence(sequences)
+    output = task_prepare.select_sequence([short, long, medium])
 
-    for record in caplog.records:
-        assert record.levelname == "WARNING"
-
-    assert output.seq == sequence.seq
-    assert output.id == sequence.id
+    assert output.id == "long"
+    assert len(output.seq) == 12
 
 
 def test_get_sequence_error(task_prepare):
@@ -189,46 +173,26 @@ def test_non_existent_file(task_prepare, tmpdir):
 class TestEntrezSubprocessErrors:
     """Tests for proper error handling in entrez subprocess calls."""
 
-    def test_elink_failure_raises_error(self, task_download):
-        """Test that elink failure raises CalledProcessError.
-
-        This test verifies that adding check=True to elink will properly
-        propagate subprocess failures instead of silently continuing.
-        """
+    def test_esearch_failure_raises_error(self, task_download):
+        """Test that esearch failure raises CalledProcessError."""
 
         def mock_subprocess_run(*args, **kwargs):
             cmd = args[0]
-            mock_result = MagicMock()
-
             if cmd[0] == "esearch":
-                mock_result.returncode = 0
-                mock_result.stdout = b"<ENTREZ_DIRECT>valid</ENTREZ_DIRECT>"
-                return mock_result
-            elif cmd[0] == "elink":
-                # Simulate elink failure
-                if kwargs.get("check", False):
-                    raise subprocess.CalledProcessError(1, cmd)
-                mock_result.returncode = 1
-                mock_result.stdout = b""
-                return mock_result
-            elif cmd[0] == "efetch":
-                mock_result.returncode = 0
-                mock_result.stdout = b""
-                return mock_result
+                raise subprocess.CalledProcessError(1, cmd)
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = b""
             return mock_result
 
         with patch(
             "eFISHent.prepare_sequence.subprocess.run", side_effect=mock_subprocess_run
         ):
             with pytest.raises(subprocess.CalledProcessError):
-                task_download.fetch_entrez("test_query")
+                task_download.fetch_entrez("", "test_gene", "test_organism")
 
     def test_efetch_failure_raises_error(self, task_download):
-        """Test that efetch failure raises CalledProcessError.
-
-        This test verifies that adding check=True to efetch will properly
-        propagate subprocess failures instead of silently continuing.
-        """
+        """Test that efetch failure raises CalledProcessError."""
 
         def mock_subprocess_run(*args, **kwargs):
             cmd = args[0]
@@ -238,21 +202,27 @@ class TestEntrezSubprocessErrors:
                 mock_result.returncode = 0
                 mock_result.stdout = b"<ENTREZ_DIRECT>valid</ENTREZ_DIRECT>"
                 return mock_result
-            elif cmd[0] == "elink":
-                mock_result.returncode = 0
-                mock_result.stdout = b"<ENTREZ_DIRECT>linked</ENTREZ_DIRECT>"
-                return mock_result
             elif cmd[0] == "efetch":
-                # Simulate efetch failure
-                if kwargs.get("check", False):
-                    raise subprocess.CalledProcessError(1, cmd)
-                mock_result.returncode = 1
-                mock_result.stdout = b""
-                return mock_result
+                raise subprocess.CalledProcessError(1, cmd)
             return mock_result
 
         with patch(
             "eFISHent.prepare_sequence.subprocess.run", side_effect=mock_subprocess_run
         ):
             with pytest.raises(subprocess.CalledProcessError):
-                task_download.fetch_entrez("test_query")
+                task_download.fetch_entrez("", "test_gene", "test_organism")
+
+    def test_empty_result_raises_lookup_error(self, task_download):
+        """Test that empty FASTA results raise LookupError."""
+
+        def mock_subprocess_run(*args, **kwargs):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = b"No items found."
+            return mock_result
+
+        with patch(
+            "eFISHent.prepare_sequence.subprocess.run", side_effect=mock_subprocess_run
+        ):
+            with pytest.raises(LookupError):
+                task_download.fetch_entrez("", "nonexistent", "nonexistent")

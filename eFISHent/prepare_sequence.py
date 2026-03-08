@@ -25,50 +25,86 @@ class DownloadEntrezGeneSequence(luigi.Task):
         fname = f"{util.get_gene_name()}_entrez.fasta"
         return luigi.LocalTarget(os.path.join(util.get_output_dir(), fname))
 
-    def get_entrez_query(
+    def get_nuccore_query(
         self, ensembl_id: str, gene_name: str, organism_name: str
     ) -> str:
-        """Retrieve the query depending on sequence configuration arguments passed."""
+        """Build an NCBI nuccore query that returns only RefSeq transcripts.
+
+        Searches the nuccore database directly with RefSeq and biomol filters
+        to avoid returning genomic sequences, ESTs, or other non-transcript records.
+        For Ensembl IDs, first resolves to an NCBI Gene ID via the gene database.
+        """
+        refseq_filter = "refseq[filter] AND (biomol_mrna[prop] OR biomol_rna[prop])"
+
         if ensembl_id:
-            return f"({ensembl_id})" + (
-                f" AND {organism_name}[Organism]" if organism_name else ""
+            # Resolve Ensembl ID to NCBI Gene ID via the gene database
+            ensembl_query = f"({ensembl_id})"
+            if organism_name:
+                ensembl_query += f" AND {organism_name}[Organism]"
+
+            search = subprocess.run(
+                ["esearch", "-db", "gene", "-query", ensembl_query],
+                check=True,
+                capture_output=True,
             )
+            uid_result = subprocess.run(
+                ["efetch", "-format", "uid"],
+                input=search.stdout,
+                check=True,
+                capture_output=True,
+            )
+            gene_id = uid_result.stdout.decode().strip()
+            if not gene_id:
+                raise LookupError(
+                    f"No NCBI Gene found for Ensembl ID '{ensembl_id}'. "
+                    "Please check the ID and try again."
+                )
+            # Take first Gene ID if multiple returned
+            gene_id = gene_id.split("\n")[0].strip()
+            self.logger.debug(f"Resolved Ensembl ID '{ensembl_id}' to Gene ID {gene_id}.")
+            return f"{gene_id}[Gene ID] AND {refseq_filter}"
 
         if gene_name and organism_name:
-            return f"({gene_name}[Gene Name]) AND {organism_name}[Organism]"
+            return (
+                f"({gene_name}[Gene Name]) AND {organism_name}[Organism]"
+                f" AND {refseq_filter}"
+            )
 
         raise ValueError(
             "For downloading Entrez Gene Probes, "
-            " you need to specify the gene name and organism name or provide an Emsembl ID."
+            "you need to specify the gene name and organism name or provide an Ensembl ID."
         )
 
-    def fetch_entrez(self, query: str) -> str:
-        """Retrieve the fasta sequence data from entrez."""
-        args_search = ["esearch", "-db", "gene", "-query", query]
-        args_link = [
-            "elink",
-            "-db",
-            "gene",
-            "-target",
-            "nuccore",
-            "-name",
-            "gene_nuccore_refseqrna",
-        ]
-        args_fetch = ["efetch", "-format", "fasta"]
-        self.logger.debug(f"Fetching from Entrez using query '{query}'.")
+    def fetch_entrez(
+        self, ensembl_id: str, gene_name: str, organism_name: str
+    ) -> str:
+        """Retrieve the fasta sequence data from NCBI.
 
-        search = subprocess.run(args_search, check=True, capture_output=True)
-        link = subprocess.run(args_link, input=search.stdout, check=True, capture_output=True)
-        fetch = subprocess.run(args_fetch, input=link.stdout, check=True, capture_output=True)
+        Queries the nuccore database directly with RefSeq transcript filters
+        to ensure only curated mRNA/ncRNA sequences are returned.
+        """
+        query = self.get_nuccore_query(ensembl_id, gene_name, organism_name)
+        self.logger.debug(f"Fetching from Entrez nuccore using query '{query}'.")
+
+        search = subprocess.run(
+            ["esearch", "-db", "nuccore", "-query", query],
+            check=True,
+            capture_output=True,
+        )
+        fetch = subprocess.run(
+            ["efetch", "-format", "fasta"],
+            input=search.stdout,
+            check=True,
+            capture_output=True,
+        )
         fasta = fetch.stdout.decode()
 
         # Check for empty results or missing FASTA content
-        # Valid FASTA must contain ">" header - error messages won't have this
         if not fasta or ">" not in fasta:
             raise LookupError(
-                "No Entrez gene found. "
+                "No RefSeq transcript found for your query. "
                 "Please check your gene name and organism and try again. "
-                "Or provide a custom fasta file as `sequence-file`."
+                "Or provide a custom fasta file with --sequence-file."
             )
         return fasta
 
@@ -82,16 +118,24 @@ class DownloadEntrezGeneSequence(luigi.Task):
                     "Proceed with caution."
                 )
             )
-        query = self.get_entrez_query(
+        fasta = self.fetch_entrez(
             SequenceConfig().ensembl_id,
             SequenceConfig().gene_name,
             SequenceConfig().organism_name,
         )
-        fasta = self.fetch_entrez(query)
+
+        # Log which sequences were retrieved
+        headers = [line for line in fasta.split("\n") if line.startswith(">")]
+        n_records = len(headers)
+        if n_records == 1:
+            self.logger.info(f"Downloaded 1 transcript: {headers[0][1:]}")
+        else:
+            self.logger.info(f"Downloaded {n_records} transcript isoforms from NCBI:")
+            for header in headers:
+                self.logger.info(f"  {header[1:]}")
 
         with self.output().open("w") as outfile:
             outfile.write(fasta)
-        self.logger.info(f"Downloaded sequence from entrez using query '{query}'.")
 
 
 class PrepareSequence(luigi.Task):
@@ -115,17 +159,23 @@ class PrepareSequence(luigi.Task):
     def select_sequence(
         self, sequences: List[Bio.SeqRecord.SeqRecord]
     ) -> Bio.SeqRecord.SeqRecord:
-        """Select a single sequence as template."""
+        """Select a single sequence as template.
+
+        When multiple records are present (e.g. transcript isoforms),
+        selects the longest sequence to maximize probe coverage.
+        """
         if not sequences:
             raise ValueError(
                 "No records found in fasta file. "
                 "Please ensure at least one sequence is present."
             )
         if len(sequences) > 1:
-            self.logger.warning(
-                f"{util.UniCode.warn} More than one record (potential isoforms) found in fasta file. "
-                "Will default to take the first sequence."
+            longest = max(sequences, key=lambda s: len(s.seq))
+            self.logger.info(
+                f"Found {len(sequences)} transcript isoforms. "
+                f"Selected longest: {longest.id} ({len(longest.seq):,} nt)."
             )
+            return longest
         return sequences[0]
 
     def select_strand(

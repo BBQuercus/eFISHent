@@ -57,6 +57,9 @@ eFISHent = "eFISHent.cli:main"
 [tool.setuptools.packages.find]
 include = ["eFISHent*"]
 
+[tool.setuptools.package-data]
+eFISHent = ["Fold_osx", "Fold_linux", "data_tables/*"]
+
 [tool.ruff.lint.per-file-ignores]
 "eFISHent/cli.py" = ["E402", "F401"]
 
