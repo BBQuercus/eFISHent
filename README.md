@@ -114,22 +114,88 @@ Or simply remove the install directory: `rm -rf ~/.local/efishent`
 
 ## Getting Genomes, Annotations, Count Tables
 
-For some of the steps described below, you'll need to provide a few key resources unique to your model organism/cell line:
+For some of the steps described below, you'll need to provide a few key resources unique to your model organism/cell line. Below is a quick-start for **human cells** (the most common use case), followed by general instructions for other organisms.
 
-### Genome Sequence and Annotations
+### Human Quick-Start (HeLa, HEK293, U2OS, etc.)
 
-1. Go to the [UCSC genome browser](https://hgdownload.soe.ucsc.edu/downloads.html)
-2. Find your organism, typically select the `Genome sequence files and select annotations` option
-3. For the actual genome, download the file ending in `.fa.gz` (which will have to be unzipped e.g. using `gunzip`)
-4. For the annotation, it's typically in the `genes/` directory ending in `.gtf.gz` (will also have to be unzipped)
+All human cell lines use the same reference genome and annotation — cell-line-specific differences don't affect probe design at the annotation level.
 
-### Count Table
+**1. Reference genome** (required)
 
-1. Go to the [GEO dataset search](https://www.ncbi.nlm.nih.gov/gds/)
-2. Search for your organism/cell line followed by `RNA-seq`
-3. Select a sample that you think will represent your data the best (make sure it's RNA-seq - sometimes the search isn't the best...)
-4. Scroll down and, if available, under `Supplementary file` select any files ending in `/FPKM/TPM/RPKMs.txt.gz` or similar. Do not download raw counts!
-5. Alternatively you can also visit the [Expression Atlas](https://www.ebi.ac.uk/gxa/home) - count tables there might need some minor editing beforehand to ensure the required format of Ensembl ID and count values in columns 1 and 2 respectively
+Download the GRCh38 primary assembly from [Ensembl](https://ftp.ensembl.org/pub/current_fasta/homo_sapiens/dna/):
+
+```bash
+# Primary assembly excludes haplotype patches that inflate off-target counts
+wget https://ftp.ensembl.org/pub/current_fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+gunzip Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+```
+
+**2. GTF annotation** (required for `--intergenic-off-targets`, `--filter-rrna`, expression filtering)
+
+Download from [Ensembl](https://ftp.ensembl.org/pub/current_gtf/homo_sapiens/):
+
+```bash
+wget https://ftp.ensembl.org/pub/current_gtf/homo_sapiens/Homo_sapiens.GRCh38.115.gtf.gz
+gunzip Homo_sapiens.GRCh38.115.gtf.gz
+```
+
+> Ensembl GTFs use `gene_biotype` while GENCODE uses `gene_type` — eFISHent supports both. Either source works, but Ensembl is recommended for consistency with the genome FASTA.
+
+**3. Reference transcriptome** (optional, for BLAST cross-validation and comprehensive rRNA filtering)
+
+Generate from your genome + GTF using [gffread](https://github.com/gpertea/gffread), then append rRNA sequences for comprehensive filtering:
+
+```bash
+# Generate transcriptome from genome + annotation
+gffread Homo_sapiens.GRCh38.115.gtf -g Homo_sapiens.GRCh38.dna.primary_assembly.fa -w transcriptome.fa
+
+# Download rRNA sequences (major 18S/28S/5.8S are NOT in standard GTFs)
+# 45S pre-rRNA contains 18S, 5.8S, and 28S
+efetch -db nucleotide -id NR_003286.4 -format fasta >> transcriptome.fa
+# 5S rRNA
+efetch -db nucleotide -id NR_023363.1 -format fasta >> transcriptome.fa
+```
+
+> **Why append rRNA?** The major rRNA genes (18S, 28S, 5.8S) exist in ~300 tandem copies in nucleolar organizer regions that are not assembled in GRCh38. They are absent from standard GTFs, so `--filter-rrna` alone won't catch them. Including them in the transcriptome FASTA ensures the BLAST filter removes probes binding these highly abundant sequences.
+
+**4. Count table** (optional, for expression-weighted off-target filtering)
+
+Download a HeLa (or your cell line) RNA-seq dataset:
+
+1. Go to [GEO](https://www.ncbi.nlm.nih.gov/gds/) and search for your cell line + `RNA-seq` (e.g., `HeLa RNA-seq`)
+2. Under `Supplementary file`, download files ending in `FPKM`, `TPM`, or `RPKMs.txt.gz` — **not raw counts**
+3. Alternatively, use [Expression Atlas](https://www.ebi.ac.uk/gxa/home) — ensure the file has Ensembl IDs in column 1 and normalized counts in column 2
+
+**Putting it all together** — recommended command for human smFISH:
+
+```bash
+# Build indices once
+eFISHent \
+    --reference-genome Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+    --build-indices True
+
+# Design probes with all recommended filters
+eFISHent \
+    --reference-genome Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+    --reference-annotation Homo_sapiens.GRCh38.115.gtf \
+    --reference-transcriptome transcriptome.fa \
+    --gene-name "ACTB" \
+    --organism-name "homo sapiens" \
+    --preset smfish \
+    --mask-repeats True \
+    --intergenic-off-targets True \
+    --filter-rrna True \
+    --threads 8
+```
+
+### Other Organisms
+
+For non-human organisms, follow the same pattern using your organism's Ensembl page or UCSC genome browser:
+
+1. Go to [Ensembl](https://www.ensembl.org/) or [UCSC genome browser](https://hgdownload.soe.ucsc.edu/downloads.html)
+2. Download the genome FASTA (`.fa.gz`) — prefer `primary_assembly` if available, otherwise `toplevel`
+3. Download the GTF annotation (`.gtf.gz`) from the same source
+4. Unzip both files with `gunzip`
 
 ## Workflow
 
