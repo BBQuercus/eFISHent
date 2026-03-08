@@ -51,6 +51,31 @@ class BuildBowtieIndex(luigi.Task):
         self.logger.info("Finished building bowtie index.")
 
 
+class BuildBowtie2Index(luigi.Task):
+    """Create bowtie2 index for a given reference genome."""
+
+    logger = logging.getLogger("custom-logger")
+
+    def output(self):
+        return luigi.LocalTarget(util.get_genome_name() + ".1.bt2")
+
+    def run(self):
+        util.log_stage_start(self.logger, "BuildBowtie2Index")
+        from .console import spinner
+
+        args = [
+            "bowtie2-build",
+            os.path.abspath(GeneralConfig().reference_genome),
+            util.get_genome_name(),
+        ]
+        self.logger.debug(f"Running bowtie2-build with - {''.join(args)}")
+        with spinner("Building Bowtie2 index..."):
+            subprocess.check_call(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            )
+        self.logger.info("Finished building Bowtie2 index.")
+
+
 class PrepareAnnotationFile(luigi.Task):
     """Convert gtf annotation file to parquet.
 
