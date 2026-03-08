@@ -436,6 +436,33 @@ def validate_parameter_warnings(args: argparse.Namespace) -> List[str]:
     return warnings
 
 
+def _ensure_deps_on_path() -> None:
+    """Auto-discover eFISHent deps installed by install.sh.
+
+    If deps were installed to ~/.local/efishent/deps/bin (the default),
+    add them to PATH so users don't need to source activate.sh manually.
+    """
+    default_deps = Path.home() / ".local" / "efishent" / "deps"
+    deps_bin = default_deps / "bin"
+    deps_edirect = default_deps / "edirect"
+
+    if deps_bin.is_dir() and str(deps_bin) not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"{deps_bin}:{os.environ.get('PATH', '')}"
+
+    if deps_edirect.is_dir() and str(deps_edirect) not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"{deps_edirect}:{os.environ.get('PATH', '')}"
+
+    # Also set library path for jellyfish/glpk shared libs
+    deps_lib = default_deps / "lib"
+    if deps_lib.is_dir():
+        if sys.platform == "darwin":
+            lib_var = "DYLD_LIBRARY_PATH"
+        else:
+            lib_var = "LD_LIBRARY_PATH"
+        if str(deps_lib) not in os.environ.get(lib_var, ""):
+            os.environ[lib_var] = f"{deps_lib}:{os.environ.get(lib_var, '')}"
+
+
 def _get_tool_version(name: str, args: list, pattern: str = r"[0-9]+\.[0-9]+\.?[0-9]*") -> str:
     """Try to get a tool's version string."""
     import re
@@ -711,6 +738,9 @@ def main():
         print_missing_deps_error,
         print_parameter_warnings,
     )
+
+    # Auto-discover deps installed by install.sh
+    _ensure_deps_on_path()
 
     start_time = time.time()
     args = _parse_args()
