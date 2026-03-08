@@ -118,12 +118,12 @@ class OptimizeProbeCoverage(luigi.Task):
                 f"Invalid optimization method: {RunConfig().optimization_method}"
                 "Must be greedy or optimal."
             )
+        # Try to fill coverage gaps with unassigned probes
+        assigned = fill_coverage_gaps(self.df, assigned, ProbeConfig().spacing)
+
         if ProbeConfig().sequence_similarity > 0:
             match_percentage = ProbeConfig().sequence_similarity / 100
             assigned = self.filter_binding_probes(assigned, match_percentage)
-
-        # Try to fill coverage gaps with unassigned probes
-        assigned = fill_coverage_gaps(self.df, assigned, ProbeConfig().spacing)
 
         visualize_assignment(self.df, assigned, self.output()["coverage"].path)
 
