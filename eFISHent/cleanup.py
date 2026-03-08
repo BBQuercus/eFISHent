@@ -196,10 +196,9 @@ class CleanUpOutput(luigi.Task):
 
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
 
-        # Display filtering funnel and probe summary table
-        from .console import print_filtering_funnel, print_probe_table
+        # Display probe summary table
+        from .console import print_probe_table
 
-        print_filtering_funnel()
         print_probe_table(df)
 
         # Store summary stats for completion message
@@ -209,7 +208,7 @@ class CleanUpOutput(luigi.Task):
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")
         with open(self.output()["config"].path, "w") as f:
             f.write(config)
-        self.logger.info(f'Saving all files using hash "{util.get_gene_name()}"')
+        self.logger.debug(f'Saving all files using hash "{util.get_gene_name()}"')
 
         # Files to be deleted
         if not RunConfig().save_intermediates:

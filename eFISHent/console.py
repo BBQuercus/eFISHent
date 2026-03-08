@@ -166,38 +166,65 @@ def print_filtering_funnel() -> None:
     if _silent_mode or not _funnel_data:
         return
 
-    max_count = max(count for _, count in _funnel_data)
+    # Skip non-filtering stages (first = prepare, last = cleanup)
+    # Keep: Generated, TM/GC, Alignment, K-mer, Secondary structure, Optimization
+    stages = [
+        (name, count)
+        for name, count in _funnel_data
+        if name not in ("Preparing gene sequence", "Finalizing output")
+    ]
+    if not stages:
+        return
+
+    max_count = max(count for _, count in stages)
     if max_count == 0:
         return
 
+    # Short labels for compact display
+    _short_names = {
+        "Generating candidate probes": "Generated",
+        "Filtering by TM/GC content": "TM/GC filter",
+        "Aligning probes to genome": "Genome alignment",
+        "Filtering by k-mer frequency": "K-mer filter",
+        "Filtering by secondary structure": "Secondary structure",
+        "Optimizing probe coverage": "Optimization",
+    }
+
     bar_width = 24
-    lines = []
 
-    for i, (stage_name, count) in enumerate(_funnel_data):
-        # Bar proportional to max count
-        filled = round(count / max_count * bar_width) if max_count > 0 else 0
+    table = Table(
+        show_header=False, box=None, padding=(0, 1), show_edge=False
+    )
+    table.add_column("Stage", style="dim", width=20, no_wrap=True)
+    table.add_column("Bar", width=bar_width, no_wrap=True)
+    table.add_column("Count", justify="right", width=7, no_wrap=True)
+    table.add_column("Drop", width=10, no_wrap=True)
+
+    for i, (stage_name, count) in enumerate(stages):
+        filled = max(1, round(count / max_count * bar_width)) if max_count > 0 else 0
         bar = "\u2588" * filled
+        short_name = _short_names.get(stage_name, stage_name)
 
-        # Drop percentage from previous stage
+        # Drop info
         if i == 0:
             drop_str = ""
-        elif i == len(_funnel_data) - 1:
-            drop_str = "  selected"
+        elif i == len(stages) - 1:
+            drop_str = "[cyan]selected[/cyan]"
         else:
-            prev_count = _funnel_data[i - 1][1]
+            prev_count = stages[i - 1][1]
             if prev_count > 0:
                 drop_pct = (prev_count - count) / prev_count * 100
-                drop_str = f"  \u2193{drop_pct:>3.0f}%"
+                drop_str = f"[dim]\u2193{drop_pct:>3.0f}%[/dim]"
             else:
                 drop_str = ""
 
         # Color based on drop severity
         if i == 0:
             color = "green"
-        elif i == len(_funnel_data) - 1:
+        elif i == len(stages) - 1:
             color = "cyan bold"
         else:
-            prev_count = _funnel_data[i - 1][1]
+            prev_count = stages[i - 1][1]
             drop_pct = (prev_count - count) / prev_count * 100 if prev_count > 0 else 0
             if drop_pct > 50:
                 color = "red"
@@ -206,18 +233,16 @@ def print_filtering_funnel() -> None:
             else:
                 color = "green"
 
-        lines.append(
-            f"  {stage_name:<24s} [{color}]{bar:<{bar_width}s}[/{color}]"
-            f"  {count:>6,}{drop_str}"
+        table.add_row(
+            short_name,
+            f"[{color}]{bar}[/{color}]",
+            f"{count:,}",
+            drop_str,
         )
 
-    console.print(
-        Panel(
-            "\n".join(lines),
-            title="[bold]Filtering Funnel[/bold]",
-            border_style="blue",
-        )
-    )
+    console.print()
+    console.print("[bold]Filtering Funnel[/bold]")
+    console.print(table)
 
 
 def print_stage(order: int, total: int, description: str) -> None:

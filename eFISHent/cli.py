@@ -668,6 +668,7 @@ def main():
         pipeline_progress,
         print_completion,
         print_dependency_check,
+        print_filtering_funnel,
         print_header,
         print_missing_deps_error,
         print_parameter_warnings,
@@ -761,6 +762,7 @@ def main():
         summary = getattr(tasks[-1], "_summary", None)
 
         if not args.silent:
+            print_filtering_funnel()
             print_completion(format_duration(duration), output_files, summary)
         else:
             logger.info(
