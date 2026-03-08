@@ -3,12 +3,15 @@
 Remove the files that are not needed and prettify the kept output.
 """
 
-from typing import List
+from typing import Dict, List, Optional
 import glob
 import logging
 import multiprocessing
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 
 import Bio.Seq
 import Bio.SeqIO
@@ -98,17 +101,35 @@ class CleanUpOutput(luigi.Task):
         df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]
         return df
 
+    def _get_gene_length(self) -> int:
+        """Get the actual gene sequence length from the sequence file."""
+        # Try the prepared sequence file (available before intermediate cleanup)
+        sequence_fasta = os.path.join(
+            util.get_output_dir(), f"{util.get_gene_name()}_sequence.fasta"
+        )
+        if os.path.isfile(sequence_fasta):
+            seq = next(Bio.SeqIO.parse(sequence_fasta, "fasta"))
+            return len(seq)
+        # Try user-provided sequence file
+        if SequenceConfig().sequence_file and os.path.isfile(SequenceConfig().sequence_file):
+            seq = next(Bio.SeqIO.parse(SequenceConfig().sequence_file, "fasta"))
+            return len(seq)
+        return 0
+
     def _compute_summary(self, df: pd.DataFrame) -> dict:
         """Compute summary statistics from the final probe DataFrame."""
         from .console import get_funnel_data
 
         gene_name = util.get_gene_name(hashed=False)
 
-        # Coverage: span of probes vs gene length
-        gene_length = df["end"].max() - df["start"].min() if len(df) > 0 else 0
+        # Get actual gene length, fall back to probe span
+        gene_length = self._get_gene_length()
+        if gene_length == 0 and len(df) > 0:
+            gene_length = int(df["end"].max())
+
+        # Compute covered base pairs by merging overlapping intervals
         covered_bp = 0
         if len(df) > 0:
-            # Merge overlapping probe regions to get total coverage
             intervals = sorted(zip(df["start"], df["end"]))
             merged_start, merged_end = intervals[0]
             for s, e in intervals[1:]:
@@ -130,6 +151,7 @@ class CleanUpOutput(luigi.Task):
             "probe_count": len(df),
             "initial_count": initial_count,
             "coverage_pct": coverage_pct,
+            "gene_length": gene_length,
             "length_range": (int(df["length"].min()), int(df["length"].max())),
             "length_median": int(df["length"].median()),
             "tm_range": (float(df["TM"].min()), float(df["TM"].max())),
@@ -137,6 +159,100 @@ class CleanUpOutput(luigi.Task):
             "gc_range": (float(df["GC"].min()), float(df["GC"].max())),
             "gc_median": float(df["GC"].median()),
         }
+
+    def _run_blast_verification(self, probes_fasta: str) -> Optional[Dict]:
+        """Cross-validate final probes with BLAST against the reference genome.
+
+        Uses a different algorithm than Bowtie2 alignment to independently
+        verify probe specificity. Only counts near-full-length matches
+        (>= 75% of probe length at >= 90% identity) as significant hits.
+        Returns None if BLAST is not available.
+        """
+        if not shutil.which("blastn") or not shutil.which("makeblastdb"):
+            return None
+
+        genome = os.path.abspath(GeneralConfig().reference_genome)
+        if not genome or not os.path.isfile(genome):
+            return None
+
+        from .console import spinner
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                db_path = os.path.join(tmpdir, "genome")
+                blast_out = os.path.join(tmpdir, "blast.tsv")
+
+                # Build temporary BLAST DB
+                with spinner("Building verification BLAST database..."):
+                    subprocess.check_call(
+                        ["makeblastdb", "-in", genome, "-dbtype", "nucl",
+                         "-out", db_path],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                    )
+
+                # BLAST with sensitive parameters
+                with spinner("Running BLAST cross-validation..."):
+                    subprocess.check_call(
+                        ["blastn", "-task", "blastn",
+                         "-query", probes_fasta, "-db", db_path,
+                         "-evalue", "10", "-word_size", "11",
+                         "-dust", "no",
+                         "-num_threads", str(GeneralConfig().threads),
+                         "-outfmt", "6 qseqid sseqid pident length mismatch "
+                                    "gapopen qstart qend sstart send qlen",
+                         "-out", blast_out],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                    )
+
+                # Parse results
+                cols = ["qseqid", "sseqid", "pident", "length", "mismatch",
+                        "gapopen", "qstart", "qend", "sstart", "send", "qlen"]
+                if os.path.getsize(blast_out) > 0:
+                    df_blast = pd.read_csv(blast_out, sep="\t", header=None, names=cols)
+                else:
+                    df_blast = pd.DataFrame(columns=cols)
+
+                # Significant hits: near-full-length matches only
+                # >= 90% identity AND alignment covers >= 75% of probe length
+                df_blast["effective_len"] = df_blast["length"] - df_blast["gapopen"]
+                min_match_frac = 0.75
+                sig = df_blast[
+                    (df_blast["pident"] >= 90)
+                    & (df_blast["effective_len"] >= df_blast["qlen"] * min_match_frac)
+                ]
+
+                # Count unique genomic loci per probe
+                # Group by chromosome + 1kb-binned position to deduplicate
+                sig = sig.copy()
+                sig["locus"] = sig["sseqid"] + ":" + (sig["sstart"] // 1000).astype(str)
+                hits_per_probe = sig.groupby("qseqid")["locus"].nunique().to_dict()
+
+                probes = [r.id for r in Bio.SeqIO.parse(probes_fasta, "fasta")]
+
+                # For exogenous probes, 0 self-hits expected (not in genome)
+                # For endogenous probes, 1 self-hit expected (target locus)
+                is_endogenous = SequenceConfig().is_endogenous
+                max_expected = ProbeConfig().max_off_targets + (1 if is_endogenous else 0)
+
+                clean = sum(
+                    1 for p in probes
+                    if hits_per_probe.get(p, 0) <= max_expected
+                )
+                flagged = {
+                    p: hits_per_probe.get(p, 0)
+                    for p in probes
+                    if hits_per_probe.get(p, 0) > max_expected
+                }
+
+                return {
+                    "total": len(probes),
+                    "clean": clean,
+                    "flagged": flagged,
+                    "max_expected": max_expected,
+                }
+        except Exception as e:
+            self.logger.debug(f"BLAST verification failed: {e}")
+            return None
 
     def prettify_sequences(self, df: pd.DataFrame) -> List[Bio.SeqRecord.SeqRecord]:
         """Clean up sequence id's and descriptions."""
@@ -206,6 +322,11 @@ class CleanUpOutput(luigi.Task):
         with open(self.output()["config"].path, "w") as f:
             f.write(config)
         self.logger.debug(f'Saving all files using hash "{util.get_gene_name()}"')
+
+        # Run BLAST verification on final probes
+        self._verification = self._run_blast_verification(
+            self.output()["fasta"].path
+        )
 
         # Files to be deleted
         if not RunConfig().save_intermediates:

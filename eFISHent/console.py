@@ -100,16 +100,18 @@ def print_completion(
     output_files: Optional[List[str]] = None,
     summary: Optional[Dict] = None,
     probe_df: Optional[pd.DataFrame] = None,
+    verification: Optional[Dict] = None,
 ) -> None:
-    """Print the completion panel with funnel, probe table, summary, and output files.
+    """Print the completion panel with funnel, coverage map, probe table, and summary.
 
     Args:
         duration: Human-readable duration string.
         output_files: List of output file paths.
         summary: Optional dict with keys: gene_name, probe_count, initial_count,
-                 coverage_pct, length_range, length_median, tm_range, tm_median,
-                 gc_range, gc_median.
+                 coverage_pct, gene_length, length_range, length_median,
+                 tm_range, tm_median, gc_range, gc_median.
         probe_df: Optional DataFrame with probe data to show in the table.
+        verification: Optional dict with BLAST verification results.
     """
     if _silent_mode:
         return
@@ -126,13 +128,22 @@ def print_completion(
         renderables.append(Text(" Filtering Funnel", style="bold"))
         renderables.append(funnel_table)
 
-    # 2. Probe table
+    # 2. Coverage map
+    if probe_df is not None and summary and len(probe_df) > 0:
+        gene_length = summary.get("gene_length", 0)
+        coverage_pct = summary.get("coverage_pct", 0.0)
+        coverage_map = _build_coverage_map(probe_df, gene_length, coverage_pct)
+        if coverage_map is not None:
+            renderables.append(Text(""))
+            renderables.append(coverage_map)
+
+    # 3. Probe table
     if probe_df is not None and len(probe_df) > 0:
         probe_table = _build_probe_table(probe_df, show_title=False)
         renderables.append(Text(""))
         renderables.append(probe_table)
 
-    # 3. Summary stats
+    # 4. Summary stats
     if summary:
         renderables.append(Text(""))
         stats_table = Table(
@@ -149,9 +160,11 @@ def print_completion(
                 count_str += f" selected from {summary['initial_count']:,} candidates"
             stats_table.add_row("Probes:", count_str)
         if summary.get("coverage_pct") is not None:
-            stats_table.add_row(
-                "Coverage:", f"{summary['coverage_pct']:.1f}% of gene sequence"
-            )
+            gene_len = summary.get("gene_length", 0)
+            cov_str = f"{summary['coverage_pct']:.1f}%"
+            if gene_len:
+                cov_str += f" of {gene_len:,} nt"
+            stats_table.add_row("Coverage:", cov_str)
         if summary.get("length_range"):
             lo, hi = summary["length_range"]
             med = summary.get("length_median", "")
@@ -169,7 +182,12 @@ def print_completion(
             stats_table.add_row("GC range:", f"{lo:.1f}-{hi:.1f}%{med_str}")
         renderables.append(stats_table)
 
-    # 4. Output files
+    # 5. BLAST verification
+    if verification:
+        renderables.append(Text(""))
+        renderables.append(_build_verification_summary(verification))
+
+    # 6. Output files
     if output_files:
         renderables.append(Text(""))
         file_lines = [" [bold]Output:[/bold]"]
@@ -177,7 +195,7 @@ def print_completion(
             file_lines.append(f"   [dim]\u2192[/dim] {path}")
         renderables.append(Text.from_markup("\n".join(file_lines)))
 
-    # 5. Duration
+    # 7. Duration
     renderables.append(Text(""))
     renderables.append(Text.from_markup(f" [dim]Completed in {duration}[/dim]"))
 
@@ -266,6 +284,104 @@ def _build_funnel_table() -> Optional[Table]:
         )
 
     return table
+
+
+def _build_coverage_map(
+    probe_df: pd.DataFrame,
+    gene_length: int,
+    coverage_pct: float,
+) -> Optional["Text"]:
+    """Build an ASCII coverage map showing probe binding positions on the gene.
+
+    Returns a Rich Text renderable with a horizontal bar where filled blocks
+    represent covered regions and light blocks represent gaps.
+    """
+    from rich.text import Text
+
+    if gene_length <= 0:
+        return None
+
+    bar_width = 50
+
+    # Build boolean coverage array across the gene
+    coverage = [False] * gene_length
+    for _, row in probe_df.iterrows():
+        start = max(0, int(row["start"]))
+        end = min(int(row["end"]), gene_length)
+        for i in range(start, end):
+            coverage[i] = True
+
+    # Downsample to bar width — a cell is "covered" if any base in its range is
+    bar = []
+    for i in range(bar_width):
+        region_start = int(i * gene_length / bar_width)
+        region_end = int((i + 1) * gene_length / bar_width)
+        bar.append(any(coverage[region_start:region_end]))
+
+    # Build the visual bar
+    text = Text()
+    text.append(f" Coverage ({coverage_pct:.1f}% of {gene_length:,} nt)\n", style="bold")
+    text.append("  5\u2032 ", style="dim")
+    for covered in bar:
+        if covered:
+            text.append("\u2588", style="green")
+        else:
+            text.append("\u2591", style="dim")
+    text.append(" 3\u2032\n", style="dim")
+
+    # Scale line with position markers
+    scale = [" "] * bar_width
+    markers = [
+        (0, "0"),
+        (bar_width // 4, str(gene_length // 4)),
+        (bar_width // 2, str(gene_length // 2)),
+        (3 * bar_width // 4, str(3 * gene_length // 4)),
+        (bar_width - 1, str(gene_length)),
+    ]
+    for pos, label in markers:
+        # Place label at position, avoiding overlap
+        for j, ch in enumerate(label):
+            idx = pos + j
+            if 0 <= idx < bar_width:
+                scale[idx] = ch
+
+    text.append("     " + "".join(scale).rstrip(), style="dim")
+    return text
+
+
+def _build_verification_summary(verification: Dict) -> "Text":
+    """Build a Rich Text summary of BLAST verification results."""
+    from rich.text import Text
+
+    total = verification["total"]
+    clean = verification["clean"]
+    flagged = verification.get("flagged", {})
+    max_show = 5
+
+    text = Text()
+    text.append(" BLAST Verification\n", style="bold")
+
+    if clean == total:
+        text.append("  \u2714 ", style="green")
+        text.append(f"{clean}/{total} probes verified ", style="green")
+        text.append("(independent BLAST cross-check)", style="dim")
+    else:
+        text.append("  \u2714 ", style="green")
+        text.append(f"{clean}/{total} probes clean", style="green")
+        n_flagged = total - clean
+        text.append(f", {n_flagged} with additional BLAST hits:\n", style="yellow")
+        max_expected = verification.get("max_expected", 1)
+        items = sorted(flagged.items(), key=lambda x: -x[1])
+        for probe_name, hit_count in items[:max_show]:
+            text.append(f"    \u26a0 {probe_name}: ", style="yellow")
+            text.append(f"{hit_count} loci ", style="yellow")
+            text.append(f"(expected \u2264{max_expected})\n", style="dim")
+        if len(items) > max_show:
+            text.append(
+                f"    [dim]...and {len(items) - max_show} more[/dim]",
+            )
+
+    return text
 
 
 def print_filtering_funnel() -> None:

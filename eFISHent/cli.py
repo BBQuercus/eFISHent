@@ -968,9 +968,13 @@ def main():
         # Get summary stats and probe data from CleanUpOutput task if available
         summary = getattr(tasks[-1], "_summary", None)
         probe_df = getattr(tasks[-1], "_probe_df", None)
+        verification = getattr(tasks[-1], "_verification", None)
 
         if not args.silent:
-            print_completion(format_duration(duration), output_files, summary, probe_df)
+            print_completion(
+                format_duration(duration), output_files, summary, probe_df,
+                verification,
+            )
         else:
             logger.info(
                 f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
