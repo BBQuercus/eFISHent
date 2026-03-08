@@ -181,7 +181,12 @@ class KMerFiltering(luigi.Task):
     logger = logging.getLogger("custom-logger")
 
     def requires(self):
-        return {"jellyfish": BuildJellyfishIndex(), "probes": AlignProbeCandidates()}
+        if GeneralConfig().reference_transcriptome:
+            from .transcriptome_filter import TranscriptomeFiltering
+            probe_task = TranscriptomeFiltering()
+        else:
+            probe_task = AlignProbeCandidates()
+        return {"jellyfish": BuildJellyfishIndex(), "probes": probe_task}
 
     def output(self):
         return luigi.LocalTarget(
@@ -196,6 +201,15 @@ class KMerFiltering(luigi.Task):
 
         jellyfish_path = self.input()["jellyfish"].path
         counts = get_max_kmer_counts_batch(sequences, jellyfish_path)
+
+        # Diagnostic: warn about probes with potential unique contiguous matches
+        for seq, count in zip(sequences, counts):
+            if count == 1:
+                self.logger.debug(
+                    f"Probe {seq.id} has max k-mer count of 1 — "
+                    "may have a unique contiguous match in genome. "
+                    "Consider enabling transcriptome filtering."
+                )
 
         candidates = [
             seq

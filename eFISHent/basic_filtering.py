@@ -2,6 +2,7 @@
 
 from typing import List
 import logging
+import math
 import multiprocessing
 import os
 
@@ -45,6 +46,54 @@ def get_g_quadruplet_count(sequence: Bio.Seq.Seq) -> int:
     return int(sequence.count("GGGG"))
 
 
+def get_max_homopolymer_run(sequence: Bio.Seq.Seq) -> int:
+    """Get the length of the longest homopolymer run in any base.
+
+    Approach matches OligoMiner's blockParse.py prohibited sequences
+    (Beliveau et al., 2018, MIT license).
+    """
+    seq_str = str(sequence)
+    if not seq_str:
+        return 0
+    max_run = 1
+    current_run = 1
+    for i in range(1, len(seq_str)):
+        if seq_str[i] == seq_str[i - 1]:
+            current_run += 1
+            max_run = max(max_run, current_run)
+        else:
+            current_run = 1
+    return max_run
+
+
+def get_dinucleotide_repeat_count(sequence: Bio.Seq.Seq, min_repeats: int = 4) -> int:
+    """Count distinct dinucleotide repeat motifs present (e.g., ATATAT)."""
+    seq_str = str(sequence)
+    count = 0
+    seen = set()
+    for i in range(len(seq_str) - 1):
+        di = seq_str[i : i + 2]
+        if di not in seen and di[0] != di[1]:
+            seen.add(di)
+            if (di * min_repeats) in seq_str:
+                count += 1
+    return count
+
+
+def has_low_complexity(
+    sequence: Bio.Seq.Seq, window: int = 10, threshold: float = 1.0
+) -> bool:
+    """Check if any window of the sequence has Shannon entropy < threshold bits."""
+    seq_str = str(sequence)
+    for i in range(len(seq_str) - window + 1):
+        w = seq_str[i : i + window]
+        freqs = [w.count(b) / window for b in "ACGT"]
+        entropy = -sum(f * math.log2(f) for f in freqs if f > 0)
+        if entropy < threshold:
+            return True
+    return False
+
+
 class BasicFiltering(luigi.Task):
     """Initial probe filtering based on melting temperature and GC content."""
 
@@ -69,20 +118,33 @@ class BasicFiltering(luigi.Task):
 
         sequence = candidate.seq
         gc_content = get_gc_content(sequence)
-        g_quadruplets = get_g_quadruplet_count(sequence)
         melting_temp = get_melting_temp(
             Bio.Seq.Seq(sequence),
             config.na_concentration,
             config.formamide_concentration,
         )
 
-        if (
-            config.min_gc <= gc_content <= config.max_gc
-            and config.min_tm <= melting_temp <= config.max_tm
-            and g_quadruplets == 0
-        ):
-            return True
-        return False
+        if not (config.min_gc <= gc_content <= config.max_gc):
+            return False
+        if not (config.min_tm <= melting_temp <= config.max_tm):
+            return False
+
+        # Homopolymer filtering
+        max_homopolymer = getattr(config, "max_homopolymer_length", 0)
+        if max_homopolymer > 0:
+            if get_max_homopolymer_run(sequence) >= max_homopolymer:
+                return False
+        else:
+            # Legacy fallback: only filter GGGG
+            if get_g_quadruplet_count(sequence) > 0:
+                return False
+
+        # Low-complexity filter (optional)
+        if getattr(config, "filter_low_complexity", False):
+            if has_low_complexity(sequence) or get_dinucleotide_repeat_count(sequence) > 0:
+                return False
+
+        return True
 
     def _is_candidate_valid(self, candidate: Bio.SeqRecord.SeqRecord) -> bool:
         """Counteracting the really weird multiprocess class behavior."""

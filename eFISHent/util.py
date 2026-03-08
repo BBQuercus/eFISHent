@@ -30,6 +30,7 @@ PIPELINE_STAGES = {
         "total": 8,
         "desc": "Aligning probes to genome",
     },
+    "TranscriptomeFiltering": {"order": 0, "total": 0, "desc": "Filtering by transcriptome off-targets"},
     "KMerFiltering": {"order": 5, "total": 8, "desc": "Filtering by k-mer frequency"},
     "SecondaryStructureFiltering": {
         "order": 6,
@@ -44,6 +45,7 @@ PIPELINE_STAGES = {
     "CleanUpOutput": {"order": 8, "total": 8, "desc": "Finalizing output"},
     # Index building (shown separately)
     "BuildBowtieIndex": {"order": 0, "total": 0, "desc": "Building bowtie index"},
+    "BuildBowtie2Index": {"order": 0, "total": 0, "desc": "Building bowtie2 index"},
     "BuildJellyfishIndex": {"order": 0, "total": 0, "desc": "Building k-mer index"},
     "DownloadEntrezGeneSequence": {
         "order": 0,

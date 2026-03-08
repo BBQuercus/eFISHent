@@ -21,6 +21,14 @@ class GeneralConfig(luigi.Config):
         ),
         default="",
     )
+    reference_transcriptome = luigi.Parameter(
+        description=(
+            "Path to reference transcriptome FASTA file. "
+            "Enables transcriptome-level off-target filtering via BLAST. "
+            "Generate from genome + GTF using gffread."
+        ),
+        default="",
+    )
 
 
 class RunConfig(luigi.Config):
@@ -178,11 +186,46 @@ class ProbeConfig(luigi.Config):
     )
     sequence_similarity = luigi.IntParameter(
         description=(
-            "Maximum percentage probes can be similar. "
-            "Applied to their complements and reverse complements only. "
-            "Ensures probes don't falsely bind to eachother. "
-            "Setting any value above 0 could add multiple minute of runtime! "
-            "The lower the value (above 0) the fewer potential probes."
+            "Maximum percentage probes can be similar to each other's "
+            "complement/reverse complement. Prevents probe-probe cross-hybridization. "
+            "Set to 0 to disable (default). "
+            "Recommended: 75-85 for stringent designs."
         ),
         default=0,
+    )
+    aligner = luigi.Parameter(
+        description=(
+            "Alignment tool for off-target detection. "
+            "'bowtie2' uses sensitive local alignment tuned for short probes "
+            "(OligoMiner/Tigerfish parameter set). "
+            "'bowtie' uses the legacy Bowtie aligner (max 2 mismatches). "
+        ),
+        default="bowtie2",
+    )
+    max_homopolymer_length = luigi.IntParameter(
+        description=(
+            "Maximum length of homopolymer run allowed in any base (A, T, C, or G). "
+            "OligoMiner uses 5 (filters AAAAA, TTTTT, CCCCC, GGGGG). "
+            "Set to 0 to disable. Replaces the legacy GGGG-only filter when > 0."
+        ),
+        default=5,
+    )
+    filter_low_complexity = luigi.BoolParameter(
+        description="Filter probes containing low-complexity regions (dinucleotide repeats, low entropy).",
+        default=False,
+    )
+    max_transcriptome_off_targets = luigi.IntParameter(
+        description=(
+            "Maximum number of transcriptome off-target hits per probe. "
+            "A hit = >= 75%% identity over >= 15nt. "
+            "Only used when reference_transcriptome is provided."
+        ),
+        default=0,
+    )
+    blast_identity_threshold = luigi.FloatParameter(
+        description=(
+            "Minimum percent identity for a BLAST hit to count as an off-target. "
+            "Only used when reference_transcriptome is provided."
+        ),
+        default=75.0,
     )
