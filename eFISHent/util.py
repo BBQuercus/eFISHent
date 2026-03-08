@@ -182,9 +182,13 @@ def log_and_check_candidates(
         print_candidate_count,
         print_error_panel,
         print_warning,
+        record_funnel_stage,
     )
 
     stage_desc = get_stage_description(name)
+
+    # Record for funnel visualization
+    record_funnel_stage(stage_desc, count)
 
     # Use Rich output for candidate counts
     if not is_silent():

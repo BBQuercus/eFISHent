@@ -1,11 +1,13 @@
 """Command line interface."""
 
 from pathlib import Path
-from typing import Any, List, TYPE_CHECKING
+from typing import Any, Dict, List, TYPE_CHECKING
 import argparse
 import configparser
 import logging
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -235,6 +237,11 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Change the program output to silent hiding information on progress.",
     )
+    utility.add_argument(
+        "--check",
+        action="store_true",
+        help="Check if all external dependencies are installed and exit.",
+    )
     utility.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
 
@@ -351,10 +358,125 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         parser.error("\n  " + "\n  ".join(errors))
 
 
+def _get_tool_version(name: str, args: list, pattern: str = r"[0-9]+\.[0-9]+\.?[0-9]*") -> str:
+    """Try to get a tool's version string."""
+    import re
+
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=5)
+        output = result.stdout + result.stderr
+        match = re.search(pattern, output)
+        return match.group(0) if match else "installed"
+    except Exception:
+        return ""
+
+
+# Dependency definitions: {name: (check_args, version_args, needed_for)}
+DEPENDENCIES = {
+    "bowtie": {
+        "version_args": ["bowtie", "--version"],
+        "needed_for": "probe alignment",
+    },
+    "jellyfish": {
+        "version_args": ["jellyfish", "--version"],
+        "needed_for": "k-mer counting",
+    },
+    "glpsol": {
+        "version_args": ["glpsol", "--version"],
+        "needed_for": "optimal optimization (optional if using greedy)",
+    },
+    "esearch": {
+        "version_args": ["esearch", "-version"],
+        "needed_for": "NCBI gene download (optional if providing sequence file)",
+    },
+}
+
+
+def check_all_dependencies() -> Dict[str, dict]:
+    """Check all external dependencies and return status dict."""
+    results = {}
+
+    for name, info in DEPENDENCIES.items():
+        path = shutil.which(name)
+        if path:
+            version = _get_tool_version(name, info["version_args"])
+            results[name] = {
+                "found": True,
+                "path": path,
+                "version": version or path,
+                "needed_for": info["needed_for"],
+            }
+        else:
+            results[name] = {
+                "found": False,
+                "needed_for": info["needed_for"],
+            }
+
+    # Check bundled Fold binary
+    fold_path = Path(__file__).resolve().parent
+    if sys.platform.startswith("linux"):
+        fold_bin = fold_path / "Fold_linux"
+    elif sys.platform == "darwin":
+        fold_bin = fold_path / "Fold_osx"
+    else:
+        fold_bin = None
+
+    if fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK):
+        results["Fold"] = {
+            "found": True,
+            "version": "bundled",
+            "path": str(fold_bin),
+            "needed_for": "secondary structure prediction",
+        }
+    else:
+        results["Fold"] = {
+            "found": False,
+            "needed_for": "secondary structure prediction",
+        }
+
+    return results
+
+
+def check_required_dependencies(args: argparse.Namespace) -> List[str]:
+    """Check only the dependencies required for the current run mode.
+
+    Returns list of missing dependency names (empty = all good).
+    """
+    # Always required
+    required = ["bowtie", "jellyfish"]
+
+    # Fold is required for the full pipeline (not for index building)
+    if not args.build_indices:
+        fold_path = Path(__file__).resolve().parent
+        if sys.platform.startswith("linux"):
+            fold_bin = fold_path / "Fold_linux"
+        elif sys.platform == "darwin":
+            fold_bin = fold_path / "Fold_osx"
+        else:
+            fold_bin = None
+
+        if not (fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK)):
+            return ["Fold (bundled binary missing or not executable)"]
+
+    # glpsol only needed for optimal optimization
+    if getattr(args, "optimization_method", "greedy") == "optimal":
+        required.append("glpsol")
+
+    # esearch/efetch only needed for NCBI download
+    needs_ncbi = (
+        not args.build_indices
+        and not getattr(args, "sequence_file", None)
+        and (getattr(args, "gene_name", None) or getattr(args, "ensembl_id", None))
+    )
+    if needs_ncbi:
+        required.append("esearch")
+
+    missing = [name for name in required if not shutil.which(name)]
+    return missing
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
-    import shutil
-
     from rich_argparse import RichHelpFormatter
 
     # Configure RichHelpFormatter for better alignment
@@ -386,6 +508,11 @@ def _parse_args() -> argparse.Namespace:
             parser.exit(0)
     except Exception as e:
         print(e)
+
+    # Handle --check before full validation (doesn't need other args)
+    if "--check" in sys.argv:
+        args = argparse.Namespace(check=True)
+        return args
 
     args = parser.parse_args()
     validate_args(args, parser)
@@ -471,10 +598,24 @@ def format_duration(seconds: float) -> str:
 
 def main():
     """Run eFISHent tasks."""
-    from .console import pipeline_progress, print_completion, print_header
+    from .console import (
+        pipeline_progress,
+        print_completion,
+        print_dependency_check,
+        print_header,
+        print_missing_deps_error,
+    )
 
     start_time = time.time()
     args = _parse_args()
+
+    # Handle --check: show dependency report and exit
+    if getattr(args, "check", False):
+        print_header(__version__)
+        results = check_all_dependencies()
+        print_dependency_check(results)
+        sys.exit(0 if all(r["found"] for r in results.values()) else 1)
+
     logger = set_logging_level(args.silent, args.debug)
 
     # Print header banner
@@ -482,6 +623,18 @@ def main():
         print_header(__version__)
     else:
         logger.info(f"{UniCode.fishing} eFISHent v{__version__} starting...")
+
+    # Check required dependencies before starting the pipeline
+    missing = check_required_dependencies(args)
+    if missing:
+        if not args.silent:
+            print_missing_deps_error(missing)
+        else:
+            logger.error(
+                f"Missing required dependencies: {', '.join(missing)}. "
+                "Run efishent --check for details."
+            )
+        sys.exit(1)
 
     # Lazy imports - only load heavy modules after arg parsing
     from .analyze import AnalyzeProbeset
@@ -520,9 +673,22 @@ def main():
     duration = time.time() - start_time
 
     if tasks[-1].complete():
+        # Collect output file paths
+        output_files = []
+        task_output = tasks[-1].output()
+        if isinstance(task_output, dict):
+            output_files = [t.path for t in task_output.values() if hasattr(t, "path")]
+        elif hasattr(task_output, "path"):
+            output_files = [task_output.path]
+
+        # Get summary stats from CleanUpOutput task if available
+        summary = getattr(tasks[-1], "_summary", None)
+
         if not args.silent:
-            print_completion(format_duration(duration))
+            print_completion(format_duration(duration), output_files, summary)
         else:
             logger.info(
                 f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
             )
+            for f in output_files:
+                logger.info(f"  Output: {f}")

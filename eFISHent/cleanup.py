@@ -97,6 +97,46 @@ class CleanUpOutput(luigi.Task):
         df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]
         return df
 
+    def _compute_summary(self, df: pd.DataFrame) -> dict:
+        """Compute summary statistics from the final probe DataFrame."""
+        from .console import get_funnel_data
+
+        gene_name = util.get_gene_name(hashed=False)
+
+        # Coverage: span of probes vs gene length
+        gene_length = df["end"].max() - df["start"].min() if len(df) > 0 else 0
+        covered_bp = 0
+        if len(df) > 0:
+            # Merge overlapping probe regions to get total coverage
+            intervals = sorted(zip(df["start"], df["end"]))
+            merged_start, merged_end = intervals[0]
+            for s, e in intervals[1:]:
+                if s <= merged_end:
+                    merged_end = max(merged_end, e)
+                else:
+                    covered_bp += merged_end - merged_start
+                    merged_start, merged_end = s, e
+            covered_bp += merged_end - merged_start
+
+        coverage_pct = (covered_bp / gene_length * 100) if gene_length > 0 else 0.0
+
+        # Get initial candidate count from funnel data
+        funnel = get_funnel_data()
+        initial_count = funnel[0][1] if funnel else None
+
+        return {
+            "gene_name": gene_name,
+            "probe_count": len(df),
+            "initial_count": initial_count,
+            "coverage_pct": coverage_pct,
+            "length_range": (int(df["length"].min()), int(df["length"].max())),
+            "length_median": int(df["length"].median()),
+            "tm_range": (float(df["TM"].min()), float(df["TM"].max())),
+            "tm_median": float(df["TM"].median()),
+            "gc_range": (float(df["GC"].min()), float(df["GC"].max())),
+            "gc_median": float(df["GC"].median()),
+        }
+
     def prettify_sequences(self, df: pd.DataFrame) -> List[Bio.SeqRecord.SeqRecord]:
         """Clean up sequence id's and descriptions."""
         return [
@@ -156,10 +196,14 @@ class CleanUpOutput(luigi.Task):
 
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
 
-        # Display probe summary table
-        from .console import print_probe_table
+        # Display filtering funnel and probe summary table
+        from .console import print_filtering_funnel, print_probe_table
 
+        print_filtering_funnel()
         print_probe_table(df)
+
+        # Store summary stats for completion message
+        self._summary = self._compute_summary(df)
 
         df.to_csv(self.output()["table"].path, index=False)
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")

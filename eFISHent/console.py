@@ -1,7 +1,7 @@
 """Rich console utilities for eFISHent CLI."""
 
 from contextlib import contextmanager
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from rich.console import Console
@@ -42,6 +42,24 @@ _silent_mode: bool = False
 _current_stage: int = 0
 _total_stages: int = 8
 
+# Filtering funnel data: list of (stage_name, candidate_count) tuples
+_funnel_data: List[Tuple[str, int]] = []
+
+
+def record_funnel_stage(stage_name: str, count: int) -> None:
+    """Record a filtering stage result for the funnel visualization."""
+    _funnel_data.append((stage_name, count))
+
+
+def get_funnel_data() -> List[Tuple[str, int]]:
+    """Get the accumulated funnel data."""
+    return list(_funnel_data)
+
+
+def reset_funnel_data() -> None:
+    """Reset the funnel data (e.g. between runs)."""
+    _funnel_data.clear()
+
 
 def set_silent_mode(silent: bool) -> None:
     """Set silent mode to disable Rich output."""
@@ -78,15 +96,126 @@ def print_header(version: str) -> None:
     )
 
 
-def print_completion(duration: str) -> None:
-    """Print the completion message."""
+def print_completion(
+    duration: str,
+    output_files: Optional[List[str]] = None,
+    summary: Optional[Dict] = None,
+) -> None:
+    """Print the completion message with design summary and output file locations.
+
+    Args:
+        duration: Human-readable duration string.
+        output_files: List of output file paths.
+        summary: Optional dict with keys: gene_name, probe_count, initial_count,
+                 coverage_pct, length_range, length_median, tm_range, tm_median,
+                 gc_range, gc_median.
+    """
     if _silent_mode:
         return
+
+    lines = []
+
+    if summary:
+        if summary.get("gene_name"):
+            lines.append(f"  [bold]Gene:[/bold]      {summary['gene_name']}")
+        if summary.get("probe_count") is not None:
+            count_str = f"{summary['probe_count']}"
+            if summary.get("initial_count"):
+                count_str += f" selected from {summary['initial_count']:,} candidates"
+            lines.append(f"  [bold]Probes:[/bold]    {count_str}")
+        if summary.get("coverage_pct") is not None:
+            lines.append(
+                f"  [bold]Coverage:[/bold]  {summary['coverage_pct']:.1f}% of gene sequence"
+            )
+        if summary.get("length_range"):
+            lo, hi = summary["length_range"]
+            med = summary.get("length_median", "")
+            med_str = f" (median {med})" if med else ""
+            lines.append(f"  [bold]Length:[/bold]    {lo}-{hi} nt{med_str}")
+        if summary.get("tm_range"):
+            lo, hi = summary["tm_range"]
+            med = summary.get("tm_median", "")
+            med_str = f" (median {med:.1f}\u00b0C)" if med else ""
+            lines.append(f"  [bold]TM range:[/bold]  {lo:.1f}-{hi:.1f}\u00b0C{med_str}")
+        if summary.get("gc_range"):
+            lo, hi = summary["gc_range"]
+            med = summary.get("gc_median", "")
+            med_str = f" (median {med:.1f}%)" if med else ""
+            lines.append(f"  [bold]GC range:[/bold]  {lo:.1f}-{hi:.1f}%{med_str}")
+        lines.append("")
+
+    if output_files:
+        lines.append("  [bold]Output:[/bold]")
+        for path in output_files:
+            lines.append(f"    [dim]\u2192[/dim] {path}")
+        lines.append("")
+
+    lines.append(f"  [dim]Completed in {duration}[/dim]")
+
     console.print(
         Panel(
-            f"[success]eFISHent has finished successfully![/success]\n"
-            f"[dim]Completed in {duration}[/dim]",
+            "\n".join(lines),
+            title="[success]eFISHent \u2014 Design Complete[/success]",
             border_style="green",
+        )
+    )
+
+
+def print_filtering_funnel() -> None:
+    """Print a filtering funnel visualization showing probe counts at each stage."""
+    if _silent_mode or not _funnel_data:
+        return
+
+    max_count = max(count for _, count in _funnel_data)
+    if max_count == 0:
+        return
+
+    bar_width = 24
+    lines = []
+
+    for i, (stage_name, count) in enumerate(_funnel_data):
+        # Bar proportional to max count
+        filled = round(count / max_count * bar_width) if max_count > 0 else 0
+        bar = "\u2588" * filled
+
+        # Drop percentage from previous stage
+        if i == 0:
+            drop_str = ""
+        elif i == len(_funnel_data) - 1:
+            drop_str = "  selected"
+        else:
+            prev_count = _funnel_data[i - 1][1]
+            if prev_count > 0:
+                drop_pct = (prev_count - count) / prev_count * 100
+                drop_str = f"  \u2193{drop_pct:>3.0f}%"
+            else:
+                drop_str = ""
+
+        # Color based on drop severity
+        if i == 0:
+            color = "green"
+        elif i == len(_funnel_data) - 1:
+            color = "cyan bold"
+        else:
+            prev_count = _funnel_data[i - 1][1]
+            drop_pct = (prev_count - count) / prev_count * 100 if prev_count > 0 else 0
+            if drop_pct > 50:
+                color = "red"
+            elif drop_pct > 20:
+                color = "yellow"
+            else:
+                color = "green"
+
+        lines.append(
+            f"  {stage_name:<24s} [{color}]{bar:<{bar_width}s}[/{color}]"
+            f"  {count:>6,}{drop_str}"
+        )
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[bold]Filtering Funnel[/bold]",
+            border_style="blue",
         )
     )
 
@@ -150,7 +279,7 @@ def print_error_panel(title: str, message: str, hint: Optional[str] = None) -> N
     console.print(Panel(content, title=f"[error]{title}[/error]", border_style="red"))
 
 
-def print_probe_table(df: pd.DataFrame, max_rows: int = 10) -> None:
+def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
     """Display probe data as a Rich table."""
     if _silent_mode:
         return
@@ -250,6 +379,63 @@ def print_analysis_stage(step: int, total: int, description: str) -> None:
             completed=step,
             description=f"Analyzing {description.lower()}...",
         )
+
+
+def print_dependency_check(results: Dict[str, dict]) -> None:
+    """Print dependency check results as a table."""
+    table = Table(
+        title="Dependency Check",
+        show_header=True,
+        header_style="bold cyan",
+        border_style="dim",
+    )
+    table.add_column("Dependency", style="bold")
+    table.add_column("Status", justify="center")
+    table.add_column("Version / Path")
+    table.add_column("Required For")
+
+    all_ok = True
+    for name, info in results.items():
+        if info["found"]:
+            status = "[green]\u2714[/green]"
+            detail = info.get("version", info.get("path", ""))
+        else:
+            status = "[red]\u2718[/red]"
+            detail = "[red]not found[/red]"
+            all_ok = False
+        table.add_row(name, status, detail, info.get("needed_for", ""))
+
+    console.print(table)
+    console.print()
+
+    if all_ok:
+        console.print("[success]All dependencies found![/success]")
+    else:
+        console.print(
+            "[error]Missing dependencies detected.[/error] "
+            "Run the install script for your platform:\n"
+            "  [dim]macOS:[/dim]  ./install_macos.sh\n"
+            "  [dim]Linux:[/dim]  ./install_linux.sh\n"
+            "  [dim]Then:[/dim]   source ~/.local/efishent-deps/activate.sh"
+        )
+    console.print()
+
+
+def print_missing_deps_error(missing: List[str]) -> None:
+    """Print a concise error for missing dependencies during pipeline run."""
+    deps = ", ".join(f"[bold]{d}[/bold]" for d in missing)
+    console.print(
+        Panel(
+            f"[error]Missing required dependencies: {deps}[/error]\n\n"
+            "Run the install script for your platform:\n"
+            "  [dim]macOS:[/dim]  ./install_macos.sh\n"
+            "  [dim]Linux:[/dim]  ./install_linux.sh\n"
+            "  [dim]Then:[/dim]   source ~/.local/efishent-deps/activate.sh\n\n"
+            "Or run [bold]efishent --check[/bold] for a full dependency report.",
+            title="[error]Dependency Error[/error]",
+            border_style="red",
+        )
+    )
 
 
 @contextmanager
