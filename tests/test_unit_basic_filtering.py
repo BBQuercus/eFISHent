@@ -4,9 +4,12 @@ import luigi
 import pytest
 
 from eFISHent.basic_filtering import BasicFiltering
+from eFISHent.basic_filtering import get_dinucleotide_repeat_count
 from eFISHent.basic_filtering import get_g_quadruplet_count
 from eFISHent.basic_filtering import get_gc_content
+from eFISHent.basic_filtering import get_max_homopolymer_run
 from eFISHent.basic_filtering import get_melting_temp
+from eFISHent.basic_filtering import has_low_complexity
 
 
 @pytest.mark.parametrize(
@@ -76,6 +79,8 @@ def test_is_valid(seq, tm, gc, valid):
         max_gc = luigi.FloatParameter(gc[1])
         na_concentration = luigi.IntParameter(390)
         formamide_concentration = luigi.IntParameter(10)
+        max_homopolymer_length = luigi.IntParameter(0)
+        filter_low_complexity = luigi.BoolParameter(False)
 
     assert (
         BasicFiltering().is_candidate_valid(
@@ -83,3 +88,89 @@ def test_is_valid(seq, tm, gc, valid):
         )
         == valid
     )
+
+
+# Low-complexity filter tests
+
+
+@pytest.mark.parametrize(
+    "seq,expected",
+    [
+        (Bio.Seq.Seq("ATCGATCG"), 1),
+        (Bio.Seq.Seq("ATTTTCG"), 4),
+        (Bio.Seq.Seq("AAAAATCG"), 5),
+        (Bio.Seq.Seq("GGGGGGGG"), 8),
+        (Bio.Seq.Seq(""), 0),
+    ],
+)
+def test_max_homopolymer_run(seq, expected):
+    assert get_max_homopolymer_run(seq) == expected
+
+
+@pytest.mark.parametrize(
+    "seq,expected",
+    [
+        (Bio.Seq.Seq("ATCGATCG"), 0),
+        (Bio.Seq.Seq("ATATATATATATAT"), 2),  # AT and TA both repeat
+        (Bio.Seq.Seq("GCGCGCGCGCGC"), 2),  # GC and CG both repeat
+        (Bio.Seq.Seq("ATATATATGCGCGCGC"), 2),  # AT and GC repeat 4+ times
+    ],
+)
+def test_dinucleotide_repeat_count(seq, expected):
+    assert get_dinucleotide_repeat_count(seq) == expected
+
+
+def test_has_low_complexity():
+    assert has_low_complexity(Bio.Seq.Seq("AAAAAAAAAAAAA")) is True
+    assert has_low_complexity(Bio.Seq.Seq("ATCGATCGATCGATCG")) is False
+
+
+def test_is_valid_rejects_homopolymer():
+    """Probe with TTTTT should fail when max_homopolymer_length=5."""
+    class Config(luigi.Config):
+        min_tm = luigi.FloatParameter(0)
+        max_tm = luigi.FloatParameter(100)
+        min_gc = luigi.FloatParameter(0)
+        max_gc = luigi.FloatParameter(100)
+        na_concentration = luigi.IntParameter(390)
+        formamide_concentration = luigi.IntParameter(10)
+        max_homopolymer_length = luigi.IntParameter(5)
+        filter_low_complexity = luigi.BoolParameter(False)
+
+    seq_with_run = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATTTTTCGATCG"), id="seq")
+    assert BasicFiltering().is_candidate_valid(seq_with_run, Config()) is False
+
+    seq_without_run = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCGATCGATCG"), id="seq")
+    assert BasicFiltering().is_candidate_valid(seq_without_run, Config()) is True
+
+
+def test_is_valid_low_complexity_filter():
+    """Low-complexity filter should reject dinucleotide repeats."""
+    class Config(luigi.Config):
+        min_tm = luigi.FloatParameter(0)
+        max_tm = luigi.FloatParameter(100)
+        min_gc = luigi.FloatParameter(0)
+        max_gc = luigi.FloatParameter(100)
+        na_concentration = luigi.IntParameter(390)
+        formamide_concentration = luigi.IntParameter(10)
+        max_homopolymer_length = luigi.IntParameter(0)
+        filter_low_complexity = luigi.BoolParameter(True)
+
+    seq = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATATATATATATAT"), id="seq")
+    assert BasicFiltering().is_candidate_valid(seq, Config()) is False
+
+
+def test_existing_gggg_filter_unchanged():
+    """Regression: GGGG still rejected when max_homopolymer_length=0 (legacy mode)."""
+    class Config(luigi.Config):
+        min_tm = luigi.FloatParameter(0)
+        max_tm = luigi.FloatParameter(100)
+        min_gc = luigi.FloatParameter(0)
+        max_gc = luigi.FloatParameter(100)
+        na_concentration = luigi.IntParameter(390)
+        formamide_concentration = luigi.IntParameter(10)
+        max_homopolymer_length = luigi.IntParameter(0)
+        filter_low_complexity = luigi.BoolParameter(False)
+
+    seq = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("AGGGGGGA"), id="seq")
+    assert BasicFiltering().is_candidate_valid(seq, Config()) is False

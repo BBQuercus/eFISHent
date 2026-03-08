@@ -13,6 +13,9 @@ import pytest
 BOWTIE_AVAILABLE = shutil.which("bowtie") is not None
 BOWTIE_BUILD_AVAILABLE = shutil.which("bowtie-build") is not None
 JELLYFISH_AVAILABLE = shutil.which("jellyfish") is not None
+BOWTIE2_AVAILABLE = shutil.which("bowtie2") is not None
+BOWTIE2_BUILD_AVAILABLE = shutil.which("bowtie2-build") is not None
+BLAST_AVAILABLE = shutil.which("blastn") is not None
 ESEARCH_AVAILABLE = shutil.which("esearch") is not None
 GLPK_AVAILABLE = shutil.which("glpsol") is not None
 
@@ -63,6 +66,12 @@ ESEARCH_WORKS = _esearch_works()
 
 # Integration tests require all core tools
 ALL_TOOLS_AVAILABLE = all([
+    BOWTIE2_AVAILABLE,
+    BOWTIE2_BUILD_AVAILABLE,
+    JELLYFISH_AVAILABLE,
+])
+
+LEGACY_TOOLS_AVAILABLE = all([
     BOWTIE_AVAILABLE,
     BOWTIE_BUILD_AVAILABLE,
     JELLYFISH_AVAILABLE,
@@ -72,6 +81,7 @@ ALL_TOOLS_AVAILABLE = all([
 def pytest_sessionstart(session):
     """Delete old files in case of rerun."""
     files = glob.glob("./*/sacCer3*.ebwt")
+    files.extend(glob.glob("./*/sacCer3*.bt2"))
     files.extend(glob.glob("./*/sacCer3*.jf"))
     files.extend(glob.glob("./*/Saccharomyces*"))
     files.extend(glob.glob("./*/YKL185W_*.jf"))
@@ -248,6 +258,64 @@ def test_analyze():
     fname = "./aad4_subset_analysis.pdf"
     assert os.path.exists(fname)
     os.remove(fname)
+
+
+@pytest.mark.skipif(not LEGACY_TOOLS_AVAILABLE, reason="bowtie/bowtie-build/jellyfish not installed")
+def test_backward_compat_bowtie1():
+    """Running with --aligner bowtie produces output (legacy mode)."""
+    args = [
+        "efishent",
+        "--reference-genome",
+        "./tests/data/sacCer3.fa",
+        "--sequence-file",
+        "./tests/data/renilla.fasta",
+        "--is-endogenous",
+        "False",
+        "--aligner",
+        "bowtie",
+        "--min-length",
+        "20",
+        "--max-length",
+        "24",
+        "--min-tm",
+        "45",
+        "--max-tm",
+        "55",
+        "--debug",
+    ]
+    subprocess.run(args, check=True)
+    csv_files = sorted(glob.glob("./renilla_*.csv"))
+    assert len(csv_files) >= 1
+    [os.remove(f) for f in glob.glob("./renilla_*")]  # type: ignore
+
+
+@pytest.mark.skipif(not ALL_TOOLS_AVAILABLE, reason="bowtie2/bowtie2-build/jellyfish not installed")
+def test_low_complexity_filters_active():
+    """Pipeline with --max-homopolymer-length 4 should complete."""
+    args = [
+        "efishent",
+        "--reference-genome",
+        "./tests/data/sacCer3.fa",
+        "--sequence-file",
+        "./tests/data/renilla.fasta",
+        "--is-endogenous",
+        "False",
+        "--max-homopolymer-length",
+        "4",
+        "--min-length",
+        "20",
+        "--max-length",
+        "24",
+        "--min-tm",
+        "45",
+        "--max-tm",
+        "55",
+        "--debug",
+    ]
+    subprocess.run(args, check=True)
+    csv_files = sorted(glob.glob("./renilla_*.csv"))
+    assert len(csv_files) >= 1
+    [os.remove(f) for f in glob.glob("./renilla_*")]  # type: ignore
 
 
 def test_error():
