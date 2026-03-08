@@ -28,7 +28,7 @@ from .util import UniCode
 if TYPE_CHECKING:
     from .analyze import AnalyzeProbeset
     from .cleanup import CleanUpOutput
-    from .indexing import BuildBowtieIndex
+    from .indexing import BuildBowtieIndex, BuildBowtie2Index
     from .kmers import BuildJellyfishIndex
 
 
@@ -144,6 +144,7 @@ PARAM_VALIDATORS = {
     # File validators
     "reference_genome": existing_fasta_file,
     "reference_annotation": existing_gtf_file,
+    "reference_transcriptome": existing_fasta_file,
     "sequence_file": existing_fasta_file,
     "encode_count_table": existing_count_table,
     "analyze_probeset": existing_fasta_file,
@@ -153,16 +154,19 @@ PARAM_VALIDATORS = {
     "max_length": positive_int,
     "kmer_length": positive_int,
     "max_kmers": positive_int,
+    "max_homopolymer_length": non_negative_int,
     "optimization_time_limit": positive_int,
     # Non-negative integers
     "spacing": non_negative_int,
     "max_off_targets": non_negative_int,
+    "max_transcriptome_off_targets": non_negative_int,
     "sequence_similarity": non_negative_int,
     # Percentages
     "min_gc": percentage,
     "max_gc": percentage,
     "formamide_concentration": percentage,
     "max_expression_percentage": percentage,
+    "blast_identity_threshold": percentage,
 }
 
 # Metavar hints for cleaner help output
@@ -194,6 +198,12 @@ PARAM_METAVAR = {
     "organism_name": "NAME",
     "ensembl_id": "ID",
     "optimization_method": "METHOD",
+    "aligner": "ALIGNER",
+    "max_homopolymer_length": "N",
+    "max_transcriptome_off_targets": "N",
+    "blast_identity_threshold": "%",
+    "reference_transcriptome": "FILE",
+    "filter_low_complexity": "yes/no",
     # Boolean parameters - show yes/no
     "build_indices": "yes/no",
     "save_intermediates": "yes/no",
@@ -241,6 +251,11 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
         "--check",
         action="store_true",
         help="Check if all external dependencies are installed and exit.",
+    )
+    utility.add_argument(
+        "--update",
+        action="store_true",
+        help="Update eFISHent to the latest version.",
     )
     utility.add_argument(
         "--preset",
@@ -292,6 +307,10 @@ def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> No
         if name == "optimization_method":
             kwargs["choices"] = ["greedy", "optimal"]
             kwargs["type"] = str  # Override type when using choices
+
+        if name == "aligner":
+            kwargs["choices"] = ["bowtie", "bowtie2"]
+            kwargs["type"] = str
 
         group.add_argument(
             f"-{CLI_SHORTFORM.get(name)}",
@@ -480,11 +499,19 @@ def _get_tool_version(name: str, args: list, pattern: str = r"[0-9]+\.[0-9]+\.?[
 DEPENDENCIES = {
     "bowtie": {
         "version_args": ["bowtie", "--version"],
-        "needed_for": "probe alignment",
+        "needed_for": "probe alignment (legacy aligner)",
+    },
+    "bowtie2": {
+        "version_args": ["bowtie2", "--version"],
+        "needed_for": "probe alignment (default aligner)",
     },
     "jellyfish": {
         "version_args": ["jellyfish", "--version"],
         "needed_for": "k-mer counting",
+    },
+    "blastn": {
+        "version_args": ["blastn", "-version"],
+        "needed_for": "transcriptome off-target filtering (optional)",
     },
     "glpsol": {
         "version_args": ["glpsol", "--version"],
@@ -547,8 +574,16 @@ def check_required_dependencies(args: argparse.Namespace) -> List[str]:
 
     Returns list of missing dependency names (empty = all good).
     """
-    # Always required
-    required = ["bowtie", "jellyfish"]
+    # Aligner depends on --aligner setting
+    aligner = getattr(args, "aligner", "bowtie2")
+    if aligner == "bowtie2":
+        required = ["bowtie2", "jellyfish"]
+    else:
+        required = ["bowtie", "jellyfish"]
+
+    # BLAST required if transcriptome filtering is enabled
+    if getattr(args, "reference_transcriptome", ""):
+        required.append("blastn")
 
     # Fold is required for the full pipeline (not for index building)
     if not args.build_indices:
@@ -614,9 +649,13 @@ def _parse_args() -> argparse.Namespace:
     except Exception as e:
         print(e)
 
-    # Handle --check before full validation (doesn't need other args)
+    # Handle --check/--update before full validation (doesn't need other args)
     if "--check" in sys.argv:
         args = argparse.Namespace(check=True)
+        return args
+
+    if "--update" in sys.argv:
+        args = argparse.Namespace(update=True)
         return args
 
     # Handle --preset list before full parsing
@@ -714,6 +753,98 @@ def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
     return logger
 
 
+def self_update() -> None:
+    """Update eFISHent and its dependencies to the latest version."""
+    python = sys.executable
+    current_version = __version__
+    install_script_url = (
+        "https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh"
+    )
+
+    print(f"Current version: {current_version}")
+
+    # Step 1: Update the Python package
+    print("\nUpdating eFISHent package...")
+    if shutil.which("uv"):
+        cmd = ["uv", "pip", "install", "--python", python, "--upgrade", "efishent"]
+    else:
+        cmd = [python, "-m", "pip", "install", "--upgrade", "efishent"]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            print(f"Package update failed:\n{result.stderr.strip()}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"Package update failed: {e}")
+        sys.exit(1)
+
+    # Check new version
+    try:
+        new_version_result = subprocess.run(
+            [python, "-c", "from eFISHent import __version__; print(__version__)"],
+            capture_output=True, text=True, timeout=10,
+        )
+        new_version = new_version_result.stdout.strip()
+    except Exception:
+        new_version = "unknown"
+
+    if new_version == current_version:
+        print(f"Already up to date (v{current_version}).")
+    else:
+        print(f"Updated: v{current_version} -> v{new_version}")
+
+    # Step 2: Update dependencies via install.sh
+    print("\nChecking dependencies...")
+    default_prefix = Path.home() / ".local" / "efishent"
+
+    if default_prefix.is_dir():
+        # Re-run install.sh with --deps-only to update/verify deps
+        dl_cmd = None
+        if shutil.which("curl"):
+            dl_cmd = ["curl", "-fsSL", install_script_url]
+        elif shutil.which("wget"):
+            dl_cmd = ["wget", "-qO-", install_script_url]
+
+        if dl_cmd:
+            try:
+                dl_result = subprocess.run(dl_cmd, capture_output=True, text=True, timeout=30)
+                if dl_result.returncode == 0:
+                    result = subprocess.run(
+                        ["sh", "-s", "--", "--deps-only", "--no-modify-rc",
+                         "--prefix", str(default_prefix)],
+                        input=dl_result.stdout, text=True, timeout=600,
+                    )
+                    if result.returncode != 0:
+                        print("Warning: dependency update had issues.")
+                else:
+                    print("Warning: could not download install script.")
+            except Exception as e:
+                print(f"Warning: dependency update skipped ({e})")
+        else:
+            print("Warning: neither curl nor wget found, skipping dependency update.")
+    else:
+        print(f"No install directory at {default_prefix}, skipping dependency update.")
+        print("Run the full installer to set up dependencies:")
+        print(f"  curl -LsSf {install_script_url} | sh")
+
+    # Step 3: Verify dependencies
+    print()
+    _ensure_deps_on_path()
+    results = check_all_dependencies()
+    all_found = all(r["found"] for r in results.values())
+    for name, info in results.items():
+        if info["found"]:
+            version = info.get("version", "")
+            print(f"  OK  {name}: {version}")
+        else:
+            print(f"  MISS {name}: not found ({info['needed_for']})")
+
+    if not all_found:
+        print("\nSome dependencies are missing. Run the full installer:")
+        print(f"  curl -LsSf {install_script_url} | sh")
+
+
 def format_duration(seconds: float) -> str:
     """Format duration in human-readable format."""
     if seconds < 60:
@@ -752,6 +883,11 @@ def main():
         print_dependency_check(results)
         sys.exit(0 if all(r["found"] for r in results.values()) else 1)
 
+    # Handle --update: self-update and exit
+    if getattr(args, "update", False):
+        self_update()
+        sys.exit(0)
+
     logger = set_logging_level(args.silent, args.debug)
 
     # Print header banner
@@ -784,7 +920,7 @@ def main():
     # Lazy imports - only load heavy modules after arg parsing
     from .analyze import AnalyzeProbeset
     from .cleanup import CleanUpOutput
-    from .indexing import BuildBowtieIndex
+    from .indexing import BuildBowtieIndex, BuildBowtie2Index
     from .kmers import BuildJellyfishIndex
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -794,7 +930,11 @@ def main():
 
         tasks: List[luigi.Task] = []
         if args.build_indices:
-            tasks = [BuildJellyfishIndex(), BuildBowtieIndex()]
+            if args.aligner == "bowtie2":
+                index_task = BuildBowtie2Index()
+            else:
+                index_task = BuildBowtieIndex()
+            tasks = [BuildJellyfishIndex(), index_task]
         elif args.analyze_probeset:
             tasks = [AnalyzeProbeset()]
         else:
