@@ -136,34 +136,39 @@ def print_completion(
     # 3. Summary stats
     if summary:
         renderables.append(Text(""))
-        summary_lines = []
+        stats_table = Table(
+            show_header=False, box=None, padding=(0, 1), show_edge=False
+        )
+        stats_table.add_column("Label", style="bold", no_wrap=True)
+        stats_table.add_column("Value")
+
         if summary.get("gene_name"):
-            summary_lines.append(f"  [bold]Gene:[/bold]      {summary['gene_name']}")
+            stats_table.add_row("Gene:", summary["gene_name"])
         if summary.get("probe_count") is not None:
             count_str = f"{summary['probe_count']}"
             if summary.get("initial_count"):
                 count_str += f" selected from {summary['initial_count']:,} candidates"
-            summary_lines.append(f"  [bold]Probes:[/bold]    {count_str}")
+            stats_table.add_row("Probes:", count_str)
         if summary.get("coverage_pct") is not None:
-            summary_lines.append(
-                f"  [bold]Coverage:[/bold]  {summary['coverage_pct']:.1f}% of gene sequence"
+            stats_table.add_row(
+                "Coverage:", f"{summary['coverage_pct']:.1f}% of gene sequence"
             )
         if summary.get("length_range"):
             lo, hi = summary["length_range"]
             med = summary.get("length_median", "")
             med_str = f" (median {med})" if med else ""
-            summary_lines.append(f"  [bold]Length:[/bold]    {lo}-{hi} nt{med_str}")
+            stats_table.add_row("Length:", f"{lo}-{hi} nt{med_str}")
         if summary.get("tm_range"):
             lo, hi = summary["tm_range"]
             med = summary.get("tm_median", "")
             med_str = f" (median {med:.1f}\u00b0C)" if med else ""
-            summary_lines.append(f"  [bold]TM range:[/bold]  {lo:.1f}-{hi:.1f}\u00b0C{med_str}")
+            stats_table.add_row("TM range:", f"{lo:.1f}-{hi:.1f}\u00b0C{med_str}")
         if summary.get("gc_range"):
             lo, hi = summary["gc_range"]
             med = summary.get("gc_median", "")
             med_str = f" (median {med:.1f}%)" if med else ""
-            summary_lines.append(f"  [bold]GC range:[/bold]  {lo:.1f}-{hi:.1f}%{med_str}")
-        renderables.append(Text.from_markup("\n".join(summary_lines)))
+            stats_table.add_row("GC range:", f"{lo:.1f}-{hi:.1f}%{med_str}")
+        renderables.append(stats_table)
 
     # 4. Output files
     if output_files:
@@ -217,12 +222,13 @@ def _build_funnel_table() -> Optional[Table]:
     bar_width = 24
 
     table = Table(
-        show_header=False, box=None, padding=(0, 1), show_edge=False
+        show_header=False, box=None, padding=(0, 1), show_edge=False,
+        expand=False,
     )
-    table.add_column("Stage", style="dim", width=20, no_wrap=True)
-    table.add_column("Bar", width=bar_width, no_wrap=True)
-    table.add_column("Count", justify="right", width=7, no_wrap=True)
-    table.add_column("Drop", width=10, no_wrap=True)
+    table.add_column("Stage", style="dim", min_width=20, no_wrap=True)
+    table.add_column("Bar", min_width=bar_width, no_wrap=True)
+    table.add_column("Count", justify="right", min_width=7, no_wrap=True)
+    table.add_column("Drop", min_width=8, no_wrap=True)
 
     for i, (stage_name, count) in enumerate(stages):
         filled = max(1, round(count / max_count * bar_width)) if max_count > 0 else 0
