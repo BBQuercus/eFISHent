@@ -229,16 +229,27 @@ def print_stage(order: int, total: int, description: str) -> None:
     _current_stage = order
     _total_stages = total
 
+    # Include candidate count from previous stage if available
+    count_str = ""
+    if _funnel_data:
+        last_count = _funnel_data[-1][1]
+        count_str = f" [dim]({last_count:,} probes)[/dim]"
+
     # Print a clear stage header
     console.print()
-    console.print(f"[stage]Step {order}/{total}:[/stage] [current]{description}[/current]")
+    console.print(
+        f"[stage]Step {order}/{total}:[/stage] [current]{description}[/current]{count_str}"
+    )
 
     # Update progress bar if active
     if _pipeline_progress is not None and _pipeline_task_id is not None:
+        progress_desc = f"Step {order}/{total}: {description}"
+        if _funnel_data:
+            progress_desc += f" ({_funnel_data[-1][1]:,} probes)"
         _pipeline_progress.update(
             _pipeline_task_id,
-            completed=order - 1,  # Progress shows completed stages
-            description=f"Running step {order}/{total}...",
+            completed=order - 1,
+            description=progress_desc,
         )
 
 
@@ -260,7 +271,7 @@ def print_candidate_count(name: str, count: int, count_prev: int = 0) -> None:
         _pipeline_progress.update(
             _pipeline_task_id,
             completed=_current_stage,
-            description=f"Completed step {_current_stage}/{_total_stages}",
+            description=f"Step {_current_stage}/{_total_stages} \u2714 {count:,} probes remaining",
         )
 
 
