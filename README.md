@@ -47,7 +47,7 @@ curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh 
 ```
 
 This will:
-1. Download pre-compiled binaries for bowtie, jellyfish, GLPK, and Entrez Direct
+1. Download pre-compiled binaries for bowtie2, bowtie, jellyfish, BLAST+, GLPK, and Entrez Direct
 2. Install Python and the eFISHent package in an isolated environment
 3. Create an `efishent` command that works without any activation
 
@@ -136,15 +136,39 @@ For some of the steps described below, you'll need to provide a few key resource
 eFISHent works by iteratively selecting probes passing various filtering steps as outlined below:
 
 1. A list of all candidate probes is generated from an input FASTA file containing the gene sequence. This sequence file can be passed manually or downloaded automatically from NCBI when providing a gene and species name.
-2. The first round of filtering removes any probes not passing basic sequence-specific criteria including melting temperature as given formamide and salt concentrations, GC content, and G-quadruplets.
-3. Probes are aligned to the reference genome using bowtie and candidates with off-targets are removed. In case of shorter genes or if off-targets are unavoidable, off-targets can be weighted using an encode count table to remove highly expressed genes.
-4. The targets are divided into short k-mers and discarded if they appear above a determined threshold in the reference genome using Jellyfish.
-5. The secondary structure of each candidate is predicted using a nearest neighbor thermodynamic model and filtered if the free energy is too high which could result in motifs hindering hybridization.
-6. This gives the set of all viable candidates which are still overlapping. The final step is to use mathematical or greedy optimization to maximize probe non-overlapping coverage across the gene sequence.
+2. The first round of filtering removes any probes not passing basic sequence-specific criteria including melting temperature (adjusted for formamide and salt concentrations), GC content, G-quadruplets, homopolymer runs (e.g., AAAAA), and optionally low-complexity regions (dinucleotide repeats, low Shannon entropy).
+3. Probes are aligned to the reference genome using Bowtie2 (default, with OligoMiner/Tigerfish parameters for sensitive local alignment) or Bowtie (legacy). Candidates with off-targets are removed. Several optional filters can refine off-target counting:
+   - **Repeat masking** (`--mask-repeats`): ignores off-target hits in repetitive/low-complexity regions identified by dustmasker
+   - **Intergenic filtering** (`--intergenic-off-targets`): ignores off-target hits outside annotated genes (requires `--reference-annotation`)
+   - **Thermodynamic scoring** (`--off-target-min-tm`): rescues probes whose off-target hits have predicted Tm below the hybridization temperature
+   - **Expression weighting**: removes probes hitting highly expressed genes (requires count table)
+4. If a reference transcriptome is provided, probes are BLASTed against expressed transcripts (using TrueProbes parameters) to catch off-target binding that genome alignment alone may miss — e.g., hits to processed mRNAs or splice junctions.
+5. The targets are divided into short k-mers and discarded if they appear above a determined threshold in the reference genome using Jellyfish.
+6. The secondary structure of each candidate is predicted using a nearest neighbor thermodynamic model and filtered if the free energy is too low (too stable), which could result in motifs hindering hybridization.
+7. This gives the set of all viable candidates which are still overlapping. The final step is to use mathematical or greedy optimization to maximize probe non-overlapping coverage across the gene sequence. A gap-filling pass then attempts to place additional probes in any remaining uncovered regions.
 
-<p align="center">
-  <img src="https://github.com/BBQuercus/eFISHent/raw/main/workflow.png" width="500" />
-</p>
+```mermaid
+flowchart TD
+    A["🧬 Gene Sequence<br/><i>FASTA file or NCBI download</i>"] --> B["Generate Candidate Probes<br/><i>Sliding window (min/max length)</i>"]
+
+    B --> C["Basic Filtering<br/><i>TM, GC, homopolymers, low-complexity</i>"]
+
+    C --> D["Genome Alignment<br/><i>Bowtie2 (default) or Bowtie</i><br/><i>+ repeat masking, intergenic, Tm scoring</i>"]
+
+    D --> E{"Transcriptome<br/>provided?"}
+    E -- Yes --> F["Transcriptome BLAST<br/><i>Off-target detection (TrueProbes params)</i>"]
+    E -- No --> G["K-mer Filtering<br/><i>Jellyfish frequency count</i>"]
+    F --> G
+
+    G --> H["Secondary Structure<br/><i>ΔG prediction (RNAstructure)</i>"]
+
+    H --> I["Coverage Optimization<br/><i>Greedy or optimal (MILP) + gap filling</i>"]
+
+    I --> J["🎯 Final Probe Set"]
+
+    style A fill:#e1f5fe
+    style J fill:#e8f5e9
+```
 
 ## Usage
 
@@ -181,14 +205,32 @@ There are two ways in which the final set of probe candidates that passed filter
 
 ### Off-Target Handling
 
-To minimize the effect of off-targets, you can employ one of two strategies:
+eFISHent provides multiple layers of off-target detection. These can be combined for maximum specificity:
 
-**Off-target minimization** - Using the maximum off-target flag, you can specify the maximum number of off-target bindings in the genome. By default this is set to zero meaning there aren't any known off-targets. However, for shorter or more repetitive genes, this might pose an issue which is why you can also use...
+**Genome alignment** (default) - Probes are aligned to the reference genome using Bowtie2 (sensitive local alignment with OligoMiner/Tigerfish parameters) or Bowtie (legacy). Use `--max-off-targets` to set the maximum allowed genome hits (default: 0). Use `--aligner bowtie` to fall back to the legacy aligner.
 
-**Off-target weighting** - If off-targets are unavoidable, you can provide three parameters to select how high their expression is allowed to get:
+**Transcriptome BLAST** (optional) - Probes are BLASTed against a reference transcriptome to catch off-target binding to expressed transcripts that genome alignment alone may miss (e.g., hits spanning splice junctions). BLAST parameters are derived from TrueProbes (Neuert Lab). Enable by providing:
+
+* `--reference-transcriptome` - A FASTA file of expressed transcripts (generate from genome + GTF using [gffread](https://github.com/gpertea/gffread): `gffread annotation.gtf -g genome.fa -w transcriptome.fa`)
+* `--max-transcriptome-off-targets` - Maximum transcriptome hits per probe (default: 0)
+* `--blast-identity-threshold` - Minimum % identity for a BLAST hit to count (default: 75)
+
+**Repeat masking** (optional) - Ignores off-target hits landing in repetitive/low-complexity regions (Alu, LINE, SINE elements, etc.). Uses dustmasker from BLAST+ to identify repeats. This is often the biggest win for rescuing probes — 30–50% of spurious off-target hits can be in repeats:
+
+* `--mask-repeats` - Enable repeat-masked off-target filtering (default: no)
+
+**Intergenic off-target filtering** (optional) - Ignores off-target hits that don't overlap any annotated gene. For RNA FISH, intergenic regions don't produce transcripts the probe could bind:
+
+* `--intergenic-off-targets` - Enable intergenic filtering (default: no, requires `--reference-annotation`)
+
+**Thermodynamic off-target scoring** (optional) - Rescues probes whose off-target hits are thermodynamically unstable. Computes predicted Tm for each off-target alignment using the nearest-neighbor model; hits with Tm below the threshold are ignored:
+
+* `--off-target-min-tm` - Minimum Tm (°C) for an off-target to count. Recommended: set to your hybridization temperature (e.g., 37). Set to 0 to disable (default: 0)
+
+**Expression-weighted filtering** (optional) - If genome off-targets are unavoidable, you can weight them by expression level to remove probes hitting highly expressed genes:
 
 * `--reference-annotation` - A GTF genome annotation file to know which genes correspond to which genomic loci
-* `--encode-count-table` - A `csv` or `tsv` file with any normalized RNA-seq count table format (FPKM, FPKM, TPM, etc.) as well as the encode ID matching the entries in the GTF file
+* `--encode-count-table` - A `csv` or `tsv` file with any normalized RNA-seq count table format (FPKM, TPM, etc.) as well as the Ensembl ID matching the entries in the GTF file
 * `--max-expression-percentage` - The percentage of genes to be excluded sorted based on expression level (using the provided count table)
 
 If you don't have your own RNA-seq dataset, you can download available datasets (make sure you're not using raw, but only normalized counts!) at [Gene Expression Omnibus](https://www.ncbi.nlm.nih.gov/geo/). Search for `RNA-seq` and the name of your organism/cell line.
@@ -205,9 +247,15 @@ There are a bunch of parameters that can be set to adjust filtering steps:
 | `--min-gc`, `--max-gc` | GC content in percentage |
 | `--formamide-concentration` | Percentage of formamide in buffer |
 | `--na-concentration` | Sodium ion concentration in mM |
+| `--max-homopolymer-length` | Maximum homopolymer run length (e.g., AAAAA). Default: 5 (matches OligoMiner). Set to 0 to disable |
+| `--filter-low-complexity` | Filter probes with dinucleotide repeats or low Shannon entropy regions |
+| `--aligner` | Alignment tool: `bowtie2` (default, OligoMiner/Tigerfish params) or `bowtie` (legacy) |
 | `--kmer-length`, `--max-kmers` | Jellyfish-based short-mer filtering. If candidate probes contain kmers of length `--kmer-length` that are found more than `--max-kmers` in the reference genome, the candidate will get discarded |
 | `--max-deltag` | Predicted secondary structure threshold |
-| `--sequence-similarity` | Will remove probes that might potentially bind to each other (set the similarity to the highest allowed binding percentage). Will reduce the number of probes because (due to otherwise exceptionally high runtimes) has to be run after optimization |
+| `--sequence-similarity` | Will remove probes that might potentially bind to each other (set the similarity to the highest allowed binding percentage). Will reduce the number of probes because (due to otherwise exceptionally high runtimes) has to be run after optimization. Recommended: 75-85 for stringent designs |
+| `--off-target-min-tm` | Minimum predicted Tm (°C) for an off-target to count as significant. Set to hybridization temperature to rescue probes with thermodynamically unstable off-targets. Default: 0 (disabled) |
+| `--mask-repeats` | Ignore off-target hits in repetitive/low-complexity regions (uses dustmasker from BLAST+) |
+| `--intergenic-off-targets` | Ignore off-target hits outside annotated genes (requires `--reference-annotation`) |
 
 ### Remaining Options
 
@@ -305,6 +353,19 @@ eFISHent \
     --max-off-targets 5 \
     --encode-count-table ./count_table.tsv \
     --max-expression-percentage 20 \
+    --threads 8
+```
+
+An example using advanced off-target filtering for maximum probe yield:
+
+```bash
+eFISHent \
+    --reference-genome ./hg-38.fa \
+    --reference-annotation ./hg-38.gtf \
+    --sequence-file ./my_gene.fasta \
+    --mask-repeats True \
+    --intergenic-off-targets True \
+    --off-target-min-tm 37 \
     --threads 8
 ```
 

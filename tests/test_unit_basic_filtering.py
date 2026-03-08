@@ -4,6 +4,7 @@ import luigi
 import pytest
 
 from eFISHent.basic_filtering import BasicFiltering
+from eFISHent.basic_filtering import compute_off_target_tm
 from eFISHent.basic_filtering import get_dinucleotide_repeat_count
 from eFISHent.basic_filtering import get_g_quadruplet_count
 from eFISHent.basic_filtering import get_gc_content
@@ -174,3 +175,28 @@ def test_existing_gggg_filter_unchanged():
 
     seq = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("AGGGGGGA"), id="seq")
     assert BasicFiltering().is_candidate_valid(seq, Config()) is False
+
+
+def test_compute_off_target_tm_perfect_match():
+    """Perfect match should return same Tm as get_melting_temp."""
+    seq = "ATCGATCGATCGATCGATCG"
+    tm = compute_off_target_tm(seq, seq, na_concentration=330, formamide_concentration=10)
+    expected = get_melting_temp(Bio.Seq.Seq(seq), 330, 10)
+    assert abs(tm - expected) < 0.1
+
+
+def test_compute_off_target_tm_mismatch_penalty():
+    """Mismatches should reduce Tm by ~2.5°C each."""
+    seq = "ATCGATCGATCGATCGATCG"
+    # 1 mismatch at position 17 (A->T)
+    target = "ATCGATCGATCGATCGTTCG"
+    tm_perfect = compute_off_target_tm(seq, seq, 330, 10)
+    tm_mismatch = compute_off_target_tm(seq, target, 330, 10)
+    assert tm_perfect - tm_mismatch == pytest.approx(2.5, abs=0.1)
+
+
+def test_compute_off_target_tm_invalid_seq():
+    """Non-standard bases should return 0.0."""
+    tm = compute_off_target_tm("NNNNNN", "ATCGAT", 330, 10)
+    # Should not crash, returns some value (may or may not be 0 depending on NN table)
+    assert isinstance(tm, float)

@@ -329,20 +329,24 @@ def _build_coverage_map(
             text.append("\u2591", style="dim")
     text.append(" 3\u2032\n", style="dim")
 
-    # Scale line with position markers
-    scale = [" "] * bar_width
+    # Scale line with position markers at 0%, 25%, 50%, 75%, 100%
+    # Use a wider buffer to avoid truncation at the right edge
+    scale_width = bar_width + 10
+    scale = [" "] * scale_width
     markers = [
         (0, "0"),
         (bar_width // 4, str(gene_length // 4)),
         (bar_width // 2, str(gene_length // 2)),
         (3 * bar_width // 4, str(3 * gene_length // 4)),
-        (bar_width - 1, str(gene_length)),
     ]
+    # Right-align the last label so it doesn't overflow
+    last_label = str(gene_length)
+    markers.append((bar_width - len(last_label), last_label))
+
     for pos, label in markers:
-        # Place label at position, avoiding overlap
         for j, ch in enumerate(label):
             idx = pos + j
-            if 0 <= idx < bar_width:
+            if 0 <= idx < scale_width:
                 scale[idx] = ch
 
     text.append("     " + "".join(scale).rstrip(), style="dim")

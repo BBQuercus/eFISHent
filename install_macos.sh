@@ -33,7 +33,7 @@ cd "${INSTALL_DIR}"
 
 # 1. Bowtie (pre-compiled)
 echo ""
-echo "[1/4] Installing Bowtie..."
+echo "[1/6] Installing Bowtie..."
 if [ ! -f "${BIN_DIR}/bowtie" ]; then
     curl -sL "https://sourceforge.net/projects/bowtie-bio/files/bowtie/1.3.1/bowtie-1.3.1-macos-x86_64.zip/download" -o bowtie.zip
     unzip -q bowtie.zip
@@ -46,9 +46,23 @@ else
     echo "  Bowtie already installed"
 fi
 
-# 2. Jellyfish (compile from source)
+# 2. Bowtie2 (pre-compiled)
 echo ""
-echo "[2/4] Installing Jellyfish..."
+echo "[2/6] Installing Bowtie2..."
+if [ ! -f "${BIN_DIR}/bowtie2" ]; then
+    curl -sL "https://sourceforge.net/projects/bowtie-bio/files/bowtie2/2.5.4/bowtie2-2.5.4-macos-x86_64.zip/download" -o bowtie2.zip
+    unzip -q bowtie2.zip
+    cp bowtie2-2.5.4-macos-x86_64/bowtie2* "${BIN_DIR}/"
+    rm -rf bowtie2.zip bowtie2-2.5.4-macos-x86_64
+    xattr -dr com.apple.quarantine "${BIN_DIR}/bowtie2"* 2>/dev/null || true
+    echo "  Bowtie2 installed successfully"
+else
+    echo "  Bowtie2 already installed"
+fi
+
+# 3. Jellyfish (compile from source)
+echo ""
+echo "[3/6] Installing Jellyfish..."
 if [ ! -f "${BIN_DIR}/jellyfish" ]; then
     echo "  Downloading and compiling (this may take a minute)..."
     curl -sL "https://github.com/gmarcais/Jellyfish/releases/download/v2.3.1/jellyfish-2.3.1.tar.gz" -o jellyfish.tar.gz
@@ -64,9 +78,9 @@ else
     echo "  Jellyfish already installed"
 fi
 
-# 3. GLPK (compile from source - needed for pyomo solver)
+# 4. GLPK (compile from source - needed for pyomo solver)
 echo ""
-echo "[3/4] Installing GLPK..."
+echo "[4/6] Installing GLPK..."
 if [ ! -f "${BIN_DIR}/glpsol" ]; then
     echo "  Downloading and compiling (this may take a minute)..."
     curl -sL "https://ftp.gnu.org/gnu/glpk/glpk-5.0.tar.gz" -o glpk.tar.gz
@@ -82,9 +96,22 @@ else
     echo "  GLPK already installed"
 fi
 
-# 4. Entrez Direct (official installer)
+# 5. BLAST+ (pre-compiled)
 echo ""
-echo "[4/4] Installing Entrez Direct..."
+echo "[5/6] Installing BLAST+..."
+if [ ! -f "${BIN_DIR}/blastn" ]; then
+    curl -sL "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-${ARCH_SUFFIX}-macosx.tar.gz" -o blast.tar.gz
+    tar -xzf blast.tar.gz
+    cp ncbi-blast-*/bin/blastn ncbi-blast-*/bin/makeblastdb "${BIN_DIR}/"
+    rm -rf blast.tar.gz ncbi-blast-*
+    echo "  BLAST+ installed successfully"
+else
+    echo "  BLAST+ already installed"
+fi
+
+# 6. Entrez Direct (official installer)
+echo ""
+echo "[6/6] Installing Entrez Direct..."
 if [ ! -f "${EDIRECT_DIR}/esearch" ]; then
     echo "  Downloading and setting up..."
     mkdir -p "${EDIRECT_DIR}"
@@ -117,7 +144,9 @@ echo "=================================================="
 echo "Installation complete! Installed versions:"
 echo ""
 echo "  bowtie:      $(bowtie --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+echo "  bowtie2:     $(bowtie2 --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 echo "  jellyfish:   $(jellyfish --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+echo "  blastn:      $(blastn -version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 echo "  glpsol:      $(glpsol --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+')"
 echo "  edirect:     $(esearch -version 2>&1 | head -1)"
 echo "  Fold:        bundled with eFISHent"

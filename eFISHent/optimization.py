@@ -122,6 +122,9 @@ class OptimizeProbeCoverage(luigi.Task):
             match_percentage = ProbeConfig().sequence_similarity / 100
             assigned = self.filter_binding_probes(assigned, match_percentage)
 
+        # Try to fill coverage gaps with unassigned probes
+        assigned = fill_coverage_gaps(self.df, assigned, ProbeConfig().spacing)
+
         visualize_assignment(self.df, assigned, self.output()["coverage"].path)
 
         candidates = [sequence for sequence in sequences if sequence.id in assigned]
@@ -232,6 +235,68 @@ def optimal_model(df: pd.DataFrame, time_limit: int) -> List[str]:
 
     assigned = [name for name, assign in model.assign.get_values().items() if assign]
     return assigned
+
+
+def fill_coverage_gaps(
+    df: pd.DataFrame, assigned: List[str], spacing: int
+) -> List[str]:
+    """Fill large coverage gaps with unassigned probes.
+
+    After greedy/optimal assignment, there may be uncovered regions where no
+    assigned probe lands. This function identifies gaps and tries to place
+    the longest available unassigned probe in each gap.
+    """
+    if not assigned or len(df) == len(assigned):
+        return assigned
+
+    assigned_set = set(assigned)
+    assigned_df = df[df["name"].isin(assigned_set)].sort_values("start")
+    unassigned_df = df[~df["name"].isin(assigned_set)]
+
+    if unassigned_df.empty:
+        return assigned
+
+    # Find gaps between consecutive assigned probes
+    gaps = []
+    prev_end = assigned_df.iloc[0]["end"]
+    for _, row in assigned_df.iloc[1:].iterrows():
+        gap_size = row["start"] - prev_end
+        if gap_size > spacing:
+            gaps.append((prev_end, row["start"]))
+        prev_end = max(prev_end, row["end"])
+
+    if not gaps:
+        return assigned
+
+    # For each gap, find the best unassigned probe that fits
+    new_assigned = list(assigned)
+    new_assigned_set = set(assigned)
+
+    for gap_start, gap_end in gaps:
+        # Find unassigned probes that fall within this gap
+        candidates = unassigned_df[
+            (unassigned_df["start"] >= gap_start)
+            & (unassigned_df["end"] <= gap_end)
+        ]
+        if candidates.empty:
+            continue
+
+        # Pick the longest probe (most coverage)
+        best = candidates.loc[candidates["length"].idxmax()]
+
+        # Verify no overlap with any assigned probe
+        overlaps = any(
+            is_overlapping(
+                (best["start"], best["end"]),
+                (row["start"], row["end"]),
+            )
+            for _, row in df[df["name"].isin(new_assigned_set)].iterrows()
+        )
+        if not overlaps:
+            new_assigned.append(best["name"])
+            new_assigned_set.add(best["name"])
+
+    return new_assigned
 
 
 def visualize_assignment(df: pd.DataFrame, assigned: List[str], filename: str) -> None:

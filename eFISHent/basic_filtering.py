@@ -94,6 +94,42 @@ def has_low_complexity(
     return False
 
 
+def compute_off_target_tm(
+    probe_seq: str,
+    target_seq: str,
+    na_concentration: float,
+    formamide_concentration: float,
+) -> float:
+    """Estimate Tm for a probe binding to an off-target genomic sequence.
+
+    Computes perfect-match RNA/DNA hybrid Tm using nearest-neighbor model,
+    then subtracts ~2.5°C per mismatch (empirical penalty from SantaLucia 1998).
+    Returns 0.0 on any error (e.g. non-standard bases).
+    """
+    min_len = min(len(probe_seq), len(target_seq))
+    probe_trimmed = probe_seq[:min_len]
+    target_trimmed = target_seq[:min_len]
+    mismatches = sum(
+        1 for a, b in zip(probe_trimmed, target_trimmed) if a != b
+    )
+    try:
+        rna_probe = Bio.Seq.Seq(probe_trimmed).transcribe()
+        perfect_complement = rna_probe.complement_rna()
+        tm_raw = Bio.SeqUtils.MeltingTemp.Tm_NN(
+            rna_probe,
+            c_seq=perfect_complement,
+            nn_table=Bio.SeqUtils.MeltingTemp.R_DNA_NN1,
+            Na=na_concentration,
+        )
+        tm = Bio.SeqUtils.MeltingTemp.chem_correction(
+            tm_raw, fmd=formamide_concentration
+        )
+        tm -= mismatches * 2.5
+        return float(tm)
+    except Exception:
+        return 0.0
+
+
 class BasicFiltering(luigi.Task):
     """Initial probe filtering based on melting temperature and GC content."""
 

@@ -229,3 +229,30 @@ class ProbeConfig(luigi.Config):
         ),
         default=75.0,
     )
+    off_target_min_tm = luigi.FloatParameter(
+        description=(
+            "Minimum predicted Tm for an off-target alignment to count as significant. "
+            "Hits with Tm below this are ignored as thermodynamically unstable — "
+            "rescues probes whose off-targets would not bind at hybridization conditions. "
+            "Set to 0 to disable (count all alignment hits). "
+            "Recommended: set to your hybridization temperature (e.g., 37)."
+        ),
+        default=0.0,
+    )
+    mask_repeats = luigi.BoolParameter(
+        description=(
+            "Ignore off-target hits in low-complexity/repetitive regions. "
+            "Uses dustmasker (BLAST+) to identify repeats — "
+            "rescues probes whose only off-targets are in repeats. "
+            "Requires BLAST+ to be installed."
+        ),
+        default=False,
+    )
+    intergenic_off_targets = luigi.BoolParameter(
+        description=(
+            "Ignore off-target hits in intergenic regions (not overlapping any "
+            "annotated gene). Requires --reference-annotation. "
+            "Rescues probes whose off-targets fall outside annotated genes."
+        ),
+        default=False,
+    )

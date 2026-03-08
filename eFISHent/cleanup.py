@@ -212,13 +212,13 @@ class CleanUpOutput(luigi.Task):
                 else:
                     df_blast = pd.DataFrame(columns=cols)
 
-                # Significant hits: near-full-length matches only
-                # >= 90% identity AND alignment covers >= 75% of probe length
+                # Significant hits: near-full-length high-identity matches only
+                # >= 95% identity AND alignment covers >= 80% of probe length
+                # For a 20nt probe this means ~16nt at ≤1 mismatch
                 df_blast["effective_len"] = df_blast["length"] - df_blast["gapopen"]
-                min_match_frac = 0.75
                 sig = df_blast[
-                    (df_blast["pident"] >= 90)
-                    & (df_blast["effective_len"] >= df_blast["qlen"] * min_match_frac)
+                    (df_blast["pident"] >= 95)
+                    & (df_blast["effective_len"] >= df_blast["qlen"] * 0.80)
                 ]
 
                 # Count unique genomic loci per probe

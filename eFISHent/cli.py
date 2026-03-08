@@ -167,6 +167,7 @@ PARAM_VALIDATORS = {
     "formamide_concentration": percentage,
     "max_expression_percentage": percentage,
     "blast_identity_threshold": percentage,
+    "off_target_min_tm": float,
 }
 
 # Metavar hints for cleaner help output
@@ -203,11 +204,13 @@ PARAM_METAVAR = {
     "max_transcriptome_off_targets": "N",
     "blast_identity_threshold": "%",
     "reference_transcriptome": "FILE",
+    "off_target_min_tm": "°C",
 }
 _BOOL_METAVAR = "yes/no"
 for _bool_param in [
     "filter_low_complexity", "build_indices", "save_intermediates",
     "is_plus_strand", "is_endogenous", "no_alternative_loci",
+    "mask_repeats", "intergenic_off_targets",
 ]:
     PARAM_METAVAR[_bool_param] = _BOOL_METAVAR
 
@@ -384,6 +387,10 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
     if args.encode_count_table and not args.reference_annotation:
         errors.append("--encode-count-table requires --reference-annotation")
 
+    # Check intergenic_off_targets requires reference_annotation
+    if getattr(args, "intergenic_off_targets", False) and not args.reference_annotation:
+        errors.append("--intergenic-off-targets requires --reference-annotation")
+
     if errors:
         parser.error("\n  " + "\n  ".join(errors))
 
@@ -512,6 +519,10 @@ DEPENDENCIES = {
         "version_args": ["blastn", "-version"],
         "needed_for": "transcriptome off-target filtering (optional)",
     },
+    "dustmasker": {
+        "version_args": ["dustmasker", "-version-full"],
+        "needed_for": "repeat masking for off-target filtering (optional)",
+    },
     "glpsol": {
         "version_args": ["glpsol", "--version"],
         "needed_for": "optimal optimization (optional if using greedy)",
@@ -580,9 +591,11 @@ def check_required_dependencies(args: argparse.Namespace) -> List[str]:
     else:
         required = ["bowtie", "jellyfish"]
 
-    # BLAST required if transcriptome filtering is enabled
+    # BLAST required if transcriptome filtering or repeat masking is enabled
     if getattr(args, "reference_transcriptome", ""):
         required.append("blastn")
+    if getattr(args, "mask_repeats", False):
+        required.append("dustmasker")
 
     # Fold is required for the full pipeline (not for index building)
     if not args.build_indices:

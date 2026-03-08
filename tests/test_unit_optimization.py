@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from eFISHent.optimization import OptimizeProbeCoverage
+from eFISHent.optimization import fill_coverage_gaps
 from eFISHent.optimization import greedy_model
 from eFISHent.optimization import is_binding
 from eFISHent.optimization import is_overlapping
@@ -143,3 +144,55 @@ def test_filter_binding_probes(df):
 
     assert len(filtered) <= len(assigned)
     assert all([f in assigned for f in filtered])
+
+
+def test_fill_coverage_gaps():
+    """Gap filler should place a probe in an uncovered region."""
+    df = pd.DataFrame(
+        {
+            "name": ["p1", "p2", "p3"],
+            "sequence": ["A" * 10, "T" * 10, "G" * 10],
+            "start": [0, 5, 50],
+            "end": [10, 15, 60],
+            "length": [10, 10, 10],
+        }
+    )
+    # p1 and p3 assigned, gap at 10-50. p2 (5-15) doesn't fully fit in gap.
+    assigned = ["p1", "p3"]
+    result = fill_coverage_gaps(df, assigned, spacing=2)
+    # p2 overlaps with p1, so it shouldn't be added
+    assert result == ["p1", "p3"]
+
+
+def test_fill_coverage_gaps_fills():
+    """Gap filler should add a probe when it fits cleanly."""
+    df = pd.DataFrame(
+        {
+            "name": ["p1", "p2", "p3"],
+            "sequence": ["A" * 10, "T" * 10, "G" * 10],
+            "start": [0, 20, 50],
+            "end": [10, 30, 60],
+            "length": [10, 10, 10],
+        }
+    )
+    # p1 and p3 assigned, gap at 10-50. p2 (20-30) fits in gap.
+    assigned = ["p1", "p3"]
+    result = fill_coverage_gaps(df, assigned, spacing=2)
+    assert "p2" in result
+    assert len(result) == 3
+
+
+def test_fill_coverage_gaps_no_gaps():
+    """No gaps means no changes."""
+    df = pd.DataFrame(
+        {
+            "name": ["p1", "p2"],
+            "sequence": ["A" * 10, "T" * 10],
+            "start": [0, 11],
+            "end": [10, 21],
+            "length": [10, 10],
+        }
+    )
+    assigned = ["p1", "p2"]
+    result = fill_coverage_gaps(df, assigned, spacing=2)
+    assert result == ["p1", "p2"]

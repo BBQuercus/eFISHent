@@ -1,5 +1,6 @@
 import os
 import shutil
+import tempfile
 
 import pandas as pd
 import pytest
@@ -200,3 +201,37 @@ def test_filter_unique_probes_bowtie2():
     # Clean up
     if os.path.exists(fname_sam):
         os.remove(fname_sam)
+
+
+class TestMaskedIntervals:
+    """Tests for dustmasker interval parsing and lookup."""
+
+    def test_load_masked_intervals(self):
+        """Parse dustmasker interval format correctly."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".intervals", delete=False) as f:
+            f.write(">chrI\n0 - 100\n500 - 600\n>chrII\n200 - 300\n")
+            f.flush()
+            path = f.name
+
+        result = AlignProbeCandidates._load_masked_intervals(path)
+        os.unlink(path)
+
+        assert "chrI" in result
+        assert "chrII" in result
+        assert result["chrI"] == ([0, 500], [100, 600])
+        assert result["chrII"] == ([200], [300])
+
+    def test_is_in_masked_region(self):
+        """Check masked region overlap detection."""
+        task = AlignProbeCandidates()
+        task._masked_intervals = {
+            "chrI": ([100, 500], [200, 600]),
+        }
+        # Inside masked region
+        assert task._is_in_masked_region("chrI", 150, 20) is True
+        # Overlapping boundary
+        assert task._is_in_masked_region("chrI", 190, 20) is True
+        # Outside masked region
+        assert task._is_in_masked_region("chrI", 300, 20) is False
+        # Unknown chromosome
+        assert task._is_in_masked_region("chrIII", 150, 20) is False
