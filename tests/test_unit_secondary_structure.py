@@ -1,3 +1,6 @@
+import os
+import shutil
+import sys
 from unittest.mock import patch
 
 import Bio.Seq
@@ -6,7 +9,13 @@ import pytest
 
 from eFISHent.secondary_structure import get_free_energy
 
+# Check if Fold is available (bundled binary or on PATH)
+_fold_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_fold_bin = os.path.join(_fold_dir, "eFISHent", "Fold_linux" if sys.platform.startswith("linux") else "Fold_osx")
+FOLD_AVAILABLE = os.access(_fold_bin, os.X_OK) or shutil.which("Fold") is not None
 
+
+@pytest.mark.skipif(not FOLD_AVAILABLE, reason="Fold binary not available")
 @pytest.mark.parametrize(
     "seq,deltag",
     [
