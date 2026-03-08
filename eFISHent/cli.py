@@ -242,6 +242,18 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Check if all external dependencies are installed and exit.",
     )
+    utility.add_argument(
+        "--preset",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=(
+            "Apply a parameter preset for common FISH protocols. "
+            "Explicit arguments override preset values. "
+            "Use --preset list to see available presets. "
+            "[options: smfish, merfish, dna-fish, strict, relaxed]"
+        ),
+    )
     utility.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
 
@@ -580,7 +592,34 @@ def _parse_args() -> argparse.Namespace:
         args = argparse.Namespace(check=True)
         return args
 
+    # Handle --preset list before full parsing
+    if "--preset" in sys.argv:
+        idx = sys.argv.index("--preset")
+        if idx + 1 < len(sys.argv) and sys.argv[idx + 1] == "list":
+            from .presets import format_preset_list
+            print(format_preset_list())
+            sys.exit(0)
+
     args = parser.parse_args()
+
+    # Apply preset defaults — explicit CLI args take precedence
+    if args.preset:
+        from .presets import PRESETS
+        if args.preset not in PRESETS:
+            from .presets import get_preset_names
+            parser.error(
+                f"Unknown preset '{args.preset}'. "
+                f"Available: {', '.join(get_preset_names())}"
+            )
+        preset_params = PRESETS[args.preset]["params"]
+        # Only apply preset values for params the user didn't explicitly set
+        # We detect this by checking if the value matches the parser default
+        for param_name, preset_value in preset_params.items():
+            parser_default = parser.get_default(param_name)
+            current_value = getattr(args, param_name, None)
+            if current_value == parser_default:
+                setattr(args, param_name, preset_value)
+
     validate_args(args, parser)
     return args
 
