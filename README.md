@@ -227,6 +227,12 @@ eFISHent provides multiple layers of off-target detection. These can be combined
 
 * `--off-target-min-tm` - Minimum Tm (°C) for an off-target to count. Recommended: set to your hybridization temperature (e.g., 37). Set to 0 to disable (default: 0)
 
+**Ribosomal RNA filtering** (optional) - Removes probes with off-target hits on ribosomal RNA genes. rRNA constitutes ~80% of cellular RNA, so even weak off-target binding causes intense background signal. When a GTF annotation is provided, eFISHent checks `gene_biotype`/`gene_type` for rRNA and Mt_rRNA:
+
+* `--filter-rrna` - Enable rRNA off-target filtering (default: no, requires `--reference-annotation`)
+
+> **Note:** Standard GTF files (Ensembl/GENCODE) include 5S and mitochondrial rRNA genes but **miss the major 18S/28S/5.8S rRNA** — these are in unassembled tandem repeat regions. For comprehensive rRNA filtering, also use `--reference-transcriptome` with rRNA sequences included. You can download the human 45S pre-rRNA (GenBank `NR_003286.4`) and 5S rRNA (`NR_023363.1`) from NCBI, concatenate them with your transcriptome FASTA, and the transcriptome BLAST filter will catch probes binding these sequences.
+
 **Expression-weighted filtering** (optional) - If genome off-targets are unavoidable, you can weight them by expression level to remove probes hitting highly expressed genes:
 
 * `--reference-annotation` - A GTF genome annotation file to know which genes correspond to which genomic loci
@@ -256,6 +262,7 @@ There are a bunch of parameters that can be set to adjust filtering steps:
 | `--off-target-min-tm` | Minimum predicted Tm (°C) for an off-target to count as significant. Set to hybridization temperature to rescue probes with thermodynamically unstable off-targets. Default: 0 (disabled) |
 | `--mask-repeats` | Ignore off-target hits in repetitive/low-complexity regions (uses dustmasker from BLAST+) |
 | `--intergenic-off-targets` | Ignore off-target hits outside annotated genes (requires `--reference-annotation`) |
+| `--filter-rrna` | Remove probes with off-target hits on rRNA genes (requires `--reference-annotation`) |
 
 ### Remaining Options
 

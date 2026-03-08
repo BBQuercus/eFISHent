@@ -97,9 +97,57 @@ class CleanUpOutput(luigi.Task):
         )["size"].fillna(0)
         df["count"] -= 1
 
+        # Compute per-probe quality score (0-100)
+        df["quality"] = self._compute_quality_scores(df)
+
         # Create new/clean names
         df["name"] = [f"{basename}-{idx + 1}" for idx in df.index]
         return df
+
+    @staticmethod
+    def _compute_quality_scores(df: pd.DataFrame) -> pd.Series:
+        """Compute a composite quality score (0-100) for each probe.
+
+        Scores are based on how close each metric is to its ideal value:
+        - Tm: closeness to midpoint of min/max range (30%)
+        - GC: closeness to 50% (20%)
+        - deltaG: less negative is better, 0 is ideal (20%)
+        - kmers: lower is better (15%)
+        - off-target count: lower is better (15%)
+        """
+        cfg = ProbeConfig()
+        scores = pd.DataFrame(index=df.index)
+
+        # Tm score: distance from midpoint of allowed range
+        tm_mid = (cfg.min_tm + cfg.max_tm) / 2
+        tm_range = max((cfg.max_tm - cfg.min_tm) / 2, 1)
+        scores["tm"] = 1.0 - (df["TM"] - tm_mid).abs().clip(upper=tm_range) / tm_range
+
+        # GC score: distance from 50%
+        scores["gc"] = 1.0 - (df["GC"] - 50.0).abs() / 50.0
+
+        # deltaG score: 0 is ideal, more negative is worse
+        # Normalize against config threshold
+        dg_max = abs(cfg.max_deltag) if cfg.max_deltag < 0 else 10.0
+        scores["dg"] = 1.0 - df["deltaG"].abs().clip(upper=dg_max) / dg_max
+
+        # K-mer score: 0 is ideal, higher is worse
+        kmer_max = max(cfg.max_kmers, 1)
+        scores["kmer"] = 1.0 - df["kmers"].clip(upper=kmer_max) / kmer_max
+
+        # Off-target score: 0 is ideal
+        ot_max = max(cfg.max_off_targets + 1, 1)
+        scores["ot"] = 1.0 - df["count"].clip(lower=0, upper=ot_max) / ot_max
+
+        # Weighted composite
+        quality = (
+            scores["tm"] * 0.30
+            + scores["gc"] * 0.20
+            + scores["dg"] * 0.20
+            + scores["kmer"] * 0.15
+            + scores["ot"] * 0.15
+        )
+        return (quality * 100).round(1)
 
     def _get_gene_length(self) -> int:
         """Get the actual gene sequence length from the sequence file."""

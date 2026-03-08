@@ -256,3 +256,13 @@ class ProbeConfig(luigi.Config):
         ),
         default=False,
     )
+    filter_rrna = luigi.BoolParameter(
+        description=(
+            "Remove probes with off-target hits on ribosomal RNA genes. "
+            "rRNA is ~80%% of cellular RNA — even weak off-target binding "
+            "causes intense background. Requires --reference-annotation. "
+            "Catches 5S and mitochondrial rRNA from standard GTFs; "
+            "for 18S/28S use --reference-transcriptome with rRNA sequences."
+        ),
+        default=False,
+    )

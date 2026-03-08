@@ -36,19 +36,23 @@ PRESETS: Dict[str, Dict] = {
         },
     },
     "strict": {
-        "description": "Maximum specificity (low k-mer tolerance)",
+        "description": "Maximum specificity (low k-mer tolerance, low-complexity filter)",
         "params": {
             "max_off_targets": 0,
             "max_kmers": 3,
             "max_deltag": -5.0,
+            "filter_low_complexity": True,
+            "sequence_similarity": 80,
         },
     },
     "relaxed": {
-        "description": "Maximum probe yield (permissive thresholds)",
+        "description": "Maximum probe yield (permissive thresholds + rescue filters)",
         "params": {
             "max_off_targets": 2,
             "max_kmers": 10,
             "max_deltag": -15.0,
+            "mask_repeats": True,
+            "off_target_min_tm": 37.0,
         },
     },
 }

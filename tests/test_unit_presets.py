@@ -23,6 +23,8 @@ class TestPresets:
             "min_gc", "max_gc", "formamide_concentration", "na_concentration",
             "max_off_targets", "max_kmers", "max_deltag", "kmer_length",
             "sequence_similarity", "is_endogenous", "optimization_method",
+            "filter_low_complexity", "mask_repeats", "off_target_min_tm",
+            "intergenic_off_targets", "max_homopolymer_length", "filter_rrna",
         }
         for name, preset in PRESETS.items():
             for param in preset["params"]:

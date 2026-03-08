@@ -38,6 +38,7 @@ class AlignProbeCandidates(luigi.Task):
         self.off_target_min_tm = ProbeConfig().off_target_min_tm
         self.mask_repeats = ProbeConfig().mask_repeats
         self.intergenic_off_targets = ProbeConfig().intergenic_off_targets
+        self.filter_rrna = ProbeConfig().filter_rrna
         self.has_expression_filter = bool(
             self.encode_count_table
             and GeneralConfig().reference_annotation
@@ -49,6 +50,9 @@ class AlignProbeCandidates(luigi.Task):
             and self.has_annotation
             and self.is_endogenous
         )
+        self.has_rrna_filter = bool(
+            self.filter_rrna and self.has_annotation
+        )
 
     def requires(self):
         if self.aligner == "bowtie2":
@@ -56,7 +60,7 @@ class AlignProbeCandidates(luigi.Task):
         else:
             index_task = BuildBowtieIndex()
         tasks = {"probes": BasicFiltering(), "bowtie": index_task}
-        if self.has_expression_filter or self.has_intergenic_filter:
+        if self.has_expression_filter or self.has_intergenic_filter or self.has_rrna_filter:
             from .indexing import PrepareAnnotationFile
             tasks["annotation"] = PrepareAnnotationFile()
         return tasks
@@ -363,6 +367,62 @@ class AlignProbeCandidates(luigi.Task):
         )
         return df_sam
 
+    def filter_rrna_off_targets(self, df_sam: pd.DataFrame) -> pd.DataFrame:
+        """Remove probes with off-target hits on ribosomal RNA genes.
+
+        rRNA is ~80% of cellular RNA — even weak binding causes intense
+        background. Checks gene_biotype/gene_type for rRNA and Mt_rRNA.
+        """
+        self.fname_gtf = self.input()["annotation"].path
+        gtf_full = pd.read_parquet(self.fname_gtf)
+
+        # Find the biotype column (differs between Ensembl/GENCODE)
+        biotype_col = None
+        for col in ["gene_biotype", "gene_type"]:
+            if col in gtf_full.columns:
+                biotype_col = col
+                break
+
+        if biotype_col is None:
+            self.logger.debug(
+                "No gene_biotype/gene_type column in GTF — skipping rRNA filter"
+            )
+            return df_sam
+
+        # Get rRNA gene regions
+        rrna_types = {"rRNA", "Mt_rRNA", "rRNA_pseudogene"}
+        rrna_genes = gtf_full[
+            (gtf_full[biotype_col].isin(rrna_types))
+            & (gtf_full["feature"] == "gene")
+        ][["seqname", "start", "end"]].drop_duplicates()
+
+        if rrna_genes.empty:
+            self.logger.debug("No rRNA genes found in GTF annotation")
+            return df_sam
+
+        self.logger.debug(f"Found {len(rrna_genes)} rRNA gene regions in GTF")
+
+        # Find probes with hits overlapping rRNA genes
+        probes_to_remove = set()
+        for _, row in df_sam.iterrows():
+            chrom = row["rname"]
+            pos = int(row["pos"])
+            overlapping = rrna_genes[
+                (rrna_genes["seqname"] == chrom)
+                & (rrna_genes["start"] <= pos)
+                & (rrna_genes["end"] >= pos)
+            ]
+            if not overlapping.empty:
+                probes_to_remove.add(row["qname"])
+
+        if probes_to_remove:
+            self.logger.debug(
+                f"Removing {len(probes_to_remove)} probes hitting rRNA off-targets"
+            )
+            df_sam = df_sam[~df_sam["qname"].isin(probes_to_remove)]
+
+        return df_sam
+
     def filter_intergenic_off_targets(self, df_sam: pd.DataFrame) -> pd.DataFrame:
         """Remove off-target hits in intergenic regions before counting.
 
@@ -536,6 +596,10 @@ class AlignProbeCandidates(luigi.Task):
         # Thermodynamic off-target filtering (rescue probes with unstable off-targets)
         if self.off_target_min_tm > 0 and self.is_endogenous:
             df_sam = self.filter_thermodynamic_off_targets(df_sam)
+
+        # rRNA off-target filtering
+        if self.has_rrna_filter:
+            df_sam = self.filter_rrna_off_targets(df_sam)
 
         # Expression-weighted filtering
         if self.has_expression_filter:

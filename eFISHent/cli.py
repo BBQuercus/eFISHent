@@ -210,7 +210,7 @@ _BOOL_METAVAR = "yes/no"
 for _bool_param in [
     "filter_low_complexity", "build_indices", "save_intermediates",
     "is_plus_strand", "is_endogenous", "no_alternative_loci",
-    "mask_repeats", "intergenic_off_targets",
+    "mask_repeats", "intergenic_off_targets", "filter_rrna",
 ]:
     PARAM_METAVAR[_bool_param] = _BOOL_METAVAR
 
@@ -390,6 +390,10 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
     # Check intergenic_off_targets requires reference_annotation
     if getattr(args, "intergenic_off_targets", False) and not args.reference_annotation:
         errors.append("--intergenic-off-targets requires --reference-annotation")
+
+    # Check filter_rrna requires reference_annotation
+    if getattr(args, "filter_rrna", False) and not args.reference_annotation:
+        errors.append("--filter-rrna requires --reference-annotation")
 
     if errors:
         parser.error("\n  " + "\n  ".join(errors))

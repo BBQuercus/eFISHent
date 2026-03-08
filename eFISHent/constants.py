@@ -99,6 +99,7 @@ CLI_SHORTFORM: Dict[str, str] = {
     "sequence_similarity": "sim",
     "spacing": "sp",
     "threads": "t",
+    "filter_rrna": "rrna",
     "intergenic_off_targets": "iot",
     "mask_repeats": "mr",
     "off_target_min_tm": "ottm",
