@@ -9,6 +9,7 @@ from rich.console import Console
 
 from eFISHent.cli import validate_parameter_warnings
 from eFISHent.console import (
+    _compute_probe_quality,
     get_funnel_data,
     print_completion,
     print_filtering_funnel,
@@ -152,6 +153,24 @@ class TestPrintProbeTable:
         assert "probe-1" in captured.out
         assert "probe-20" in captured.out
         assert "more" not in captured.out
+
+    def test_shows_quality_scores(self, sample_df, capsys):
+        print_probe_table(sample_df)
+        captured = capsys.readouterr()
+        assert "\u2605" in captured.out  # At least one filled star
+        assert "Score" in captured.out
+
+    def test_shows_probe_count_in_title(self, sample_df, capsys):
+        print_probe_table(sample_df)
+        captured = capsys.readouterr()
+        assert "20 probes" in captured.out
+
+    def test_quality_score_values(self, sample_df):
+        """Test that quality scores are computed correctly."""
+        row = sample_df.iloc[0]
+        score = _compute_probe_quality(row, sample_df)
+        assert len(score) == 3
+        assert all(c in "\u2605\u2606" for c in score)
 
     def test_silent_mode(self, sample_df, capsys):
         set_silent_mode(True)

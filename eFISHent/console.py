@@ -313,13 +313,46 @@ def print_error_panel(title: str, message: str, hint: Optional[str] = None) -> N
     console.print(Panel(content, title=f"[error]{title}[/error]", border_style="red"))
 
 
+def _compute_probe_quality(row: pd.Series, df: pd.DataFrame) -> str:
+    """Compute a quality score for a probe based on how central its metrics are.
+
+    Returns a star rating string (3 stars max).
+    """
+    score = 3  # Start perfect, subtract for issues
+
+    # TM centrality: penalize if near the edges of the range
+    tm_range = df["TM"].max() - df["TM"].min()
+    if tm_range > 0:
+        tm_mid = (df["TM"].max() + df["TM"].min()) / 2
+        tm_dist = abs(row["TM"] - tm_mid) / (tm_range / 2)
+        if tm_dist > 0.8:
+            score -= 1
+
+    # GC balance: penalize extremes
+    if row["GC"] < 30 or row["GC"] > 65:
+        score -= 1
+
+    # deltaG: penalize very negative (strong secondary structure)
+    if row["deltaG"] < -8:
+        score -= 1
+
+    # Off-targets
+    if "count" in row.index and row["count"] > 0:
+        score -= 1
+
+    score = max(1, min(3, score))
+    return "\u2605" * score + "\u2606" * (3 - score)
+
+
 def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
-    """Display probe data as a Rich table."""
+    """Display probe data as a Rich table with quality scores."""
     if _silent_mode:
         return
 
+    title = f"Probe Summary ({len(df)} probes)"
+
     table = Table(
-        title="Probe Summary", show_header=True, header_style="bold cyan", box=None
+        title=title, show_header=True, header_style="bold cyan", box=None
     )
     table.add_column("Name", style="green")
     table.add_column("Sequence", style="dim", max_width=25)
@@ -327,10 +360,12 @@ def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
     table.add_column("GC%", justify="right")
     table.add_column("TM", justify="right")
     table.add_column("deltaG", justify="right")
+    table.add_column("Score", justify="center")
 
     for _, row in df.head(max_rows).iterrows():
         seq = row["sequence"]
         seq_display = seq[:22] + "..." if len(seq) > 25 else seq
+        quality = _compute_probe_quality(row, df)
         table.add_row(
             str(row["name"]),
             seq_display,
@@ -338,10 +373,11 @@ def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
             f"{row['GC']:.1f}",
             f"{row['TM']:.1f}",
             f"{row['deltaG']:.1f}",
+            quality,
         )
 
     if len(df) > max_rows:
-        table.add_row("...", f"({len(df) - max_rows} more)", "", "", "", "")
+        table.add_row("...", f"({len(df) - max_rows} more)", "", "", "", "", "")
 
     console.print(table)
     console.print()
