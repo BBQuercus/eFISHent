@@ -124,7 +124,7 @@ def print_completion(
     funnel_table = _build_funnel_table()
     if funnel_table is not None:
         renderables.append(Text(""))
-        renderables.append(Text("Filtering Funnel", style="bold"))
+        renderables.append(Text(" Filtering Funnel", style="bold"))
         renderables.append(funnel_table)
 
     # 2. Probe table
