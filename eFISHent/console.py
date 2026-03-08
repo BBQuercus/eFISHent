@@ -275,6 +275,29 @@ def print_candidate_count(name: str, count: int, count_prev: int = 0) -> None:
         )
 
 
+def print_parameter_warnings(warnings: List[str]) -> None:
+    """Print parameter validation warnings in a panel."""
+    if _silent_mode or not warnings:
+        return
+
+    lines = []
+    for warning in warnings:
+        # Indent continuation lines
+        parts = warning.split("\n")
+        lines.append(f"  [warning]\u26a0[/warning]  {parts[0]}")
+        for part in parts[1:]:
+            lines.append(f"    {part}")
+        lines.append("")
+
+    console.print(
+        Panel(
+            "\n".join(lines).rstrip(),
+            title="[warning]Parameter Warnings[/warning]",
+            border_style="yellow",
+        )
+    )
+
+
 def print_warning(message: str) -> None:
     """Print a styled warning message."""
     if _silent_mode:

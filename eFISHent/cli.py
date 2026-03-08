@@ -358,6 +358,72 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         parser.error("\n  " + "\n  ".join(errors))
 
 
+def validate_parameter_warnings(args: argparse.Namespace) -> List[str]:
+    """Check for risky parameter combinations and return warning messages.
+
+    These are non-fatal warnings — the pipeline will still run.
+    """
+    # Skip for non-pipeline modes
+    if args.build_indices or args.analyze_probeset:
+        return []
+
+    warnings = []
+
+    # Narrow TM window
+    tm_window = args.max_tm - args.min_tm
+    if tm_window < 10:
+        warnings.append(
+            f"TM window is very narrow ({tm_window:.0f}\u00b0C) \u2014 may yield few probes.\n"
+            "  Consider widening to at least 10\u00b0C."
+        )
+
+    # High formamide with low TM range
+    if args.formamide_concentration > 30 and args.max_tm < 60:
+        warnings.append(
+            f"Formamide {args.formamide_concentration:.0f}% with max TM {args.max_tm:.0f}\u00b0C "
+            "may filter all probes.\n"
+            "  Consider --min-tm 50 --max-tm 70 for high formamide."
+        )
+
+    # K-mer length close to probe length
+    if args.kmer_length >= args.min_length - 3:
+        warnings.append(
+            f"K-mer length ({args.kmer_length}) is close to min probe length ({args.min_length}).\n"
+            f"  This may cause excessive filtering. Consider --kmer-length {max(10, args.min_length - 6)}."
+        )
+
+    # Single very short probe length
+    if args.min_length == args.max_length and args.max_length < 20:
+        warnings.append(
+            f"Single probe length of {args.min_length}nt is very short.\n"
+            "  Consider allowing a range (e.g., --min-length 20 --max-length 25)."
+        )
+
+    # Narrow GC window
+    gc_window = args.max_gc - args.min_gc
+    if gc_window < 20:
+        warnings.append(
+            f"GC window is very narrow ({gc_window:.0f}%) \u2014 may yield few probes.\n"
+            "  Consider widening to at least 20%."
+        )
+
+    # Very strict secondary structure filter
+    if args.max_deltag > -3:
+        warnings.append(
+            f"deltaG threshold ({args.max_deltag} kcal/mol) is very strict.\n"
+            "  Consider --max-deltag -10 for a more permissive filter."
+        )
+
+    # Large spacing
+    if args.spacing > 10:
+        warnings.append(
+            f"Probe spacing of {args.spacing}nt is large \u2014 may reduce coverage.\n"
+            "  Consider --spacing 2 for denser probe tiling."
+        )
+
+    return warnings
+
+
 def _get_tool_version(name: str, args: list, pattern: str = r"[0-9]+\.[0-9]+\.?[0-9]*") -> str:
     """Try to get a tool's version string."""
     import re
@@ -604,6 +670,7 @@ def main():
         print_dependency_check,
         print_header,
         print_missing_deps_error,
+        print_parameter_warnings,
     )
 
     start_time = time.time()
@@ -635,6 +702,15 @@ def main():
                 "Run efishent --check for details."
             )
         sys.exit(1)
+
+    # Pre-flight parameter warnings
+    param_warnings = validate_parameter_warnings(args)
+    if param_warnings:
+        if not args.silent:
+            print_parameter_warnings(param_warnings)
+        else:
+            for w in param_warnings:
+                logger.warning(w.replace("\n", " "))
 
     # Lazy imports - only load heavy modules after arg parsing
     from .analyze import AnalyzeProbeset

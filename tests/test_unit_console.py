@@ -1,15 +1,18 @@
 """Tests for console UX features."""
 
+import argparse
 import io
 
 import pandas as pd
 import pytest
 from rich.console import Console
 
+from eFISHent.cli import validate_parameter_warnings
 from eFISHent.console import (
     get_funnel_data,
     print_completion,
     print_filtering_funnel,
+    print_parameter_warnings,
     print_probe_table,
     record_funnel_stage,
     reset_funnel_data,
@@ -153,5 +156,89 @@ class TestPrintProbeTable:
     def test_silent_mode(self, sample_df, capsys):
         set_silent_mode(True)
         print_probe_table(sample_df)
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+
+class TestParameterWarnings:
+    """Tests for parameter validation warnings."""
+
+    @pytest.fixture
+    def default_args(self):
+        return argparse.Namespace(
+            build_indices=False,
+            analyze_probeset="",
+            min_length=21,
+            max_length=25,
+            min_tm=40.0,
+            max_tm=60.0,
+            min_gc=20.0,
+            max_gc=80.0,
+            formamide_concentration=10.0,
+            kmer_length=15,
+            max_deltag=-10.0,
+            spacing=2,
+        )
+
+    def test_no_warnings_default_params(self, default_args):
+        warnings = validate_parameter_warnings(default_args)
+        assert warnings == []
+
+    def test_narrow_tm_window(self, default_args):
+        default_args.min_tm = 50.0
+        default_args.max_tm = 55.0
+        warnings = validate_parameter_warnings(default_args)
+        assert any("TM window" in w for w in warnings)
+
+    def test_high_formamide_low_tm(self, default_args):
+        default_args.formamide_concentration = 50.0
+        default_args.max_tm = 55.0
+        warnings = validate_parameter_warnings(default_args)
+        assert any("Formamide" in w for w in warnings)
+
+    def test_kmer_close_to_probe_length(self, default_args):
+        default_args.kmer_length = 19
+        warnings = validate_parameter_warnings(default_args)
+        assert any("K-mer" in w for w in warnings)
+
+    def test_narrow_gc_window(self, default_args):
+        default_args.min_gc = 40.0
+        default_args.max_gc = 55.0
+        warnings = validate_parameter_warnings(default_args)
+        assert any("GC window" in w for w in warnings)
+
+    def test_strict_deltag(self, default_args):
+        default_args.max_deltag = -2.0
+        warnings = validate_parameter_warnings(default_args)
+        assert any("deltaG" in w for w in warnings)
+
+    def test_large_spacing(self, default_args):
+        default_args.spacing = 15
+        warnings = validate_parameter_warnings(default_args)
+        assert any("spacing" in w for w in warnings)
+
+    def test_skip_for_build_indices(self, default_args):
+        default_args.build_indices = True
+        default_args.min_tm = 55.0
+        default_args.max_tm = 56.0  # Narrow TM, but should be skipped
+        warnings = validate_parameter_warnings(default_args)
+        assert warnings == []
+
+    def test_print_parameter_warnings(self, capsys):
+        warnings = ["Warning 1.\n  Suggestion 1.", "Warning 2."]
+        print_parameter_warnings(warnings)
+        captured = capsys.readouterr()
+        assert "Parameter Warnings" in captured.out
+        assert "Warning 1" in captured.out
+        assert "Warning 2" in captured.out
+
+    def test_print_parameter_warnings_empty(self, capsys):
+        print_parameter_warnings([])
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_print_parameter_warnings_silent(self, capsys):
+        set_silent_mode(True)
+        print_parameter_warnings(["Warning"])
         captured = capsys.readouterr()
         assert captured.out == ""
