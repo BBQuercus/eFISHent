@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eFISHent — Design smFISH probes in minutes</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --blue-900: #0d2f45;
+  --blue-800: #12405e;
+  --blue-700: #1B5E8C;
+  --blue-600: #2178aa;
+  --blue-500: #3a94c4;
+  --blue-400: #6ab4d8;
+  --blue-300: #a0d2ea;
+  --blue-200: #cce6f4;
+  --blue-100: #e8f3fa;
+  --blue-50: #f4f9fd;
+
+  --gray-950: #0a0c0e;
+  --gray-900: #141719;
+  --gray-800: #1e2225;
+  --gray-700: #2e3338;
+  --gray-600: #4a5056;
+  --gray-500: #6b7280;
+  --gray-400: #9ca3af;
+  --gray-300: #d1d5db;
+  --gray-200: #e5e7eb;
+  --gray-100: #f3f4f6;
+  --gray-50: #f9fafb;
+
+  --green-600: #16a34a;
+  --green-500: #22c55e;
+  --yellow-500: #eab308;
+  --red-500: #ef4444;
+  --orange-500: #f97316;
+
+  --bg: #ffffff;
+  --bg-secondary: var(--gray-50);
+  --bg-tertiary: var(--gray-100);
+  --bg-card: #ffffff;
+  --bg-card-hover: var(--blue-50);
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-400);
+  --border: var(--gray-200);
+  --border-light: var(--gray-100);
+  --accent: var(--blue-700);
+  --accent-light: var(--blue-100);
+  --accent-hover: var(--blue-800);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.08);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.03);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --topbar-h: 52px;
+}
+
+[data-theme="dark"] {
+  --bg: #0c0e12;
+  --bg-secondary: #12151a;
+  --bg-tertiary: #1a1e24;
+  --bg-card: #161a20;
+  --bg-card-hover: #1a2030;
+  --text-primary: #e8eaed;
+  --text-secondary: #9aa0aa;
+  --text-tertiary: #5a6270;
+  --border: #252a32;
+  --border-light: #1e2228;
+  --accent: var(--blue-500);
+  --accent-light: rgba(58, 148, 196, 0.12);
+  --accent-hover: var(--blue-400);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.4);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Top Bar ── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: var(--topbar-h);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+.topbar-logo {
+  display: flex; align-items: center; gap: 9px;
+  font-weight: 700; font-size: 16px; color: var(--text-primary);
+  text-decoration: none; letter-spacing: -0.3px;
+}
+.topbar-logo svg { flex-shrink: 0; }
+.topbar-nav { display: flex; align-items: center; gap: 2px; }
+.topbar-nav button {
+  background: none; border: none; padding: 5px 13px;
+  font-family: var(--font-sans); font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); cursor: pointer;
+  border-radius: var(--radius-sm); transition: all var(--transition);
+}
+.topbar-nav button:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.topbar-nav button.active { color: var(--accent); background: var(--accent-light); }
+.topbar-right { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+  width: 34px; height: 34px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg-card);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); transition: all var(--transition);
+  text-decoration: none;
+}
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Views ── */
+.view { display: none; height: calc(100vh - var(--topbar-h)); overflow-y: auto; }
+.view.active { display: flex; flex-direction: column; }
+main { padding-top: var(--topbar-h); flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+/* ── HERO ── */
+.hero {
+  flex: 1; display: flex; flex-direction: row; align-items: stretch;
+  position: relative; overflow: hidden;
+}
+/* Left text column */
+.hero-text {
+  flex: 0 0 45%; display: flex; flex-direction: column;
+  justify-content: center; padding: 48px 48px 48px 60px;
+  position: relative; z-index: 2;
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 14px 5px 6px; width: fit-content;
+  background: var(--accent-light);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 100px; font-size: 12px; font-weight: 500;
+  color: var(--accent); margin-bottom: 20px;
+}
+.hero-badge-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); animation: pulse-dot 2s ease infinite;
+}
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+.hero h1 {
+  font-size: clamp(32px, 4vw, 50px);
+  font-weight: 700; letter-spacing: -1.5px; line-height: 1.08; margin-bottom: 16px;
+}
+.hero h1 span { color: var(--accent); }
+.hero-sub {
+  font-size: 16px; color: var(--text-secondary);
+  max-width: 400px; margin: 0 0 28px; line-height: 1.55;
+}
+.hero-cta {
+  display: inline-flex; align-items: center; gap: 10px; width: fit-content;
+  padding: 13px 30px; background: var(--accent); color: #fff; border: none;
+  border-radius: var(--radius-md); font-family: var(--font-sans);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: all var(--transition);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+  margin-bottom: 32px;
+}
+.hero-cta:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.hero-cta svg { transition: transform var(--transition); }
+.hero-cta:hover svg { transform: translateX(2px); }
+.value-props {
+  display: flex; flex-direction: column; gap: 10px; max-width: 380px;
+}
+.value-card {
+  padding: 14px 16px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  display: flex; align-items: flex-start; gap: 14px;
+  transition: all var(--transition); box-shadow: var(--shadow-card);
+}
+.value-card:hover { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); box-shadow: var(--shadow-md); transform: translateX(4px); }
+.value-icon {
+  width: 34px; height: 34px; min-width: 34px; border-radius: var(--radius-sm);
+  background: var(--accent-light); display: flex; align-items: center;
+  justify-content: center; color: var(--accent);
+}
+.value-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.value-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
+/* Right animation column */
+.hero-viz {
+  flex: 1; background: var(--bg-secondary); border-left: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+}
+.hero-viz::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 40% 50%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 65%);
+  pointer-events: none;
+}
+.hero-anim { position: relative; z-index: 1; width: 100%; max-width: 520px; padding: 20px; }
+.hero-anim-title {
+  font-size: 10px; font-weight: 500; color: var(--text-tertiary);
+  letter-spacing: 0.3px; margin-bottom: 12px;
+  text-align: right; opacity: 0.6;
+  font-family: var(--font-mono);
+}
+.hero-anim svg { width: 100%; display: block; }
+
+/* ── DESIGN VIEW — single-page flow ── */
+#view-design { padding: 0; }
+.design-layout {
+  flex: 1; display: flex; min-height: 0; overflow: hidden;
+}
+/* Left: compact form */
+.design-sidebar {
+  width: 380px; min-width: 380px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden; background: var(--bg);
+}
+.design-sidebar-head {
+  padding: 20px 22px 16px; border-bottom: 1px solid var(--border-light);
+}
+.design-sidebar-head h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.design-sidebar-head p { font-size: 12.5px; color: var(--text-tertiary); margin-top: 2px; }
+.design-sidebar-scroll {
+  flex: 1; overflow-y: auto; padding: 16px 22px 22px;
+}
+.form-section { margin-bottom: 22px; }
+.form-label {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  margin-bottom: 8px; display: block; text-transform: uppercase; letter-spacing: 0.4px;
+}
+
+/* Unified search box */
+.search-box {
+  position: relative;
+}
+.search-box input {
+  width: 100%; padding: 11px 14px 11px 38px;
+  font-family: var(--font-sans); font-size: 14px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-card); color: var(--text-primary);
+  outline: none; transition: all var(--transition);
+}
+.search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent); }
+.search-box input::placeholder { color: var(--text-tertiary); }
+.search-box .search-icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--text-tertiary); pointer-events: none;
+}
+.search-box .search-or {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-size: 11px; color: var(--text-tertiary);
+  padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px;
+  cursor: pointer; transition: all var(--transition); border: none; font-family: var(--font-sans);
+}
+.search-box .search-or:hover { background: var(--accent-light); color: var(--accent); }
+
+/* Upload overlay */
+.upload-overlay {
+  display: none; position: absolute; inset: 0; z-index: 10;
+  background: var(--bg); flex-direction: column; align-items: center; justify-content: center;
+  border: 2px dashed var(--accent); border-radius: var(--radius-md);
+}
+.upload-overlay.show { display: flex; }
+.upload-overlay p { font-size: 13px; color: var(--text-secondary); margin-top: 10px; }
+.upload-overlay .upload-back {
+  margin-top: 14px; font-size: 12px; color: var(--accent);
+  cursor: pointer; border: none; background: none; font-family: var(--font-sans);
+  text-decoration: underline;
+}
+
+/* Autocomplete */
+.autocomplete {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+  z-index: 20; display: none; overflow: hidden; max-height: 240px; overflow-y: auto;
+}
+.autocomplete.show { display: block; }
+.autocomplete-item {
+  padding: 9px 14px; font-size: 13px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  transition: background var(--transition); border-bottom: 1px solid var(--border-light);
+}
+.autocomplete-item:last-child { border-bottom: none; }
+.autocomplete-item:hover, .autocomplete-item.kb-active { background: var(--bg-card-hover); }
+.autocomplete-item .gene-name { font-weight: 600; font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); }
+.autocomplete-item .gene-desc { font-size: 11px; color: var(--text-tertiary); }
+
+/* Inline chips for organism + preset */
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  padding: 7px 14px; border: 1.5px solid var(--border);
+  border-radius: 100px; cursor: pointer; transition: all var(--transition);
+  background: var(--bg-card); font-size: 12.5px; font-weight: 500;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.chip:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.chip.selected { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+.chip .chip-sub { font-size: 10.5px; color: var(--text-tertiary); font-family: var(--font-mono); }
+.chip.selected .chip-sub { color: var(--accent); opacity: 0.7; }
+
+/* Accordion */
+.accordion {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  overflow: hidden; background: var(--bg-card);
+}
+.accordion-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 14px; cursor: pointer; font-size: 12.5px; font-weight: 600;
+  color: var(--text-secondary); transition: background var(--transition); user-select: none;
+}
+.accordion-header:hover { background: var(--bg-secondary); }
+.accordion-chevron { transition: transform var(--transition); color: var(--text-tertiary); }
+.accordion.open .accordion-chevron { transform: rotate(180deg); }
+.accordion-body { max-height: 0; overflow: hidden; transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1); }
+.accordion.open .accordion-body { max-height: 500px; }
+.accordion-content { padding: 2px 14px 14px; }
+.param-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 0; border-bottom: 1px solid var(--border-light);
+}
+.param-row:last-child { border-bottom: none; }
+.param-row label { font-size: 12.5px; color: var(--text-secondary); }
+.param-row .param-inputs { display: flex; align-items: center; gap: 6px; }
+.param-small-input {
+  width: 56px; padding: 4px 6px; font-family: var(--font-mono); font-size: 12px;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg-secondary);
+  color: var(--text-primary); text-align: center; outline: none; transition: border-color var(--transition);
+}
+.param-small-input:focus { border-color: var(--accent); }
+.param-dash { color: var(--text-tertiary); font-size: 11px; }
+.param-unit { color: var(--text-tertiary); font-size: 10px; font-family: var(--font-mono); }
+.checkbox-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.checkbox-row input[type="checkbox"] {
+  appearance: none; width: 15px; height: 15px; border: 1.5px solid var(--border);
+  border-radius: 3px; background: var(--bg-card); cursor: pointer;
+  position: relative; flex-shrink: 0; transition: all var(--transition);
+}
+.checkbox-row input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.checkbox-row input[type="checkbox"]:checked::after {
+  content: ''; position: absolute; left: 3.5px; top: 0.5px;
+  width: 5px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.checkbox-row label { font-size: 12.5px; color: var(--text-secondary); cursor: pointer; }
+
+/* Submit strip */
+.design-sidebar-foot {
+  padding: 14px 22px; border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.submit-btn {
+  width: 100%; padding: 11px 20px; background: var(--accent); color: #fff; border: none;
+  border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 14px;
+  font-weight: 600; cursor: pointer; transition: all var(--transition);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.submit-btn:hover { background: var(--accent-hover); }
+.submit-estimate { text-align: center; font-size: 11.5px; color: var(--text-tertiary); margin-top: 8px; }
+.email-row { margin-bottom: 10px; }
+.email-input {
+  width: 100%; padding: 8px 12px; font-family: var(--font-sans); font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); color: var(--text-primary); outline: none;
+  transition: border-color var(--transition);
+}
+.email-input:focus { border-color: var(--accent); }
+
+/* Right: live preview */
+.design-preview {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 40px;
+  background: var(--bg-secondary); position: relative; overflow: hidden;
+}
+.design-preview::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 60% 40%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 60%);
+  pointer-events: none;
+}
+.preview-illustration {
+  position: relative; z-index: 1; text-align: center; max-width: 500px;
+}
+.preview-illustration h3 {
+  font-size: 18px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 8px;
+}
+.preview-illustration p {
+  font-size: 13px; color: var(--text-tertiary); line-height: 1.55; margin-bottom: 28px;
+}
+/* Design preview map */
+
+/* ── STATUS ── */
+.status-view {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; max-width: 560px; margin: 0 auto; width: 100%;
+}
+.status-view h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 3px; }
+.status-job-id { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); margin-bottom: 28px; }
+.progress-bar-wrap { background: var(--bg-tertiary); border-radius: 100px; height: 6px; margin-bottom: 28px; overflow: hidden; width: 100%; }
+.progress-bar-fill {
+  height: 100%; background: linear-gradient(90deg, var(--blue-700), var(--blue-500));
+  border-radius: 100px; transition: width 1s ease; position: relative;
+}
+.progress-bar-fill::after {
+  content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 40px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+  animation: shimmer 1.5s ease infinite;
+}
+@keyframes shimmer { 0%{opacity:0} 50%{opacity:1} 100%{opacity:0} }
+.pipeline-stages { display: flex; flex-direction: column; gap: 1px; width: 100%; }
+.stage-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  border-radius: var(--radius-sm); transition: background var(--transition);
+}
+.stage-row:hover { background: var(--bg-secondary); }
+.stage-dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px;
+}
+.stage-dot.done { background: color-mix(in srgb, var(--green-500) 15%, transparent); color: var(--green-500); }
+.stage-dot.active { background: var(--accent-light); color: var(--accent); animation: pulse-ring 2s ease infinite; }
+.stage-dot.pending { background: var(--bg-tertiary); color: var(--text-tertiary); }
+@keyframes pulse-ring {
+  0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 20%,transparent)} 50%{box-shadow:0 0 0 6px transparent}
+}
+.stage-info { flex: 1; }
+.stage-name { font-size: 13px; font-weight: 500; }
+.stage-count { font-size: 11.5px; color: var(--text-tertiary); font-family: var(--font-mono); }
+.stage-count.done-count { color: var(--green-600); }
+.stage-row.is-done .stage-name { color: var(--text-secondary); }
+.stage-row.is-active .stage-name { color: var(--accent); font-weight: 600; }
+.stage-row.is-pending .stage-name { color: var(--text-tertiary); }
+.time-remaining {
+  margin-top: 24px; padding: 14px; background: var(--bg-secondary);
+  border-radius: var(--radius-md); text-align: center;
+  font-size: 13px; color: var(--text-secondary); width: 100%;
+}
+.time-remaining strong { color: var(--text-primary); }
+
+/* ── RESULTS ── */
+#view-results { display: none; flex-direction: column; }
+#view-results.active { display: flex; }
+.results-top {
+  padding: 16px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px; flex-shrink: 0;
+}
+.results-top h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.4px; }
+.results-top .job-meta { font-size: 11.5px; color: var(--text-tertiary); font-family: var(--font-mono); }
+.results-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-s {
+  padding: 6px 13px; font-family: var(--font-sans); font-size: 12.5px; font-weight: 500;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); color: var(--text-primary); cursor: pointer;
+  transition: all var(--transition); display: flex; align-items: center; gap: 5px;
+}
+.btn-s:hover { border-color: var(--accent); color: var(--accent); }
+.btn-s.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-s.primary:hover { background: var(--accent-hover); }
+
+.results-body { flex: 1; overflow-y: auto; }
+
+/* Stats ribbon */
+.stat-ribbon {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.stat-item {
+  flex: 1; padding: 14px 20px; border-right: 1px solid var(--border);
+  text-align: center;
+}
+.stat-item:last-child { border-right: none; }
+.stat-item .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.stat-item .stat-label { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
+
+/* Multi-track genome browser */
+.browser-section {
+  border-bottom: 1px solid var(--border); overflow: hidden;
+}
+.browser-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg-secondary);
+}
+.browser-header .gene-label { font-weight: 600; font-size: 13px; }
+.browser-header .gene-label span {
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
+  font-weight: 400; margin-left: 8px;
+}
+.browser-header .legend {
+  display: flex; gap: 14px; font-size: 11px; color: var(--text-tertiary);
+}
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.tracks-wrapper { position: relative; cursor: crosshair; }
+.track { position: relative; border-bottom: 1px solid var(--border-light); }
+.track:last-child { border-bottom: none; }
+.track-inner { display: flex; align-items: stretch; }
+.track-label {
+  width: 90px; min-width: 90px; display: flex; align-items: center; padding: 0 12px;
+  font-size: 10px; font-weight: 600; color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-secondary); border-right: 1px solid var(--border-light);
+}
+.track-canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+.track-canvas-wrap canvas { display: block; }
+#crosshair {
+  position: absolute; top: 0; width: 1px; height: 100%;
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
+  pointer-events: none; z-index: 10; display: none;
+}
+.highlight-band {
+  position: absolute; top: 0; height: 100%;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+  pointer-events: none; z-index: 5; display: none;
+}
+/* Probe tooltip */
+#map-tooltip {
+  position: fixed; background: var(--gray-900); color: #fff;
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  font-size: 12px; line-height: 1.6; pointer-events: none;
+  z-index: 100; display: none; box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  max-width: 280px; font-family: var(--font-mono);
+}
+[data-theme="dark"] #map-tooltip { background: var(--gray-700); }
+#map-tooltip .tt-name {
+  font-weight: 600; font-family: var(--font-sans); font-size: 13px;
+  margin-bottom: 4px; color: var(--blue-300);
+}
+#map-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+#map-tooltip .tt-label { color: #9ca3af; }
+#map-tooltip .tt-val { color: #fff; font-weight: 500; }
+
+/* Probe table */
+.probe-table-section { flex: 1; min-height: 200px; }
+.probe-table-header {
+  padding: 10px 24px; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; background: var(--bg); z-index: 5;
+}
+.probe-table {
+  width: 100%; border-collapse: collapse; font-size: 12.5px;
+}
+.probe-table thead { position: sticky; top: 38px; z-index: 4; background: var(--bg); }
+.probe-table thead th {
+  padding: 8px 14px; text-align: left; font-weight: 600; font-size: 11px;
+  color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+  white-space: nowrap; transition: color var(--transition);
+}
+.probe-table thead th:hover { color: var(--accent); }
+.probe-table thead th .sort-arrow { font-size: 9px; margin-left: 3px; opacity: 0.3; }
+.probe-table thead th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+.probe-table tbody tr {
+  border-bottom: 1px solid var(--border-light); cursor: pointer;
+  transition: background var(--transition);
+}
+.probe-table tbody tr:hover { background: var(--bg-card-hover); }
+.probe-table tbody tr.selected { background: var(--accent-light); }
+.probe-table tbody td { padding: 8px 14px; white-space: nowrap; }
+.col-seq { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.3px; color: var(--text-secondary); }
+.col-name { font-weight: 600; color: var(--accent); font-size: 12px; }
+.quality-badge {
+  display: inline-flex; padding: 2px 7px; border-radius: 100px;
+  font-size: 11.5px; font-weight: 600; font-family: var(--font-mono);
+}
+.quality-high { background: color-mix(in srgb, var(--green-500) 12%, transparent); color: var(--green-500); }
+.quality-mid { background: color-mix(in srgb, var(--yellow-500) 12%, transparent); color: var(--yellow-500); }
+.quality-low { background: color-mix(in srgb, var(--orange-500) 12%, transparent); color: var(--orange-500); }
+
+/* Citation */
+.citation-bar {
+  border-top: 1px solid var(--border); padding: 12px;
+  text-align: center; font-size: 11.5px; color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.citation-bar a { color: var(--accent); text-decoration: none; }
+.citation-bar a:hover { text-decoration: underline; }
+
+@media (max-width: 860px) {
+  .hero { flex-direction: column; }
+  .hero-text { flex: 0 0 auto; padding: 32px 24px; text-align: center; align-items: center; }
+  .hero-viz { flex: 1; border-left: none; border-top: 1px solid var(--border); }
+  .value-props { align-items: center; }
+  .design-layout { flex-direction: column; }
+  .design-sidebar { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); max-height: 60vh; }
+  .design-preview { min-height: 300px; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="#" class="topbar-logo" onclick="showView('hero');return false;">
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+      <path d="M14 2C14 2 8 6 8 14C8 18 10 22 14 26" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <path d="M14 2C14 2 20 6 20 14C20 18 18 22 14 26" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <circle cx="14" cy="14" r="3" fill="var(--accent)"/>
+    </svg>
+    eFISHent
+  </a>
+  <nav class="topbar-nav">
+    <button class="active" onclick="showView('hero')">Home</button>
+    <button onclick="showView('design')">Design</button>
+    <button onclick="showView('status')">Status</button>
+    <button onclick="showView('results')">Results</button>
+  </nav>
+  <div class="topbar-right">
+    <a href="https://github.com/BBQuercus/eFISHent" class="icon-btn" title="GitHub" target="_blank">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+    </a>
+    <button class="icon-btn" onclick="toggleTheme()" title="Toggle dark mode">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+
+<!-- ════ HERO ════ -->
+<section class="view active" id="view-hero">
+  <div class="hero">
+    <!-- Left: text + value props -->
+    <div class="hero-text">
+      <div class="hero-badge"><span class="hero-badge-dot"></span> Open source probe design</div>
+      <h1>Design <span>smFISH</span> probes<br>in minutes</h1>
+      <p class="hero-sub">Upload a gene, pick your protocol, get optimized quality-scored oligonucleotide probes ready to order.</p>
+      <button class="hero-cta" onclick="showView('design')">
+        Design Probes
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+      <div class="value-props">
+        <div class="value-card">
+          <div class="value-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div><h3>7-Layer Specificity</h3><p>Genome alignment, BLAST, repeat masking, intergenic, thermodynamic, rRNA, expression filtering.</p></div>
+        </div>
+        <div class="value-card">
+          <div class="value-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div>
+          <div><h3>Optimized Spacing</h3><p>ILP or greedy placement maximizes coverage with minimum cross-hybridization.</p></div>
+        </div>
+        <div class="value-card">
+          <div class="value-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div><h3>Quality Scored</h3><p>0-100 composite score per probe: Tm, GC, structure, k-mer, off-targets.</p></div>
+        </div>
+      </div>
+    </div>
+    <!-- Right: animated pipeline visualization -->
+    <div class="hero-viz">
+      <div class="hero-anim">
+        <svg id="hero-pipeline" viewBox="0 0 480 240"></svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ DESIGN ════ -->
+<section class="view" id="view-design">
+  <div class="design-layout">
+    <!-- Sidebar form -->
+    <div class="design-sidebar">
+      <div class="design-sidebar-head">
+        <h2>Design Probes</h2>
+        <p>Pick a gene, choose a protocol, adjust if needed.</p>
+      </div>
+      <div class="design-sidebar-scroll">
+        <!-- Gene search -->
+        <div class="form-section">
+          <label class="form-label">Target</label>
+          <div class="search-box" id="search-box">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" id="gene-input" placeholder="Gene name, Ensembl ID, or paste sequence..." autocomplete="off" oninput="handleGeneInput(this.value)" onfocus="handleGeneInput(this.value)" onkeydown="handleGeneKeydown(event)">
+            <button class="search-or" onclick="showUpload()">or upload FASTA</button>
+            <div class="autocomplete" id="gene-autocomplete"></div>
+            <div class="upload-overlay" id="upload-overlay">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p>Drop a FASTA file or click to browse</p>
+              <button class="upload-back" onclick="hideUpload()">Back to gene search</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Organism -->
+        <div class="form-section">
+          <label class="form-label">Organism</label>
+          <div class="chip-row">
+            <div class="chip selected" onclick="selectChip(this,'organism')">Human <span class="chip-sub">GRCh38</span></div>
+            <div class="chip" onclick="selectChip(this,'organism')">Mouse <span class="chip-sub">GRCm39</span></div>
+          </div>
+        </div>
+
+        <!-- Protocol -->
+        <div class="form-section">
+          <label class="form-label">Protocol</label>
+          <div class="chip-row">
+            <div class="chip selected" onclick="selectChip(this,'protocol')">smFISH</div>
+            <div class="chip" onclick="selectChip(this,'protocol')">MERFISH</div>
+            <div class="chip" onclick="selectChip(this,'protocol')">DNA-FISH</div>
+            <div class="chip" onclick="selectChip(this,'protocol')">Custom</div>
+          </div>
+        </div>
+
+        <!-- Advanced -->
+        <div class="form-section">
+          <div class="accordion" id="adv-accordion">
+            <div class="accordion-header" onclick="toggleAccordion('adv-accordion')">
+              <span>Advanced</span>
+              <svg class="accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="accordion-body">
+              <div class="accordion-content">
+                <div class="param-row"><label>Probe length</label><div class="param-inputs"><input class="param-small-input" type="number" value="20"><span class="param-dash">-</span><input class="param-small-input" type="number" value="20"><span class="param-unit">nt</span></div></div>
+                <div class="param-row"><label>Tm range</label><div class="param-inputs"><input class="param-small-input" type="number" value="40"><span class="param-dash">-</span><input class="param-small-input" type="number" value="65"><span class="param-unit">C</span></div></div>
+                <div class="param-row"><label>GC content</label><div class="param-inputs"><input class="param-small-input" type="number" value="35"><span class="param-dash">-</span><input class="param-small-input" type="number" value="75"><span class="param-unit">%</span></div></div>
+                <div class="param-row"><label>Spacing</label><div class="param-inputs"><input class="param-small-input" type="number" value="2"><span class="param-unit">nt</span></div></div>
+                <div style="margin-top:10px;margin-bottom:4px;font-size:11px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.4px">Off-target filters</div>
+                <div class="checkbox-row"><input type="checkbox" id="cb1" checked><label for="cb1">Mask repeats</label></div>
+                <div class="checkbox-row"><input type="checkbox" id="cb2" checked><label for="cb2">Intergenic filtering</label></div>
+                <div class="checkbox-row"><input type="checkbox" id="cb3" checked><label for="cb3">Filter rRNA targets</label></div>
+                <div class="checkbox-row"><input type="checkbox" id="cb4"><label for="cb4">Thermodynamic scoring</label></div>
+                <div class="param-row"><label>Off-target min Tm</label><div class="param-inputs"><input class="param-small-input" type="number" value="0"><span class="param-unit">C</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="design-sidebar-foot">
+        <div class="email-row"><input class="email-input" type="email" placeholder="Email for notification (optional)"></div>
+        <button class="submit-btn" onclick="showView('status')">Submit Design</button>
+        <div class="submit-estimate">~15 min estimated for a typical gene</div>
+      </div>
+    </div>
+
+    <!-- Right preview -->
+    <div class="design-preview">
+      <div class="preview-illustration">
+        <h3>Example Output: ACTB</h3>
+        <p>48 probes designed in 14 minutes with smFISH preset. Average quality score 82.4, 94% gene coverage.</p>
+        <svg id="design-example-map" viewBox="0 0 460 140" style="width:100%;max-width:460px;"></svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ STATUS ════ -->
+<section class="view" id="view-status">
+  <div class="status-view">
+    <h2>Job Running</h2>
+    <div class="status-job-id">ef_8a3f7c2d &middot; ACTB &middot; Human &middot; smFISH</div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:58%"></div></div>
+    <div class="pipeline-stages">
+      <div class="stage-row is-done"><div class="stage-dot done"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><div class="stage-info"><div class="stage-name">Candidate Generation</div><div class="stage-count done-count">12,450 candidates from 1,812 nt</div></div></div>
+      <div class="stage-row is-done"><div class="stage-dot done"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><div class="stage-info"><div class="stage-name">Basic Filtering</div><div class="stage-count done-count">8,230 passed Tm, GC, homopolymer</div></div></div>
+      <div class="stage-row is-done"><div class="stage-dot done"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><div class="stage-info"><div class="stage-name">Genome Alignment</div><div class="stage-count done-count">2,104 passed off-target filtering</div></div></div>
+      <div class="stage-row is-active"><div class="stage-dot active"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/></svg></div><div class="stage-info"><div class="stage-name">K-mer Filtering</div><div class="stage-count">Scanning 15-mers...</div></div></div>
+      <div class="stage-row is-pending"><div class="stage-dot pending">5</div><div class="stage-info"><div class="stage-name">Secondary Structure</div><div class="stage-count">Waiting</div></div></div>
+      <div class="stage-row is-pending"><div class="stage-dot pending">6</div><div class="stage-info"><div class="stage-name">Optimization</div><div class="stage-count">Waiting</div></div></div>
+    </div>
+    <div class="time-remaining">Estimated time remaining: <strong>~6 minutes</strong></div>
+  </div>
+</section>
+
+<!-- ════ RESULTS ════ -->
+<section class="view" id="view-results">
+  <div class="results-top">
+    <div>
+      <h2>ACTB Probe Set</h2>
+      <div class="job-meta">ef_8a3f7c2d &middot; Human GRCh38 &middot; smFISH &middot; 14m 32s</div>
+    </div>
+    <div class="results-actions">
+      <button class="btn-s" onclick="mockAction(this,'Downloaded')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> FASTA</button>
+      <button class="btn-s" onclick="mockAction(this,'Downloaded')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> CSV</button>
+      <button class="btn-s" onclick="mockAction(this,'Downloaded')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> PDF</button>
+      <button class="btn-s primary" onclick="mockAction(this,'Copied!')">Copy IDT Order</button>
+      <button class="btn-s" onclick="mockAction(this,'Link copied')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share</button>
+    </div>
+  </div>
+
+  <div class="stat-ribbon">
+    <div class="stat-item"><div class="stat-value">48</div><div class="stat-label">Probes</div></div>
+    <div class="stat-item"><div class="stat-value">82.4</div><div class="stat-label">Avg Quality</div></div>
+    <div class="stat-item"><div class="stat-value">94%</div><div class="stat-label">Coverage</div></div>
+    <div class="stat-item"><div class="stat-value">38 nt</div><div class="stat-label">Avg Spacing</div></div>
+    <div class="stat-item"><div class="stat-value">55-65</div><div class="stat-label">Tm Range (C)</div></div>
+  </div>
+
+  <div class="results-body">
+    <div class="browser-section">
+      <div class="browser-header">
+        <div class="gene-label">ACTB <span>chr7:5,527,148-5,530,601 &middot; 1,812 nt &middot; 48 probes</span></div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Quality &gt;80</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div> Quality 60-80</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div> Quality &lt;60</div>
+        </div>
+      </div>
+      <div class="tracks-wrapper" id="tracksWrapper">
+        <div id="crosshair"></div>
+        <div class="highlight-band" id="highlightBand"></div>
+        <div class="track"><div class="track-inner"><div class="track-label">Gene</div><div class="track-canvas-wrap"><canvas id="canvasGene"></canvas></div></div></div>
+        <div class="track"><div class="track-inner"><div class="track-label">Probes</div><div class="track-canvas-wrap"><canvas id="canvasProbes"></canvas></div></div></div>
+        <div class="track"><div class="track-inner"><div class="track-label">Quality</div><div class="track-canvas-wrap"><canvas id="canvasQuality"></canvas></div></div></div>
+        <div class="track"><div class="track-inner"><div class="track-label">GC %</div><div class="track-canvas-wrap"><canvas id="canvasGC"></canvas></div></div></div>
+        <div class="track"><div class="track-inner"><div class="track-label">Tm</div><div class="track-canvas-wrap"><canvas id="canvasTm"></canvas></div></div></div>
+        <div class="track"><div class="track-inner"><div class="track-label">Coverage</div><div class="track-canvas-wrap"><canvas id="canvasCoverage"></canvas></div></div></div>
+      </div>
+    </div>
+    <div id="map-tooltip"></div>
+
+    <div class="probe-table-section">
+      <div class="probe-table-header">
+        <span>Probe Details</span>
+        <span style="font-weight:400;color:var(--text-tertiary)">48 probes &middot; Click to highlight</span>
+      </div>
+      <table class="probe-table" id="probe-table">
+        <thead><tr>
+          <th onclick="sortTable(0)">Name <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable(1)">Sequence <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable(2)">Len <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable(3)">Start <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable(4)">End <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable(5)">Tm <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable(6)">GC% <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable(7)" class="sorted">Quality <span class="sort-arrow">&#9660;</span></th>
+        </tr></thead>
+        <tbody id="probe-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="citation-bar">eFISHent &middot; <a href="#">DOI: 10.5281/zenodo.501129295</a> &middot; <a href="https://github.com/BBQuercus/eFISHent">GitHub</a> &middot; MIT License</div>
+</section>
+
+</main>
+
+<script>
+// ── Probe Data ──
+const PROBES = [
+  {name:"ACTB-1",seq:"AGCACTGTGTTGGCGTACAG",len:20,start:28,end:48,tm:60.2,gc:55,quality:92.1},
+  {name:"ACTB-2",seq:"TCCTTAATGTCACGCACGAT",len:20,start:72,end:92,tm:57.8,gc:50,quality:88.4},
+  {name:"ACTB-3",seq:"GAAGGTAGTTTCGTGGATGC",len:20,start:115,end:135,tm:56.4,gc:50,quality:85.7},
+  {name:"ACTB-4",seq:"CAGCTCGTAGCTCTTCTCCA",len:20,start:162,end:182,tm:59.1,gc:55,quality:90.3},
+  {name:"ACTB-5",seq:"GTCACCTTCACCGTTCCAGT",len:20,start:208,end:228,tm:60.5,gc:55,quality:91.8},
+  {name:"ACTB-6",seq:"ACAGCCTGGATAGCAACGTA",len:20,start:251,end:271,tm:58.3,gc:50,quality:86.2},
+  {name:"ACTB-7",seq:"CTTCTCCATGTCGTCCCAGT",len:20,start:296,end:316,tm:58.9,gc:55,quality:84.5},
+  {name:"ACTB-8",seq:"GGACTTCGAGCAAGAGATGG",len:20,start:342,end:362,tm:58.6,gc:55,quality:87.9},
+  {name:"ACTB-9",seq:"AGCAGCCGTGGCCATCTCTT",len:20,start:388,end:408,tm:63.1,gc:60,quality:79.4},
+  {name:"ACTB-10",seq:"ATCTTGATCTTCATTGTGCT",len:20,start:432,end:452,tm:55.2,gc:40,quality:72.6},
+  {name:"ACTB-11",seq:"CTCTTCCAGCCTTCCTTCCT",len:20,start:478,end:498,tm:59.4,gc:55,quality:88.1},
+  {name:"ACTB-12",seq:"GAAGCATTTGCGGTGGACGA",len:20,start:524,end:544,tm:62.4,gc:55,quality:93.2},
+  {name:"ACTB-13",seq:"ACGAAAGCAATGCTATCACC",len:20,start:568,end:588,tm:56.7,gc:45,quality:81.3},
+  {name:"ACTB-14",seq:"GCCTCAGGGCAGCGGAACTT",len:20,start:614,end:634,tm:62.8,gc:65,quality:76.5},
+  {name:"ACTB-15",seq:"TCGATGGGGTACTTCAGGGT",len:20,start:658,end:678,tm:59.7,gc:55,quality:89.0},
+  {name:"ACTB-16",seq:"AGGAAGGAAGGCTGGAAGAG",len:20,start:702,end:722,tm:58.1,gc:55,quality:85.4},
+  {name:"ACTB-17",seq:"TGTGGTGCCAGATTTTCTCC",len:20,start:748,end:768,tm:58.4,gc:50,quality:87.2},
+  {name:"ACTB-18",seq:"GCTCAGGAGGAGCAATGATC",len:20,start:794,end:814,tm:58.7,gc:55,quality:86.8},
+  {name:"ACTB-19",seq:"CCAGAGGCGTACAGGGATAG",len:20,start:840,end:860,tm:59.2,gc:55,quality:90.7},
+  {name:"ACTB-20",seq:"TTCTGCATCCTGTCGGCAAT",len:20,start:884,end:904,tm:60.0,gc:50,quality:91.5},
+  {name:"ACTB-21",seq:"GCCGATCCACACGGAGTACT",len:20,start:930,end:950,tm:61.3,gc:60,quality:83.9},
+  {name:"ACTB-22",seq:"CAAACATGATCTGGGTCATC",len:20,start:975,end:995,tm:55.6,gc:45,quality:78.2},
+  {name:"ACTB-23",seq:"ATAGCAACGTACATGGCTGG",len:20,start:1020,end:1040,tm:58.5,gc:50,quality:86.7},
+  {name:"ACTB-24",seq:"TCTTGCTCGAAGTCTAGAGC",len:20,start:1064,end:1084,tm:56.9,gc:50,quality:82.4},
+  {name:"ACTB-25",seq:"GATGGAGTTGAAGGTAGTTT",len:20,start:1108,end:1128,tm:53.8,gc:40,quality:68.1},
+  {name:"ACTB-26",seq:"TAGCTCTTCTCCAGGGAGGA",len:20,start:1154,end:1174,tm:59.0,gc:55,quality:88.6},
+  {name:"ACTB-27",seq:"CATGTCGTCCCAGTTGGTGA",len:20,start:1198,end:1218,tm:60.4,gc:55,quality:90.2},
+  {name:"ACTB-28",seq:"GGATCTTCATGAGGTAGTCA",len:20,start:1242,end:1262,tm:54.3,gc:45,quality:74.8},
+  {name:"ACTB-29",seq:"CCACACGCAGCTCATTGTAG",len:20,start:1288,end:1308,tm:58.8,gc:55,quality:87.3},
+  {name:"ACTB-30",seq:"ACCCATGCCCACCATCACGC",len:20,start:1334,end:1354,tm:62.1,gc:65,quality:80.1},
+  {name:"ACTB-31",seq:"TCCTTCTGCATCCTGTCGGC",len:20,start:1378,end:1398,tm:62.7,gc:60,quality:84.6},
+  {name:"ACTB-32",seq:"CTTAATGTCACGCACGATTT",len:20,start:1424,end:1444,tm:55.4,gc:40,quality:73.9},
+  {name:"ACTB-33",seq:"GGGTACTTCAGGGTGAGGAT",len:20,start:1468,end:1488,tm:58.2,gc:55,quality:85.0},
+  {name:"ACTB-34",seq:"AATGCCAGGGTACATGGTGG",len:20,start:1514,end:1534,tm:60.8,gc:55,quality:89.5},
+  {name:"ACTB-35",seq:"CCTTAATGTCACGCACGATT",len:20,start:1558,end:1578,tm:57.6,gc:50,quality:82.8},
+  {name:"ACTB-36",seq:"GATGCCACAGGACTCCATGC",len:20,start:1602,end:1622,tm:61.5,gc:60,quality:87.6},
+  {name:"ACTB-37",seq:"AGGTCTTTGCGGATGTCCAC",len:20,start:1648,end:1668,tm:60.9,gc:55,quality:91.0},
+  {name:"ACTB-38",seq:"CTCCTGCTTGCTGATCCACA",len:20,start:1694,end:1714,tm:60.3,gc:55,quality:89.8},
+  {name:"ACTB-39",seq:"GCAATGCTATCACCTCCCCT",len:20,start:1734,end:1754,tm:59.5,gc:55,quality:86.4},
+  {name:"ACTB-40",seq:"AGGCTGGAAGAGTGCCTCAG",len:20,start:1770,end:1790,tm:61.2,gc:60,quality:83.2},
+  {name:"ACTB-41",seq:"GCAGCTCGTAGCTCTTCTCC",len:20,start:155,end:175,tm:59.6,gc:60,quality:88.0},
+  {name:"ACTB-42",seq:"TGGACTTCGAGCAAGAGATG",len:20,start:345,end:365,tm:57.9,gc:50,quality:84.2},
+  {name:"ACTB-43",seq:"AGCCGTGGCCATCTCTTGCT",len:20,start:390,end:410,tm:63.5,gc:60,quality:77.8},
+  {name:"ACTB-44",seq:"GTAGTTTCGTGGATGCCACA",len:20,start:118,end:138,tm:58.0,gc:50,quality:83.6},
+  {name:"ACTB-45",seq:"TGATCTTCATTGTGCTGGGT",len:20,start:435,end:455,tm:57.3,gc:45,quality:81.0},
+  {name:"ACTB-46",seq:"AGTCTAGAGCAACATAGCAC",len:20,start:1070,end:1090,tm:54.1,gc:45,quality:70.5},
+  {name:"ACTB-47",seq:"CGTACATGGCTGGGGTGTTG",len:20,start:1025,end:1045,tm:61.7,gc:60,quality:85.3},
+  {name:"ACTB-48",seq:"TGAAGGTAGTTTCGTGGATG",len:20,start:112,end:132,tm:55.9,gc:45,quality:79.7},
+];
+
+const GENE_AUTOCOMPLETE = [
+  {name:"ACTB",desc:"Actin Beta",id:"ENSG00000075624"},
+  {name:"GAPDH",desc:"Glyceraldehyde-3-Phosphate Dehydrogenase",id:"ENSG00000111640"},
+  {name:"NORAD",desc:"Non-Coding RNA Activated at DNA Damage",id:"ENSG00000260032"},
+  {name:"NEAT1",desc:"Nuclear Enriched Abundant Transcript 1",id:"ENSG00000245532"},
+  {name:"MALAT1",desc:"Metastasis Associated Lung Adenocarcinoma Transcript 1",id:"ENSG00000251562"},
+  {name:"TP53",desc:"Tumor Protein P53",id:"ENSG00000141510"},
+  {name:"MYC",desc:"MYC Proto-Oncogene",id:"ENSG00000136997"},
+  {name:"XIST",desc:"X Inactive Specific Transcript",id:"ENSG00000229807"},
+];
+
+const GENE_LENGTH = 1812;
+let selectedProbeIdx = null;
+let currentSortCol = 7;
+let currentSortAsc = false;
+let acKbIdx = -1;
+
+// ── View switching ──
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.topbar-nav button').forEach(b => b.classList.remove('active'));
+  const labels = {hero:'Home',design:'Design',status:'Status',results:'Results'};
+  document.querySelectorAll('.topbar-nav button').forEach(b => {
+    if (b.textContent === labels[name]) b.classList.add('active');
+  });
+  if (name === 'results') { setTimeout(renderTracks, 50); }
+  if (name === 'design') renderGenePreview();
+  if (name === 'hero') startHeroAnim();
+}
+
+function toggleTheme() {
+  const h = document.documentElement;
+  h.setAttribute('data-theme', h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  if (document.getElementById('view-results').classList.contains('active')) renderTracks();
+}
+
+// ── Gene input ──
+function handleGeneInput(val) {
+  const ac = document.getElementById('gene-autocomplete');
+  acKbIdx = -1;
+  if (val.length === 0) { ac.classList.remove('show'); return; }
+  const matches = GENE_AUTOCOMPLETE.filter(g =>
+    g.name.toLowerCase().includes(val.toLowerCase()) ||
+    g.desc.toLowerCase().includes(val.toLowerCase()) ||
+    g.id.toLowerCase().includes(val.toLowerCase())
+  );
+  if (matches.length === 0) { ac.classList.remove('show'); return; }
+  ac.innerHTML = matches.map((g,i) =>
+    `<div class="autocomplete-item" data-idx="${i}" onclick="selectGene('${g.name}')">
+      <span><span class="gene-name">${g.name}</span> &mdash; ${g.desc}</span>
+      <span class="gene-desc">${g.id}</span>
+    </div>`
+  ).join('');
+  ac.classList.add('show');
+}
+
+function handleGeneKeydown(e) {
+  const ac = document.getElementById('gene-autocomplete');
+  const items = ac.querySelectorAll('.autocomplete-item');
+  if (!ac.classList.contains('show') || items.length === 0) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); acKbIdx = Math.min(acKbIdx + 1, items.length - 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); acKbIdx = Math.max(acKbIdx - 1, 0); }
+  else if (e.key === 'Enter' && acKbIdx >= 0) { e.preventDefault(); items[acKbIdx].click(); return; }
+  else return;
+  items.forEach((it, i) => it.classList.toggle('kb-active', i === acKbIdx));
+  items[acKbIdx].scrollIntoView({block:'nearest'});
+}
+
+function selectGene(name) {
+  document.getElementById('gene-input').value = name;
+  document.getElementById('gene-autocomplete').classList.remove('show');
+}
+
+document.addEventListener('click', e => { if (!e.target.closest('.search-box')) document.getElementById('gene-autocomplete').classList.remove('show'); });
+
+function showUpload() { document.getElementById('upload-overlay').classList.add('show'); }
+function hideUpload() { document.getElementById('upload-overlay').classList.remove('show'); }
+
+// ── Chips ──
+function selectChip(el) {
+  el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function toggleAccordion(id) { document.getElementById(id).classList.toggle('open'); }
+
+// ── Design preview animation ──
+function renderGenePreview() {
+  const svg = document.getElementById('design-example-map');
+  if (!svg) return;
+  const W = 460, H = 140, padL = 30, padR = 30;
+  const trackW = W - padL - padR, trackY = 40, trackH = 12;
+  let html = '';
+  // Backbone
+  html += `<rect x="${padL}" y="${trackY}" width="${trackW}" height="${trackH}" rx="4" fill="var(--bg-tertiary)" stroke="var(--border)" stroke-width="1"/>`;
+  html += `<text x="${padL}" y="${trackY-8}" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-sans)">5'</text>`;
+  html += `<text x="${padL+trackW}" y="${trackY-8}" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-sans)" text-anchor="end">3'</text>`;
+  // Ticks
+  for (let i = 0; i <= GENE_LENGTH; i += 200) {
+    const x = padL + (i / GENE_LENGTH) * trackW;
+    html += `<line x1="${x}" y1="${trackY+trackH+3}" x2="${x}" y2="${trackY+trackH+8}" stroke="var(--text-tertiary)" stroke-width="0.7"/>`;
+    html += `<text x="${x}" y="${trackY+trackH+18}" text-anchor="middle" fill="var(--text-tertiary)" font-size="9" font-family="var(--font-mono)">${i}</text>`;
+  }
+  // Probes with staggered animation
+  const sorted = [...PROBES].sort((a,b) => a.start - b.start);
+  sorted.forEach((p, i) => {
+    const x = padL + (p.start / GENE_LENGTH) * trackW;
+    const pw = Math.max(((p.end - p.start) / GENE_LENGTH) * trackW, 4);
+    html += `<rect x="${x}" y="${trackY-5}" width="${pw}" height="${trackH+10}" rx="2.5"
+      fill="${getQualityColor(p.quality)}" opacity="0"
+      style="animation: probeAppear 0.3s ease ${i*0.04}s forwards"/>`;
+  });
+  // Quality sparkline
+  let points = sorted.map(p => {
+    const x = padL + ((p.start + p.end) / 2 / GENE_LENGTH) * trackW;
+    const y = 90 + (1 - p.quality / 100) * 35;
+    return `${x},${y}`;
+  }).join(' ');
+  html += `<polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-opacity="0.5" opacity="0" style="animation: heroFadeIn 0.5s ease 1.8s forwards"/>`;
+  html += `<text x="${padL}" y="${H-4}" fill="var(--text-tertiary)" font-size="9" font-family="var(--font-mono)" opacity="0" style="animation: heroFadeIn 0.3s ease 2s forwards">Quality profile</text>`;
+  svg.innerHTML = html;
+}
+
+function renderHeroPipeline() {
+  const svg = document.getElementById('hero-pipeline');
+  if (!svg) return;
+  const W = 480, H = 280;
+  let html = '';
+  const font = "var(--font-sans)";
+  const mono = "var(--font-mono)";
+
+  // Filtering stages — probes drop out at each step
+  const totalDots = 55;
+  const stages = [
+    { label: "Candidates", count: "12,450", keep: 55 },
+    { label: "Tm / GC", count: "8,230", keep: 36 },
+    { label: "Alignment", count: "2,104", keep: 9 },
+    { label: "K-mer", count: "1,890", keep: 8 },
+    { label: "Structure", count: "1,412", keep: 6 },
+    { label: "Optimized", count: "48", keep: 5 },
+  ];
+
+  const labelColW = 110;
+  const probeAreaX = labelColW + 6;
+  const probeAreaW = W - probeAreaX - 16;
+  const rowH = 36;
+  const topPad = 28;
+  const dotW = 4.5;
+  const dotH = 14;
+  const dotGap = (probeAreaW - totalDots * dotW) / (totalDots - 1);
+
+  // Assign each dot a "drop stage" index
+  const dotFates = new Array(totalDots).fill(0);
+  // Last N survive all stages
+  for (let d = 0; d < stages[5].keep; d++) dotFates[d] = 6;
+  for (let d = stages[5].keep; d < stages[4].keep; d++) dotFates[d] = 5;
+  for (let d = stages[4].keep; d < stages[3].keep; d++) dotFates[d] = 4;
+  for (let d = stages[3].keep; d < stages[2].keep; d++) dotFates[d] = 3;
+  for (let d = stages[2].keep; d < stages[1].keep; d++) dotFates[d] = 2;
+  for (let d = stages[1].keep; d < totalDots; d++) dotFates[d] = 1;
+  // Deterministic shuffle to scatter the drops
+  for (let i = dotFates.length - 1; i > 0; i--) {
+    const j = Math.abs(((i * 2654435761) >>> 0) % (i + 1));
+    [dotFates[i], dotFates[j]] = [dotFates[j], dotFates[i]];
+  }
+
+  const finalColors = ['#22c55e','#22c55e','#eab308','#22c55e','#22c55e'];
+
+  // Gene backbone at top
+  const geneY = 12;
+  html += `<line x1="${probeAreaX}" y1="${geneY}" x2="${probeAreaX + probeAreaW}" y2="${geneY}"
+    stroke="var(--accent)" stroke-width="3" stroke-linecap="round"
+    opacity="0" style="animation: heroFadeIn 0.5s ease 0s forwards"/>`;
+  html += `<text x="${labelColW - 6}" y="${geneY + 1}" text-anchor="end"
+    fill="var(--text-secondary)" font-size="11" font-family="${font}" font-weight="600"
+    opacity="0" style="animation: heroFadeIn 0.3s ease 0.1s forwards">Gene</text>`;
+  html += `<text x="${labelColW - 6}" y="${geneY + 13}" text-anchor="end"
+    fill="var(--text-tertiary)" font-size="9" font-family="${mono}"
+    opacity="0" style="animation: heroFadeIn 0.3s ease 0.12s forwards">1,812 nt</text>`;
+  // 5' / 3' at start and end of the line
+  html += `<text x="${probeAreaX}" y="${geneY - 6}" text-anchor="start" fill="var(--text-tertiary)" font-size="8" font-family="${mono}"
+    opacity="0" style="animation: heroFadeIn 0.3s ease 0.2s forwards">5'</text>`;
+  html += `<text x="${probeAreaX + probeAreaW}" y="${geneY - 6}" text-anchor="end" fill="var(--text-tertiary)" font-size="8" font-family="${mono}"
+    opacity="0" style="animation: heroFadeIn 0.3s ease 0.2s forwards">3'</text>`;
+
+  // Render each filtering stage as a row of probe dots
+  stages.forEach((stage, si) => {
+    const y = topPad + si * rowH;
+    const delay = 0.35 + si * 0.35;
+    const isLast = si === stages.length - 1;
+
+    // Left label + count stacked
+    html += `<text x="${labelColW - 6}" y="${y + dotH/2 + 1}" text-anchor="end"
+      fill="${isLast ? 'var(--accent)' : 'var(--text-secondary)'}"
+      font-size="11" font-family="${font}" font-weight="${isLast ? '700' : '500'}"
+      opacity="0" style="animation: heroFadeIn 0.25s ease ${delay}s forwards">${stage.label}</text>`;
+    html += `<text x="${labelColW - 6}" y="${y + dotH/2 + 13}" text-anchor="end"
+      fill="var(--text-tertiary)" font-size="9" font-family="${mono}"
+      opacity="0" style="animation: heroFadeIn 0.25s ease ${delay + 0.05}s forwards">${stage.count}</text>`;
+
+    // Probe dots
+    for (let d = 0; d < totalDots; d++) {
+      const dx = probeAreaX + d * (dotW + dotGap);
+      const alive = dotFates[d] > si;
+      const justDied = dotFates[d] === si + 1;
+
+      if (alive) {
+        let color = 'var(--accent)';
+        if (isLast) {
+          const idx = dotFates.slice(0, d + 1).filter(f => f > si).length - 1;
+          color = finalColors[idx % finalColors.length];
+        }
+        html += `<rect x="${dx}" y="${y}" width="${dotW}" height="${dotH}" rx="1.5"
+          fill="${color}" opacity="0"
+          style="animation: heroFadeIn 0.15s ease ${delay + 0.06 + d * 0.006}s forwards"/>`;
+      } else if (justDied) {
+        html += `<rect x="${dx}" y="${y}" width="${dotW}" height="${dotH}" rx="1.5"
+          fill="var(--red-500)" opacity="0"
+          style="animation: heroDropOut 0.6s ease ${delay + 0.06 + d * 0.006}s forwards"/>`;
+      }
+    }
+  });
+
+  svg.innerHTML = html;
+}
+
+// Auto-restart the animation periodically
+let heroAnimInterval;
+function startHeroAnim() {
+  renderHeroPipeline();
+  clearInterval(heroAnimInterval);
+  heroAnimInterval = setInterval(() => {
+    if (document.getElementById('view-hero')?.classList.contains('active')) renderHeroPipeline();
+  }, 8000);
+}
+
+// ── Multi-Track Browser ──
+function getQualityColor(q) {
+  if (q >= 80) return '#22c55e';
+  if (q >= 60) return '#eab308';
+  return '#f97316';
+}
+function qualityColorAlpha(q, a) {
+  if (q > 80) return `rgba(34,197,94,${a})`;
+  if (q >= 60) return `rgba(234,179,8,${a})`;
+  return `rgba(249,115,22,${a})`;
+}
+
+const TRACK_LABEL_W = 90;
+const TRACK_HEIGHTS = { gene: 48, probes: 56, quality: 90, gc: 70, tm: 70, coverage: 64 };
+const TRACK_PAD = { left: 18, right: 18 };
+const DPR = window.devicePixelRatio || 1;
+let trackCanvasWidth = 900;
+
+function ntToX(nt) {
+  return TRACK_PAD.left + (nt / GENE_LENGTH) * (trackCanvasWidth - TRACK_PAD.left - TRACK_PAD.right);
+}
+function xToNt(x) {
+  return ((x - TRACK_PAD.left) / (trackCanvasWidth - TRACK_PAD.left - TRACK_PAD.right)) * GENE_LENGTH;
+}
+
+function setupCanvas(canvas, height) {
+  const wrap = canvas.parentElement;
+  const w = wrap.clientWidth;
+  trackCanvasWidth = w;
+  canvas.width = w * DPR;
+  canvas.height = height * DPR;
+  canvas.style.width = w + 'px';
+  canvas.style.height = height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+  return ctx;
+}
+
+function smoothCurve(ctx, points) {
+  if (points.length < 2) return;
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    ctx.bezierCurveTo(
+      p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
+      p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6,
+      p2.x, p2.y
+    );
+  }
+}
+
+function drawGene(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  ctx.fillStyle = isDark ? '#12151a' : '#fafbfc';
+  ctx.fillRect(0, 0, w, h);
+  const y = h / 2;
+  const x1 = ntToX(0), x2 = ntToX(GENE_LENGTH);
+  ctx.strokeStyle = isDark ? '#4a5056' : '#94a3b8';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+  // Arrow
+  ctx.fillStyle = isDark ? '#4a5056' : '#94a3b8';
+  ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2 - 7, y - 4); ctx.lineTo(x2 - 7, y + 4); ctx.closePath(); ctx.fill();
+  // Labels
+  ctx.font = "600 10px 'DM Sans', sans-serif";
+  ctx.fillStyle = isDark ? '#9aa0aa' : '#6b7280';
+  ctx.textAlign = 'right'; ctx.fillText("5'", x1 - 5, y + 3.5);
+  ctx.textAlign = 'left'; ctx.fillText("3'", x2 + 7, y + 3.5);
+  // Ticks
+  ctx.font = "400 8px 'JetBrains Mono', monospace";
+  ctx.fillStyle = isDark ? '#5a6270' : '#9ca3af';
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = isDark ? '#2e3338' : '#cbd5e1';
+  ctx.lineWidth = 1;
+  for (let nt = 0; nt <= GENE_LENGTH; nt += 200) {
+    const x = ntToX(nt);
+    ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.stroke();
+    ctx.fillText(nt.toString(), x, y + 16);
+  }
+}
+
+function drawProbes(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  const midY = h / 2, probeH = 16;
+  PROBES.forEach((p, i) => {
+    const x1 = ntToX(p.start), x2 = ntToX(p.end);
+    const pw = Math.max(x2 - x1, 5);
+    const isSel = selectedProbeIdx === i;
+    ctx.fillStyle = isSel ? qualityColorAlpha(p.quality, 0.9) : qualityColorAlpha(p.quality, 0.65);
+    ctx.strokeStyle = isSel ? getQualityColor(p.quality) : qualityColorAlpha(p.quality, 0.25);
+    ctx.lineWidth = isSel ? 2 : 1;
+    ctx.beginPath(); ctx.roundRect(x1, midY - probeH / 2, pw, probeH, 3); ctx.fill(); ctx.stroke();
+    if (pw > 28) {
+      ctx.font = "500 7px 'JetBrains Mono', monospace";
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(p.name.replace('ACTB-', ''), x1 + pw / 2, midY);
+    }
+  });
+}
+
+function drawSparkline(ctx, w, h, getValue, maxVal, minVal, fillColor, strokeColor) {
+  ctx.clearRect(0, 0, w, h);
+  const pad = { top: 10, bottom: 12 };
+  const plotH = h - pad.top - pad.bottom;
+  ctx.font = "400 7px 'JetBrains Mono', monospace";
+  ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#5a6270' : '#b0b5be';
+  ctx.textAlign = 'left';
+  ctx.fillText(maxVal.toFixed(0), 3, pad.top + 5);
+  ctx.fillText(minVal.toFixed(0), 3, h - pad.bottom - 1);
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  ctx.strokeStyle = isDark ? '#1e2228' : '#f0f1f3';
+  ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+  for (let i = 0; i <= 4; i++) {
+    const gy = pad.top + (plotH * i) / 4;
+    ctx.beginPath(); ctx.moveTo(TRACK_PAD.left, gy); ctx.lineTo(w - TRACK_PAD.right, gy); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const sortedByPos = [...PROBES].sort((a, b) => a.start - b.start);
+  const points = sortedByPos.map(p => ({
+    x: ntToX((p.start + p.end) / 2),
+    y: pad.top + plotH * (1 - (getValue(p) - minVal) / (maxVal - minVal))
+  }));
+  const gradient = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+  gradient.addColorStop(0, fillColor);
+  gradient.addColorStop(1, isDark ? 'rgba(12,14,18,0)' : 'rgba(255,255,255,0)');
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, h - pad.bottom); ctx.lineTo(points[0].x, points[0].y);
+  smoothCurve(ctx, points);
+  ctx.lineTo(points[points.length - 1].x, h - pad.bottom); ctx.closePath();
+  ctx.fillStyle = gradient; ctx.fill();
+  ctx.beginPath(); smoothCurve(ctx, points);
+  ctx.strokeStyle = strokeColor; ctx.lineWidth = 1.5; ctx.stroke();
+  sortedByPos.forEach((p, i) => {
+    const origIdx = PROBES.indexOf(p);
+    const isSel = selectedProbeIdx === origIdx;
+    const pt = points[i];
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, isSel ? 3.5 : 2, 0, Math.PI * 2);
+    ctx.fillStyle = isSel ? strokeColor : (isDark ? '#1a1e24' : '#fff');
+    ctx.fill(); ctx.strokeStyle = strokeColor; ctx.lineWidth = isSel ? 2 : 1.5; ctx.stroke();
+  });
+}
+
+function drawCoverage(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  const binSize = 50, nBins = Math.ceil(GENE_LENGTH / binSize);
+  const bins = new Array(nBins).fill(0);
+  PROBES.forEach(p => {
+    const s = Math.floor(p.start / binSize), e = Math.floor(p.end / binSize);
+    for (let b = s; b <= e && b < nBins; b++) bins[b]++;
+  });
+  const maxBin = Math.max(...bins);
+  const pad = { top: 8, bottom: 12 };
+  const plotH = h - pad.top - pad.bottom;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  ctx.font = "400 7px 'JetBrains Mono', monospace";
+  ctx.fillStyle = isDark ? '#5a6270' : '#b0b5be';
+  ctx.textAlign = 'left';
+  ctx.fillText(maxBin.toString(), 3, pad.top + 7);
+  ctx.fillText('0', 3, h - pad.bottom - 1);
+  bins.forEach((count, i) => {
+    const x1 = ntToX(i * binSize), x2 = ntToX((i + 1) * binSize);
+    const bw = x2 - x1 - 1, bh = (count / maxBin) * plotH, by = h - pad.bottom - bh;
+    const grad = ctx.createLinearGradient(0, by, 0, h - pad.bottom);
+    grad.addColorStop(0, isDark ? 'rgba(58,148,196,0.5)' : 'rgba(27,94,140,0.5)');
+    grad.addColorStop(1, isDark ? 'rgba(58,148,196,0.1)' : 'rgba(27,94,140,0.1)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.roundRect(x1 + 0.5, by, Math.max(bw, 2), bh, [2, 2, 0, 0]); ctx.fill();
+  });
+}
+
+function renderTracks() {
+  const container = document.querySelector('.track-canvas-wrap');
+  if (!container) return;
+  trackCanvasWidth = container.clientWidth;
+  const w = trackCanvasWidth;
+  drawGene(setupCanvas(document.getElementById('canvasGene'), TRACK_HEIGHTS.gene), w, TRACK_HEIGHTS.gene);
+  drawProbes(setupCanvas(document.getElementById('canvasProbes'), TRACK_HEIGHTS.probes), w, TRACK_HEIGHTS.probes);
+  drawSparkline(setupCanvas(document.getElementById('canvasQuality'), TRACK_HEIGHTS.quality), w, TRACK_HEIGHTS.quality, p => p.quality, 100, 50, 'rgba(99,102,241,0.2)', '#6366f1');
+  drawSparkline(setupCanvas(document.getElementById('canvasGC'), TRACK_HEIGHTS.gc), w, TRACK_HEIGHTS.gc, p => p.gc, 70, 30, 'rgba(245,158,11,0.18)', '#d97706');
+  drawSparkline(setupCanvas(document.getElementById('canvasTm'), TRACK_HEIGHTS.tm), w, TRACK_HEIGHTS.tm, p => p.tm, 65, 50, 'rgba(239,68,68,0.15)', '#ef4444');
+  drawCoverage(setupCanvas(document.getElementById('canvasCoverage'), TRACK_HEIGHTS.coverage), w, TRACK_HEIGHTS.coverage);
+}
+
+// ── Track Interaction ──
+function findProbeAtX(px) {
+  for (let i = 0; i < PROBES.length; i++) {
+    if (px >= ntToX(PROBES[i].start) && px <= ntToX(PROBES[i].end)) return i;
+  }
+  let minDist = Infinity, nearest = -1;
+  PROBES.forEach((p, i) => {
+    const d = Math.abs(px - ntToX((p.start + p.end) / 2));
+    if (d < minDist) { minDist = d; nearest = i; }
+  });
+  return minDist < 35 ? nearest : -1;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const tw = document.getElementById('tracksWrapper');
+  const ch = document.getElementById('crosshair');
+  const hb = document.getElementById('highlightBand');
+  const tt = document.getElementById('map-tooltip');
+  if (!tw) return;
+
+  tw.addEventListener('mousemove', (e) => {
+    const rect = tw.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const canvasX = mx - TRACK_LABEL_W;
+    if (canvasX < 0 || canvasX > trackCanvasWidth) {
+      ch.style.display = 'none'; tt.style.display = 'none'; return;
+    }
+    ch.style.display = 'block'; ch.style.left = mx + 'px';
+    const pi = findProbeAtX(canvasX);
+    if (pi >= 0) {
+      const p = PROBES[pi];
+      tt.innerHTML = `<div class="tt-name">${p.name}</div>
+        <div class="tt-row"><span class="tt-label">Position</span><span class="tt-val">${p.start}-${p.end}</span></div>
+        <div class="tt-row"><span class="tt-label">Quality</span><span class="tt-val" style="color:${getQualityColor(p.quality)}">${p.quality}</span></div>
+        <div class="tt-row"><span class="tt-label">GC%</span><span class="tt-val">${p.gc}%</span></div>
+        <div class="tt-row"><span class="tt-label">Tm</span><span class="tt-val">${p.tm}&deg;C</span></div>
+        <div class="tt-row"><span class="tt-label">Length</span><span class="tt-val">${p.len} nt</span></div>`;
+      tt.style.display = 'block';
+      let tx = e.clientX + 16, ty = e.clientY - 20;
+      const tw2 = tt.offsetWidth, th = tt.offsetHeight;
+      if (tx + tw2 > window.innerWidth - 10) tx = e.clientX - tw2 - 16;
+      if (ty + th > window.innerHeight - 10) ty = e.clientY - th - 10;
+      if (ty < 10) ty = 10;
+      tt.style.left = tx + 'px'; tt.style.top = ty + 'px';
+    } else { tt.style.display = 'none'; }
+  });
+
+  tw.addEventListener('mouseleave', () => {
+    ch.style.display = 'none'; tt.style.display = 'none';
+  });
+
+  tw.addEventListener('click', (e) => {
+    const rect = tw.getBoundingClientRect();
+    const canvasX = e.clientX - rect.left - TRACK_LABEL_W;
+    if (canvasX < 0) return;
+    const pi = findProbeAtX(canvasX);
+    if (pi >= 0) {
+      if (selectedProbeIdx === pi) {
+        selectedProbeIdx = null; hb.style.display = 'none';
+      } else {
+        selectedProbeIdx = pi;
+        const p = PROBES[pi];
+        const x1 = ntToX(p.start) + TRACK_LABEL_W;
+        const x2 = ntToX(p.end) + TRACK_LABEL_W;
+        hb.style.display = 'block'; hb.style.left = x1 + 'px'; hb.style.width = (x2 - x1) + 'px';
+      }
+      renderTracks();
+      renderTable();
+      if (selectedProbeIdx !== null) {
+        document.querySelectorAll('#probe-tbody tr').forEach(r => {
+          if (r.classList.contains('selected')) r.scrollIntoView({block:'nearest',behavior:'smooth'});
+        });
+      }
+    }
+  });
+});
+
+function selectProbe(idx) {
+  const hb = document.getElementById('highlightBand');
+  if (selectedProbeIdx === idx) {
+    selectedProbeIdx = null;
+    if (hb) hb.style.display = 'none';
+  } else {
+    selectedProbeIdx = idx;
+    if (hb && PROBES[idx]) {
+      const p = PROBES[idx];
+      const x1 = ntToX(p.start) + TRACK_LABEL_W;
+      const x2 = ntToX(p.end) + TRACK_LABEL_W;
+      hb.style.display = 'block'; hb.style.left = x1 + 'px'; hb.style.width = (x2 - x1) + 'px';
+    }
+  }
+  renderTracks();
+  renderTable();
+  if (selectedProbeIdx !== null) {
+    document.querySelectorAll('#probe-tbody tr').forEach(r => {
+      if (r.classList.contains('selected')) r.scrollIntoView({block:'nearest',behavior:'smooth'});
+    });
+  }
+}
+
+// ── Table ──
+function renderTable() {
+  const sorted = [...PROBES];
+  sorted.sort((a,b) => {
+    const keys = ['name','seq','len','start','end','tm','gc','quality'];
+    const key = keys[currentSortCol];
+    let va = a[key], vb = b[key];
+    if (key === 'name') { const na = parseInt(va.split('-')[1]), nb = parseInt(vb.split('-')[1]); return currentSortAsc ? na-nb : nb-na; }
+    if (typeof va === 'string') return currentSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return currentSortAsc ? va-vb : vb-va;
+  });
+  document.getElementById('probe-tbody').innerHTML = sorted.map(p => {
+    const idx = PROBES.indexOf(p);
+    const sel = idx === selectedProbeIdx ? ' selected' : '';
+    const qc = p.quality >= 80 ? 'quality-high' : p.quality >= 60 ? 'quality-mid' : 'quality-low';
+    return `<tr class="${sel}" onclick="selectProbe(${idx})">
+      <td class="col-name">${p.name}</td><td class="col-seq">${p.seq}</td><td>${p.len}</td>
+      <td>${p.start}</td><td>${p.end}</td><td>${p.tm.toFixed(1)}</td><td>${p.gc}</td>
+      <td><span class="quality-badge ${qc}">${p.quality.toFixed(1)}</span></td></tr>`;
+  }).join('');
+}
+
+function sortTable(col) {
+  const ths = document.querySelectorAll('.probe-table thead th');
+  if (currentSortCol === col) currentSortAsc = !currentSortAsc;
+  else { currentSortCol = col; currentSortAsc = col <= 1; }
+  ths.forEach((th,i) => {
+    th.classList.toggle('sorted', i === col);
+    th.querySelector('.sort-arrow').innerHTML = i === col ? (currentSortAsc ? '&#9650;' : '&#9660;') : '&#9650;';
+  });
+  renderTable();
+}
+
+// ── Mock actions ──
+function mockAction(btn, text) {
+  const orig = btn.innerHTML;
+  btn.innerHTML = text; btn.style.borderColor = 'var(--green-500)'; btn.style.color = 'var(--green-500)';
+  setTimeout(() => { btn.innerHTML = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 1500);
+}
+
+// ── Init ──
+renderTable();
+startHeroAnim();
+window.addEventListener('resize', () => {
+  if (document.getElementById('view-results').classList.contains('active')) renderTracks();
+});
+
+// CSS animations for design preview
+const style = document.createElement('style');
+style.textContent = `
+@keyframes probeAppear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes probeFade { to { opacity: 0.15; } }
+@keyframes heroSlideIn { from { opacity: 0; transform: translateY(8px) scaleX(0.9); } to { opacity: 1; transform: translateY(0) scaleX(1); } }
+@keyframes heroFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes heroDropOut { 0% { opacity: 0; } 30% { opacity: 0.6; fill: var(--red-500); } 100% { opacity: 0.08; } }
+`;
+document.head.appendChild(style);
+</script>
+
+</body>
+</html>

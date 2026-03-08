@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design C: Multi-Track Browser</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #f8f9fb;
+    background-image: radial-gradient(circle, #d8dbe2 0.8px, transparent 0.8px);
+    background-size: 20px 20px;
+    color: #1a1d23;
+    min-height: 100vh;
+    padding: 32px 40px;
+  }
+
+  .page-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1d23;
+    margin-bottom: 6px;
+  }
+  .page-subtitle {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 24px;
+    font-weight: 400;
+  }
+
+  .browser-container {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #e2e5ea;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+    overflow: hidden;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .browser-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid #e8eaed;
+    background: #fafbfc;
+  }
+  .browser-header .gene-label {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1a1d23;
+  }
+  .browser-header .gene-label span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .browser-header .legend {
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: #6b7280;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+
+  .tracks-wrapper {
+    position: relative;
+    cursor: crosshair;
+  }
+
+  .track {
+    position: relative;
+    border-bottom: 1px solid #f0f1f3;
+  }
+  .track:last-child { border-bottom: none; }
+
+  .track-inner {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .track-label {
+    width: 110px;
+    min-width: 110px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #fafbfc;
+    border-right: 1px solid #f0f1f3;
+  }
+
+  .track-canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  canvas { display: block; }
+
+  /* Crosshair line */
+  #crosshair {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: rgba(99, 102, 241, 0.5);
+    pointer-events: none;
+    z-index: 10;
+    display: none;
+    transition: left 0.03s linear;
+  }
+
+  /* Selected highlight band */
+  .highlight-band {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(99, 102, 241, 0.06);
+    border-left: 1px solid rgba(99, 102, 241, 0.15);
+    border-right: 1px solid rgba(99, 102, 241, 0.15);
+    pointer-events: none;
+    z-index: 5;
+    display: none;
+  }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed;
+    background: #1a1d23;
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    pointer-events: none;
+    z-index: 100;
+    display: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    max-width: 280px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  #tooltip .tt-name {
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: #c7d2fe;
+  }
+  #tooltip .tt-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  #tooltip .tt-label { color: #9ca3af; }
+  #tooltip .tt-val { color: #fff; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="page-title">Design C: Multi-Track Browser</div>
+<div class="page-subtitle">Probe map visualization inspired by UCSC Genome Browser / IGV</div>
+
+<div class="browser-container">
+  <div class="browser-header">
+    <div class="gene-label">ACTB <span>chr7:5,527,148-5,530,601 &middot; 1,812 nt &middot; 30 probes</span></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Quality &gt;80</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div> Quality 60-80</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div> Quality &lt;60</div>
+    </div>
+  </div>
+
+  <div class="tracks-wrapper" id="tracksWrapper">
+    <div id="crosshair"></div>
+    <div class="highlight-band" id="highlightBand"></div>
+
+    <!-- Track 1: Gene backbone -->
+    <div class="track" id="trackGene">
+      <div class="track-inner">
+        <div class="track-label">Gene</div>
+        <div class="track-canvas-wrap"><canvas id="canvasGene"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Track 2: Probe placement -->
+    <div class="track" id="trackProbes">
+      <div class="track-inner">
+        <div class="track-label">Probes</div>
+        <div class="track-canvas-wrap"><canvas id="canvasProbes"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Track 3: Quality sparkline -->
+    <div class="track" id="trackQuality">
+      <div class="track-inner">
+        <div class="track-label">Quality</div>
+        <div class="track-canvas-wrap"><canvas id="canvasQuality"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Track 4: GC content -->
+    <div class="track" id="trackGC">
+      <div class="track-inner">
+        <div class="track-label">GC %</div>
+        <div class="track-canvas-wrap"><canvas id="canvasGC"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Track 5: Tm profile -->
+    <div class="track" id="trackTm">
+      <div class="track-inner">
+        <div class="track-label">Tm</div>
+        <div class="track-canvas-wrap"><canvas id="canvasTm"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Track 6: Coverage density -->
+    <div class="track" id="trackCoverage">
+      <div class="track-inner">
+        <div class="track-label">Coverage</div>
+        <div class="track-canvas-wrap"><canvas id="canvasCoverage"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const PROBES = [
+  {name:"ACTB-1",seq:"AGCACTGTGTTGGCGTACAG",len:20,start:28,end:48,tm:60.2,gc:55,quality:92.1},
+  {name:"ACTB-2",seq:"TCCTTAATGTCACGCACGAT",len:20,start:72,end:92,tm:57.8,gc:50,quality:88.4},
+  {name:"ACTB-3",seq:"GAAGGTAGTTTCGTGGATGC",len:20,start:115,end:135,tm:56.4,gc:50,quality:85.7},
+  {name:"ACTB-4",seq:"CAGCTCGTAGCTCTTCTCCA",len:20,start:162,end:182,tm:59.1,gc:55,quality:90.3},
+  {name:"ACTB-5",seq:"GTCACCTTCACCGTTCCAGT",len:20,start:208,end:228,tm:60.5,gc:55,quality:91.8},
+  {name:"ACTB-6",seq:"ACAGCCTGGATAGCAACGTA",len:20,start:251,end:271,tm:58.3,gc:50,quality:86.2},
+  {name:"ACTB-7",seq:"CTTCTCCATGTCGTCCCAGT",len:20,start:296,end:316,tm:58.9,gc:55,quality:84.5},
+  {name:"ACTB-8",seq:"GGACTTCGAGCAAGAGATGG",len:20,start:342,end:362,tm:58.6,gc:55,quality:87.9},
+  {name:"ACTB-9",seq:"AGCAGCCGTGGCCATCTCTT",len:20,start:388,end:408,tm:63.1,gc:60,quality:79.4},
+  {name:"ACTB-10",seq:"ATCTTGATCTTCATTGTGCT",len:20,start:432,end:452,tm:55.2,gc:40,quality:72.6},
+  {name:"ACTB-11",seq:"CTCTTCCAGCCTTCCTTCCT",len:20,start:478,end:498,tm:59.4,gc:55,quality:88.1},
+  {name:"ACTB-12",seq:"GAAGCATTTGCGGTGGACGA",len:20,start:524,end:544,tm:62.4,gc:55,quality:93.2},
+  {name:"ACTB-13",seq:"ACGAAAGCAATGCTATCACC",len:20,start:568,end:588,tm:56.7,gc:45,quality:81.3},
+  {name:"ACTB-14",seq:"GCCTCAGGGCAGCGGAACTT",len:20,start:614,end:634,tm:62.8,gc:65,quality:76.5},
+  {name:"ACTB-15",seq:"TCGATGGGGTACTTCAGGGT",len:20,start:658,end:678,tm:59.7,gc:55,quality:89.0},
+  {name:"ACTB-16",seq:"AGGAAGGAAGGCTGGAAGAG",len:20,start:702,end:722,tm:58.1,gc:55,quality:85.4},
+  {name:"ACTB-17",seq:"TGTGGTGCCAGATTTTCTCC",len:20,start:748,end:768,tm:58.4,gc:50,quality:87.2},
+  {name:"ACTB-18",seq:"GCTCAGGAGGAGCAATGATC",len:20,start:794,end:814,tm:58.7,gc:55,quality:86.8},
+  {name:"ACTB-19",seq:"CCAGAGGCGTACAGGGATAG",len:20,start:840,end:860,tm:59.2,gc:55,quality:90.7},
+  {name:"ACTB-20",seq:"TTCTGCATCCTGTCGGCAAT",len:20,start:884,end:904,tm:60.0,gc:50,quality:91.5},
+  {name:"ACTB-21",seq:"GCCGATCCACACGGAGTACT",len:20,start:930,end:950,tm:61.3,gc:60,quality:83.9},
+  {name:"ACTB-22",seq:"CAAACATGATCTGGGTCATC",len:20,start:975,end:995,tm:55.6,gc:45,quality:78.2},
+  {name:"ACTB-23",seq:"ATAGCAACGTACATGGCTGG",len:20,start:1020,end:1040,tm:58.5,gc:50,quality:86.7},
+  {name:"ACTB-24",seq:"TCTTGCTCGAAGTCTAGAGC",len:20,start:1064,end:1084,tm:56.9,gc:50,quality:82.4},
+  {name:"ACTB-25",seq:"GATGGAGTTGAAGGTAGTTT",len:20,start:1108,end:1128,tm:53.8,gc:40,quality:68.1},
+  {name:"ACTB-26",seq:"TAGCTCTTCTCCAGGGAGGA",len:20,start:1154,end:1174,tm:59.0,gc:55,quality:88.6},
+  {name:"ACTB-27",seq:"CATGTCGTCCCAGTTGGTGA",len:20,start:1198,end:1218,tm:60.4,gc:55,quality:90.2},
+  {name:"ACTB-28",seq:"GGATCTTCATGAGGTAGTCA",len:20,start:1242,end:1262,tm:54.3,gc:45,quality:74.8},
+  {name:"ACTB-29",seq:"CCACACGCAGCTCATTGTAG",len:20,start:1288,end:1308,tm:58.8,gc:55,quality:87.3},
+  {name:"ACTB-30",seq:"ACCCATGCCCACCATCACGC",len:20,start:1334,end:1354,tm:62.1,gc:65,quality:80.1},
+];
+const GENE_LENGTH = 1812;
+
+// --- Layout ---
+const LABEL_W = 110;
+const TRACK_HEIGHTS = { gene: 52, probes: 60, quality: 100, gc: 80, tm: 80, coverage: 70 };
+const PADDING = { left: 20, right: 20 };
+const DPR = window.devicePixelRatio || 1;
+
+let selectedProbe = null;
+let canvasWidth = 900; // will be computed
+
+function ntToX(nt) {
+  return PADDING.left + (nt / GENE_LENGTH) * (canvasWidth - PADDING.left - PADDING.right);
+}
+
+function xToNt(x) {
+  return ((x - PADDING.left) / (canvasWidth - PADDING.left - PADDING.right)) * GENE_LENGTH;
+}
+
+function qualityColor(q) {
+  if (q > 80) return '#22c55e';
+  if (q >= 60) return '#eab308';
+  return '#f97316';
+}
+
+function qualityColorAlpha(q, a) {
+  if (q > 80) return `rgba(34,197,94,${a})`;
+  if (q >= 60) return `rgba(234,179,8,${a})`;
+  return `rgba(249,115,22,${a})`;
+}
+
+// --- Canvas setup ---
+function setupCanvas(canvas, height) {
+  const wrap = canvas.parentElement;
+  const w = wrap.clientWidth;
+  canvasWidth = w;
+  canvas.width = w * DPR;
+  canvas.height = height * DPR;
+  canvas.style.width = w + 'px';
+  canvas.style.height = height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+  return ctx;
+}
+
+// --- Smooth curve through points ---
+function smoothCurve(ctx, points) {
+  if (points.length < 2) return;
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
+}
+
+// --- Draw functions ---
+function drawGene(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+
+  // Background
+  ctx.fillStyle = '#fafbfc';
+  ctx.fillRect(0, 0, w, h);
+
+  const y = h / 2;
+  const x1 = ntToX(0);
+  const x2 = ntToX(GENE_LENGTH);
+
+  // Gene backbone line
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y);
+  ctx.lineTo(x2, y);
+  ctx.stroke();
+
+  // Arrow at 3' end
+  ctx.fillStyle = '#94a3b8';
+  ctx.beginPath();
+  ctx.moveTo(x2, y);
+  ctx.lineTo(x2 - 8, y - 5);
+  ctx.lineTo(x2 - 8, y + 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // 5' / 3' labels
+  ctx.font = "600 11px 'DM Sans'";
+  ctx.fillStyle = '#6b7280';
+  ctx.textAlign = 'right';
+  ctx.fillText("5'", x1 - 6, y + 4);
+  ctx.textAlign = 'left';
+  ctx.fillText("3'", x2 + 8, y + 4);
+
+  // Position markers every 200nt
+  ctx.font = "400 9px 'JetBrains Mono'";
+  ctx.fillStyle = '#9ca3af';
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  for (let nt = 0; nt <= GENE_LENGTH; nt += 200) {
+    const x = ntToX(nt);
+    ctx.beginPath();
+    ctx.moveTo(x, y - 6);
+    ctx.lineTo(x, y + 6);
+    ctx.stroke();
+    ctx.fillText(nt.toString(), x, y + 18);
+  }
+}
+
+function drawProbes(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  const midY = h / 2;
+  const probeH = 18;
+
+  PROBES.forEach((p, i) => {
+    const x1 = ntToX(p.start);
+    const x2 = ntToX(p.end);
+    const pw = Math.max(x2 - x1, 6);
+    const isSelected = selectedProbe === i;
+
+    // Probe rectangle
+    ctx.fillStyle = isSelected ? qualityColorAlpha(p.quality, 0.9) : qualityColorAlpha(p.quality, 0.7);
+    ctx.strokeStyle = isSelected ? qualityColor(p.quality) : qualityColorAlpha(p.quality, 0.3);
+    ctx.lineWidth = isSelected ? 2 : 1;
+
+    const ry = midY - probeH / 2;
+    const radius = 4;
+    ctx.beginPath();
+    ctx.roundRect(x1, ry, pw, probeH, radius);
+    ctx.fill();
+    ctx.stroke();
+
+    // Probe name if wide enough
+    if (pw > 30) {
+      ctx.font = "500 8px 'JetBrains Mono'";
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.name.replace('ACTB-', ''), x1 + pw / 2, midY);
+    }
+  });
+}
+
+function drawSparkline(ctx, w, h, getValue, maxVal, minVal, fillColor, strokeColor) {
+  ctx.clearRect(0, 0, w, h);
+
+  const pad = { top: 12, bottom: 14 };
+  const plotH = h - pad.top - pad.bottom;
+
+  // Y-axis labels
+  ctx.font = "400 8px 'JetBrains Mono'";
+  ctx.fillStyle = '#b0b5be';
+  ctx.textAlign = 'left';
+  ctx.fillText(maxVal.toFixed(0), 4, pad.top + 6);
+  ctx.fillText(minVal.toFixed(0), 4, h - pad.bottom - 2);
+
+  // Grid lines
+  ctx.strokeStyle = '#f0f1f3';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  for (let i = 0; i <= 4; i++) {
+    const gy = pad.top + (plotH * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(PADDING.left, gy);
+    ctx.lineTo(w - PADDING.right, gy);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Build points
+  const points = PROBES.map(p => {
+    const x = ntToX((p.start + p.end) / 2);
+    const v = getValue(p);
+    const y = pad.top + plotH * (1 - (v - minVal) / (maxVal - minVal));
+    return { x, y };
+  });
+
+  // Filled area
+  const gradient = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+  gradient.addColorStop(0, fillColor);
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, h - pad.bottom);
+  ctx.lineTo(points[0].x, points[0].y);
+  smoothCurve(ctx, points);
+  ctx.lineTo(points[points.length - 1].x, h - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // Stroke line
+  ctx.beginPath();
+  smoothCurve(ctx, points);
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Dots
+  points.forEach((pt, i) => {
+    const isSelected = selectedProbe === i;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, isSelected ? 4 : 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = isSelected ? strokeColor : '#fff';
+    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = isSelected ? 2 : 1.5;
+    ctx.stroke();
+  });
+}
+
+function drawCoverage(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+
+  const binSize = 50;
+  const nBins = Math.ceil(GENE_LENGTH / binSize);
+  const bins = new Array(nBins).fill(0);
+
+  PROBES.forEach(p => {
+    const startBin = Math.floor(p.start / binSize);
+    const endBin = Math.floor(p.end / binSize);
+    for (let b = startBin; b <= endBin && b < nBins; b++) {
+      bins[b]++;
+    }
+  });
+
+  const maxBin = Math.max(...bins);
+  const pad = { top: 10, bottom: 14 };
+  const plotH = h - pad.top - pad.bottom;
+
+  // Y label
+  ctx.font = "400 8px 'JetBrains Mono'";
+  ctx.fillStyle = '#b0b5be';
+  ctx.textAlign = 'left';
+  ctx.fillText(maxBin.toString(), 4, pad.top + 8);
+  ctx.fillText('0', 4, h - pad.bottom - 2);
+
+  // Bars
+  bins.forEach((count, i) => {
+    const x1 = ntToX(i * binSize);
+    const x2 = ntToX((i + 1) * binSize);
+    const bw = x2 - x1 - 1;
+    const bh = (count / maxBin) * plotH;
+    const by = h - pad.bottom - bh;
+
+    const grad = ctx.createLinearGradient(0, by, 0, h - pad.bottom);
+    grad.addColorStop(0, 'rgba(99,102,241,0.6)');
+    grad.addColorStop(1, 'rgba(99,102,241,0.15)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x1 + 0.5, by, Math.max(bw, 2), bh, [2, 2, 0, 0]);
+    ctx.fill();
+  });
+}
+
+// --- Render all ---
+function renderAll() {
+  const container = document.querySelector('.track-canvas-wrap');
+  if (!container) return;
+
+  const w = container.clientWidth;
+  canvasWidth = w;
+
+  const ctxGene = setupCanvas(document.getElementById('canvasGene'), TRACK_HEIGHTS.gene);
+  const ctxProbes = setupCanvas(document.getElementById('canvasProbes'), TRACK_HEIGHTS.probes);
+  const ctxQuality = setupCanvas(document.getElementById('canvasQuality'), TRACK_HEIGHTS.quality);
+  const ctxGC = setupCanvas(document.getElementById('canvasGC'), TRACK_HEIGHTS.gc);
+  const ctxTm = setupCanvas(document.getElementById('canvasTm'), TRACK_HEIGHTS.tm);
+  const ctxCov = setupCanvas(document.getElementById('canvasCoverage'), TRACK_HEIGHTS.coverage);
+
+  drawGene(ctxGene, w, TRACK_HEIGHTS.gene);
+  drawProbes(ctxProbes, w, TRACK_HEIGHTS.probes);
+  drawSparkline(ctxQuality, w, TRACK_HEIGHTS.quality, p => p.quality, 100, 50, 'rgba(99,102,241,0.2)', '#6366f1');
+  drawSparkline(ctxGC, w, TRACK_HEIGHTS.gc, p => p.gc, 70, 30, 'rgba(245,158,11,0.18)', '#d97706');
+  drawSparkline(ctxTm, w, TRACK_HEIGHTS.tm, p => p.tm, 65, 50, 'rgba(239,68,68,0.15)', '#ef4444');
+  drawCoverage(ctxCov, w, TRACK_HEIGHTS.coverage);
+}
+
+// --- Interaction ---
+const tracksWrapper = document.getElementById('tracksWrapper');
+const crosshair = document.getElementById('crosshair');
+const highlightBand = document.getElementById('highlightBand');
+const tooltip = document.getElementById('tooltip');
+
+function findProbeAtX(px) {
+  for (let i = 0; i < PROBES.length; i++) {
+    const p = PROBES[i];
+    const x1 = ntToX(p.start);
+    const x2 = ntToX(p.end);
+    if (px >= x1 && px <= x2) return i;
+  }
+  // Find nearest probe
+  let minDist = Infinity;
+  let nearest = -1;
+  PROBES.forEach((p, i) => {
+    const mid = ntToX((p.start + p.end) / 2);
+    const d = Math.abs(px - mid);
+    if (d < minDist) { minDist = d; nearest = i; }
+  });
+  return minDist < 40 ? nearest : -1;
+}
+
+tracksWrapper.addEventListener('mousemove', (e) => {
+  const rect = tracksWrapper.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // Account for label width
+  const canvasX = mx - LABEL_W;
+  if (canvasX < 0 || canvasX > canvasWidth) {
+    crosshair.style.display = 'none';
+    tooltip.style.display = 'none';
+    return;
+  }
+
+  // Crosshair
+  crosshair.style.display = 'block';
+  crosshair.style.left = mx + 'px';
+
+  // Find nearest probe
+  const pi = findProbeAtX(canvasX);
+  if (pi >= 0) {
+    const p = PROBES[pi];
+    tooltip.innerHTML = `
+      <div class="tt-name">${p.name}</div>
+      <div class="tt-row"><span class="tt-label">Position</span><span class="tt-val">${p.start}-${p.end}</span></div>
+      <div class="tt-row"><span class="tt-label">Quality</span><span class="tt-val" style="color:${qualityColor(p.quality)}">${p.quality}</span></div>
+      <div class="tt-row"><span class="tt-label">GC%</span><span class="tt-val">${p.gc}%</span></div>
+      <div class="tt-row"><span class="tt-label">Tm</span><span class="tt-val">${p.tm}&deg;C</span></div>
+      <div class="tt-row"><span class="tt-label">Length</span><span class="tt-val">${p.len} nt</span></div>
+    `;
+    tooltip.style.display = 'block';
+
+    // Position tooltip
+    let tx = e.clientX + 16;
+    let ty = e.clientY - 20;
+    const tw = tooltip.offsetWidth;
+    const th = tooltip.offsetHeight;
+    if (tx + tw > window.innerWidth - 10) tx = e.clientX - tw - 16;
+    if (ty + th > window.innerHeight - 10) ty = e.clientY - th - 10;
+    if (ty < 10) ty = 10;
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top = ty + 'px';
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+
+tracksWrapper.addEventListener('mouseleave', () => {
+  crosshair.style.display = 'none';
+  tooltip.style.display = 'none';
+});
+
+tracksWrapper.addEventListener('click', (e) => {
+  const rect = tracksWrapper.getBoundingClientRect();
+  const canvasX = e.clientX - rect.left - LABEL_W;
+  if (canvasX < 0) return;
+
+  const pi = findProbeAtX(canvasX);
+  if (pi >= 0) {
+    if (selectedProbe === pi) {
+      selectedProbe = null;
+      highlightBand.style.display = 'none';
+    } else {
+      selectedProbe = pi;
+      const p = PROBES[pi];
+      const x1 = ntToX(p.start) + LABEL_W;
+      const x2 = ntToX(p.end) + LABEL_W;
+      highlightBand.style.display = 'block';
+      highlightBand.style.left = x1 + 'px';
+      highlightBand.style.width = (x2 - x1) + 'px';
+    }
+    renderAll();
+  }
+});
+
+// --- Resize ---
+window.addEventListener('resize', () => {
+  renderAll();
+  if (selectedProbe !== null) {
+    const p = PROBES[selectedProbe];
+    const x1 = ntToX(p.start) + LABEL_W;
+    const x2 = ntToX(p.end) + LABEL_W;
+    highlightBand.style.left = x1 + 'px';
+    highlightBand.style.width = (x2 - x1) + 'px';
+  }
+});
+
+// Initial render
+renderAll();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design A: Radial Arc — eFISHent Probe Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0c0e12;
+    color: #e2e6ed;
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  .page-title {
+    margin-top: 40px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #5b8dea;
+    opacity: 0.85;
+  }
+
+  .subtitle {
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 1.5px;
+    color: #4a5568;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .arc-container {
+    position: relative;
+    width: 720px;
+    height: 720px;
+  }
+
+  svg.arc-svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: #181c24;
+    border: 1px solid #2a3040;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #c8cdd6;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    backdrop-filter: blur(12px);
+    min-width: 220px;
+  }
+  .tooltip.visible { opacity: 1; }
+
+  .tooltip .tt-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 14px;
+    color: #e8ecf2;
+    margin-bottom: 8px;
+  }
+
+  .tooltip .tt-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .tooltip .tt-label {
+    color: #6b7a90;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .tooltip .tt-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    font-size: 12px;
+    color: #e2e6ed;
+  }
+
+  .tooltip .tt-seq {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #2a3040;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #5b8dea;
+    word-break: break-all;
+    letter-spacing: 1px;
+  }
+
+  .tooltip .tt-quality-bar {
+    margin-top: 8px;
+    height: 4px;
+    border-radius: 2px;
+    background: #1a1e28;
+    overflow: hidden;
+  }
+  .tooltip .tt-quality-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.2s;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 28px;
+    margin-top: 12px;
+    margin-bottom: 40px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #6b7a90;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* Center stats styling handled in SVG */
+</style>
+</head>
+<body>
+
+<div class="page-title">Design A: Radial Arc</div>
+<div class="subtitle">eFISHent Probe Map Visualization</div>
+
+<div class="arc-container">
+  <svg class="arc-svg" id="arcSvg" viewBox="0 0 720 720"></svg>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div>Quality &gt; 80</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div>Quality 60–80</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>Quality &lt; 60</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const PROBES = [
+  {name:"ACTB-1",seq:"AGCACTGTGTTGGCGTACAG",len:20,start:28,end:48,tm:60.2,gc:55,quality:92.1},
+  {name:"ACTB-2",seq:"TCCTTAATGTCACGCACGAT",len:20,start:72,end:92,tm:57.8,gc:50,quality:88.4},
+  {name:"ACTB-3",seq:"GAAGGTAGTTTCGTGGATGC",len:20,start:115,end:135,tm:56.4,gc:50,quality:85.7},
+  {name:"ACTB-4",seq:"CAGCTCGTAGCTCTTCTCCA",len:20,start:162,end:182,tm:59.1,gc:55,quality:90.3},
+  {name:"ACTB-5",seq:"GTCACCTTCACCGTTCCAGT",len:20,start:208,end:228,tm:60.5,gc:55,quality:91.8},
+  {name:"ACTB-6",seq:"ACAGCCTGGATAGCAACGTA",len:20,start:251,end:271,tm:58.3,gc:50,quality:86.2},
+  {name:"ACTB-7",seq:"CTTCTCCATGTCGTCCCAGT",len:20,start:296,end:316,tm:58.9,gc:55,quality:84.5},
+  {name:"ACTB-8",seq:"GGACTTCGAGCAAGAGATGG",len:20,start:342,end:362,tm:58.6,gc:55,quality:87.9},
+  {name:"ACTB-9",seq:"AGCAGCCGTGGCCATCTCTT",len:20,start:388,end:408,tm:63.1,gc:60,quality:79.4},
+  {name:"ACTB-10",seq:"ATCTTGATCTTCATTGTGCT",len:20,start:432,end:452,tm:55.2,gc:40,quality:72.6},
+  {name:"ACTB-11",seq:"CTCTTCCAGCCTTCCTTCCT",len:20,start:478,end:498,tm:59.4,gc:55,quality:88.1},
+  {name:"ACTB-12",seq:"GAAGCATTTGCGGTGGACGA",len:20,start:524,end:544,tm:62.4,gc:55,quality:93.2},
+  {name:"ACTB-13",seq:"ACGAAAGCAATGCTATCACC",len:20,start:568,end:588,tm:56.7,gc:45,quality:81.3},
+  {name:"ACTB-14",seq:"GCCTCAGGGCAGCGGAACTT",len:20,start:614,end:634,tm:62.8,gc:65,quality:76.5},
+  {name:"ACTB-15",seq:"TCGATGGGGTACTTCAGGGT",len:20,start:658,end:678,tm:59.7,gc:55,quality:89.0},
+  {name:"ACTB-16",seq:"AGGAAGGAAGGCTGGAAGAG",len:20,start:702,end:722,tm:58.1,gc:55,quality:85.4},
+  {name:"ACTB-17",seq:"TGTGGTGCCAGATTTTCTCC",len:20,start:748,end:768,tm:58.4,gc:50,quality:87.2},
+  {name:"ACTB-18",seq:"GCTCAGGAGGAGCAATGATC",len:20,start:794,end:814,tm:58.7,gc:55,quality:86.8},
+  {name:"ACTB-19",seq:"CCAGAGGCGTACAGGGATAG",len:20,start:840,end:860,tm:59.2,gc:55,quality:90.7},
+  {name:"ACTB-20",seq:"TTCTGCATCCTGTCGGCAAT",len:20,start:884,end:904,tm:60.0,gc:50,quality:91.5},
+  {name:"ACTB-21",seq:"GCCGATCCACACGGAGTACT",len:20,start:930,end:950,tm:61.3,gc:60,quality:83.9},
+  {name:"ACTB-22",seq:"CAAACATGATCTGGGTCATC",len:20,start:975,end:995,tm:55.6,gc:45,quality:78.2},
+  {name:"ACTB-23",seq:"ATAGCAACGTACATGGCTGG",len:20,start:1020,end:1040,tm:58.5,gc:50,quality:86.7},
+  {name:"ACTB-24",seq:"TCTTGCTCGAAGTCTAGAGC",len:20,start:1064,end:1084,tm:56.9,gc:50,quality:82.4},
+  {name:"ACTB-25",seq:"GATGGAGTTGAAGGTAGTTT",len:20,start:1108,end:1128,tm:53.8,gc:40,quality:68.1},
+  {name:"ACTB-26",seq:"TAGCTCTTCTCCAGGGAGGA",len:20,start:1154,end:1174,tm:59.0,gc:55,quality:88.6},
+  {name:"ACTB-27",seq:"CATGTCGTCCCAGTTGGTGA",len:20,start:1198,end:1218,tm:60.4,gc:55,quality:90.2},
+  {name:"ACTB-28",seq:"GGATCTTCATGAGGTAGTCA",len:20,start:1242,end:1262,tm:54.3,gc:45,quality:74.8},
+  {name:"ACTB-29",seq:"CCACACGCAGCTCATTGTAG",len:20,start:1288,end:1308,tm:58.8,gc:55,quality:87.3},
+  {name:"ACTB-30",seq:"ACCCATGCCCACCATCACGC",len:20,start:1334,end:1354,tm:62.1,gc:65,quality:80.1},
+  {name:"ACTB-31",seq:"TCCTTCTGCATCCTGTCGGC",len:20,start:1378,end:1398,tm:62.7,gc:60,quality:84.6},
+  {name:"ACTB-32",seq:"CTTAATGTCACGCACGATTT",len:20,start:1424,end:1444,tm:55.4,gc:40,quality:73.9},
+  {name:"ACTB-33",seq:"GGGTACTTCAGGGTGAGGAT",len:20,start:1468,end:1488,tm:58.2,gc:55,quality:85.0},
+  {name:"ACTB-34",seq:"AATGCCAGGGTACATGGTGG",len:20,start:1514,end:1534,tm:60.8,gc:55,quality:89.5},
+  {name:"ACTB-35",seq:"CCTTAATGTCACGCACGATT",len:20,start:1558,end:1578,tm:57.6,gc:50,quality:82.8},
+  {name:"ACTB-36",seq:"GATGCCACAGGACTCCATGC",len:20,start:1602,end:1622,tm:61.5,gc:60,quality:87.6},
+  {name:"ACTB-37",seq:"AGGTCTTTGCGGATGTCCAC",len:20,start:1648,end:1668,tm:60.9,gc:55,quality:91.0},
+  {name:"ACTB-38",seq:"CTCCTGCTTGCTGATCCACA",len:20,start:1694,end:1714,tm:60.3,gc:55,quality:89.8},
+  {name:"ACTB-39",seq:"GCAATGCTATCACCTCCCCT",len:20,start:1734,end:1754,tm:59.5,gc:55,quality:86.4},
+  {name:"ACTB-40",seq:"AGGCTGGAAGAGTGCCTCAG",len:20,start:1770,end:1790,tm:61.2,gc:60,quality:83.2},
+];
+const GENE_LENGTH = 1812;
+
+// Layout constants
+const CX = 360, CY = 370;
+const R_OUTER = 280;       // outer edge of probe arcs
+const R_INNER = 252;       // inner edge of probe arcs (thick arcs)
+const R_GENE = 240;        // the gene backbone ring
+const R_TICK = 232;        // tick marks inner
+const ARC_START = -225;    // degrees, starting angle (top-left)
+const ARC_SPAN = 270;      // degrees total sweep
+
+const svg = document.getElementById('arcSvg');
+const tooltip = document.getElementById('tooltip');
+const NS = 'http://www.w3.org/2000/svg';
+
+let selectedProbe = null;
+
+function degToRad(d) { return d * Math.PI / 180; }
+
+function posToAngle(pos) {
+  return ARC_START + (pos / GENE_LENGTH) * ARC_SPAN;
+}
+
+function polarToXY(cx, cy, r, angleDeg) {
+  const rad = degToRad(angleDeg);
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function arcPath(cx, cy, r, startDeg, endDeg) {
+  const s = polarToXY(cx, cy, r, startDeg);
+  const e = polarToXY(cx, cy, r, endDeg);
+  const sweep = endDeg - startDeg;
+  const large = sweep > 180 ? 1 : 0;
+  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+}
+
+function thickArcPath(cx, cy, rOuter, rInner, startDeg, endDeg) {
+  const s1 = polarToXY(cx, cy, rOuter, startDeg);
+  const e1 = polarToXY(cx, cy, rOuter, endDeg);
+  const s2 = polarToXY(cx, cy, rInner, endDeg);
+  const e2 = polarToXY(cx, cy, rInner, startDeg);
+  const sweep = endDeg - startDeg;
+  const large = sweep > 180 ? 1 : 0;
+  return `M ${s1.x} ${s1.y} A ${rOuter} ${rOuter} 0 ${large} 1 ${e1.x} ${e1.y} L ${s2.x} ${s2.y} A ${rInner} ${rInner} 0 ${large} 0 ${e2.x} ${e2.y} Z`;
+}
+
+function qualityColor(q) {
+  if (q > 80) return '#34d399';
+  if (q >= 60) return '#fbbf24';
+  return '#f97316';
+}
+
+function qualityColorDim(q) {
+  if (q > 80) return 'rgba(52,211,153,0.25)';
+  if (q >= 60) return 'rgba(251,191,36,0.25)';
+  return 'rgba(249,115,22,0.25)';
+}
+
+// --- DEFS ---
+const defs = document.createElementNS(NS, 'defs');
+
+// Radial glow
+const rg = document.createElementNS(NS, 'radialGradient');
+rg.setAttribute('id', 'glow');
+rg.setAttribute('cx', '50%'); rg.setAttribute('cy', '52%');
+rg.setAttribute('r', '45%');
+[{o:0, c:'rgba(91,141,234,0.12)'}, {o:0.5, c:'rgba(91,141,234,0.04)'}, {o:1, c:'rgba(91,141,234,0)'}].forEach(s => {
+  const stop = document.createElementNS(NS, 'stop');
+  stop.setAttribute('offset', s.o); stop.setAttribute('stop-color', s.c);
+  rg.appendChild(stop);
+});
+defs.appendChild(rg);
+
+// Drop shadow for selected
+const filter = document.createElementNS(NS, 'filter');
+filter.setAttribute('id', 'selectedGlow');
+filter.setAttribute('x', '-50%'); filter.setAttribute('y', '-50%');
+filter.setAttribute('width', '200%'); filter.setAttribute('height', '200%');
+const feGauss = document.createElementNS(NS, 'feGaussianBlur');
+feGauss.setAttribute('in', 'SourceGraphic'); feGauss.setAttribute('stdDeviation', '4');
+feGauss.setAttribute('result', 'blur');
+const feMerge = document.createElementNS(NS, 'feMerge');
+const mn1 = document.createElementNS(NS, 'feMergeNode'); mn1.setAttribute('in', 'blur');
+const mn2 = document.createElementNS(NS, 'feMergeNode'); mn2.setAttribute('in', 'SourceGraphic');
+feMerge.appendChild(mn1); feMerge.appendChild(mn2);
+filter.appendChild(feGauss); filter.appendChild(feMerge);
+defs.appendChild(filter);
+
+svg.appendChild(defs);
+
+// --- Radial glow background ---
+const glowCircle = document.createElementNS(NS, 'circle');
+glowCircle.setAttribute('cx', CX); glowCircle.setAttribute('cy', CY);
+glowCircle.setAttribute('r', 340);
+glowCircle.setAttribute('fill', 'url(#glow)');
+svg.appendChild(glowCircle);
+
+// --- Gene backbone (thin arc) ---
+const backbone = document.createElementNS(NS, 'path');
+backbone.setAttribute('d', arcPath(CX, CY, R_GENE, ARC_START, ARC_START + ARC_SPAN));
+backbone.setAttribute('fill', 'none');
+backbone.setAttribute('stroke', '#1e2536');
+backbone.setAttribute('stroke-width', '3');
+backbone.setAttribute('stroke-linecap', 'round');
+svg.appendChild(backbone);
+
+// --- Position tick marks and labels ---
+const tickPositions = [0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1812];
+tickPositions.forEach(pos => {
+  const angle = posToAngle(pos);
+  const outer = polarToXY(CX, CY, R_GENE - 2, angle);
+  const inner = polarToXY(CX, CY, R_TICK, angle);
+  const tick = document.createElementNS(NS, 'line');
+  tick.setAttribute('x1', outer.x); tick.setAttribute('y1', outer.y);
+  tick.setAttribute('x2', inner.x); tick.setAttribute('y2', inner.y);
+  tick.setAttribute('stroke', '#2a3448'); tick.setAttribute('stroke-width', '1');
+  svg.appendChild(tick);
+
+  // Label
+  const labelR = R_TICK - 14;
+  const lp = polarToXY(CX, CY, labelR, angle);
+  const label = document.createElementNS(NS, 'text');
+  label.setAttribute('x', lp.x); label.setAttribute('y', lp.y);
+  label.setAttribute('text-anchor', 'middle');
+  label.setAttribute('dominant-baseline', 'central');
+  label.setAttribute('fill', '#3d4a60');
+  label.setAttribute('font-family', 'JetBrains Mono, monospace');
+  label.setAttribute('font-size', '9');
+  label.textContent = pos >= 1000 ? (pos/1000).toFixed(1)+'k' : pos;
+  svg.appendChild(label);
+});
+
+// --- Probe arcs ---
+const probeElements = [];
+
+PROBES.forEach((p, i) => {
+  const startAngle = posToAngle(p.start);
+  const endAngle = posToAngle(p.end);
+  const color = qualityColor(p.quality);
+
+  const group = document.createElementNS(NS, 'g');
+  group.style.cursor = 'pointer';
+
+  // Probe arc
+  const arc = document.createElementNS(NS, 'path');
+  arc.setAttribute('d', thickArcPath(CX, CY, R_OUTER, R_INNER, startAngle, endAngle));
+  arc.setAttribute('fill', color);
+  arc.setAttribute('opacity', '0.75');
+  arc.setAttribute('stroke', 'none');
+  arc.style.transition = 'opacity 0.15s ease, filter 0.15s ease';
+
+  // Invisible wider hit area
+  const hitArc = document.createElementNS(NS, 'path');
+  hitArc.setAttribute('d', thickArcPath(CX, CY, R_OUTER + 6, R_INNER - 6, startAngle, endAngle));
+  hitArc.setAttribute('fill', 'transparent');
+  hitArc.setAttribute('stroke', 'none');
+
+  group.appendChild(arc);
+  group.appendChild(hitArc);
+  svg.appendChild(group);
+
+  probeElements.push({ group, arc, probe: p });
+
+  // Events
+  group.addEventListener('mouseenter', (e) => {
+    if (selectedProbe !== i) {
+      arc.setAttribute('opacity', '1');
+      arc.setAttribute('filter', 'url(#selectedGlow)');
+    }
+    showTooltip(e, p);
+  });
+
+  group.addEventListener('mousemove', (e) => {
+    moveTooltip(e);
+  });
+
+  group.addEventListener('mouseleave', () => {
+    if (selectedProbe !== i) {
+      arc.setAttribute('opacity', '0.75');
+      arc.removeAttribute('filter');
+    }
+    hideTooltip();
+  });
+
+  group.addEventListener('click', () => {
+    if (selectedProbe === i) {
+      selectedProbe = null;
+      updateSelection();
+    } else {
+      selectedProbe = i;
+      updateSelection();
+    }
+  });
+});
+
+// --- Connector lines from probes to backbone ---
+PROBES.forEach((p) => {
+  const midAngle = posToAngle((p.start + p.end) / 2);
+  const inner = polarToXY(CX, CY, R_INNER - 1, midAngle);
+  const gene = polarToXY(CX, CY, R_GENE + 2, midAngle);
+  const line = document.createElementNS(NS, 'line');
+  line.setAttribute('x1', inner.x); line.setAttribute('y1', inner.y);
+  line.setAttribute('x2', gene.x); line.setAttribute('y2', gene.y);
+  line.setAttribute('stroke', '#1a2235');
+  line.setAttribute('stroke-width', '0.5');
+  svg.appendChild(line);
+});
+
+// --- Arc endpoints (decorative caps) ---
+const capStart = polarToXY(CX, CY, R_GENE, ARC_START);
+const capEnd = polarToXY(CX, CY, R_GENE, ARC_START + ARC_SPAN);
+[capStart, capEnd].forEach(pt => {
+  const c = document.createElementNS(NS, 'circle');
+  c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y);
+  c.setAttribute('r', '4');
+  c.setAttribute('fill', '#5b8dea');
+  c.setAttribute('opacity', '0.6');
+  svg.appendChild(c);
+});
+
+// --- Gene label at start ---
+const geneStartLabel = polarToXY(CX, CY, R_OUTER + 22, ARC_START);
+const gsText = document.createElementNS(NS, 'text');
+gsText.setAttribute('x', geneStartLabel.x); gsText.setAttribute('y', geneStartLabel.y);
+gsText.setAttribute('text-anchor', 'middle'); gsText.setAttribute('dominant-baseline', 'central');
+gsText.setAttribute('fill', '#5b8dea'); gsText.setAttribute('font-size', '10');
+gsText.setAttribute('font-family', 'JetBrains Mono, monospace'); gsText.setAttribute('font-weight', '500');
+gsText.textContent = "5'";
+svg.appendChild(gsText);
+
+const geneEndLabel = polarToXY(CX, CY, R_OUTER + 22, ARC_START + ARC_SPAN);
+const geText = document.createElementNS(NS, 'text');
+geText.setAttribute('x', geneEndLabel.x); geText.setAttribute('y', geneEndLabel.y);
+geText.setAttribute('text-anchor', 'middle'); geText.setAttribute('dominant-baseline', 'central');
+geText.setAttribute('fill', '#5b8dea'); geText.setAttribute('font-size', '10');
+geText.setAttribute('font-family', 'JetBrains Mono, monospace'); geText.setAttribute('font-weight', '500');
+geText.textContent = "3'";
+svg.appendChild(geText);
+
+// --- Center summary stats ---
+const avgQuality = (PROBES.reduce((s,p) => s + p.quality, 0) / PROBES.length).toFixed(1);
+const coveredBases = new Set();
+PROBES.forEach(p => { for (let i = p.start; i < p.end; i++) coveredBases.add(i); });
+const coverage = ((coveredBases.size / GENE_LENGTH) * 100).toFixed(0);
+
+// Gene name
+const geneName = document.createElementNS(NS, 'text');
+geneName.setAttribute('x', CX); geneName.setAttribute('y', CY - 70);
+geneName.setAttribute('text-anchor', 'middle'); geneName.setAttribute('dominant-baseline', 'central');
+geneName.setAttribute('fill', '#5b8dea'); geneName.setAttribute('font-size', '13');
+geneName.setAttribute('font-family', 'JetBrains Mono, monospace');
+geneName.setAttribute('font-weight', '600'); geneName.setAttribute('letter-spacing', '3');
+geneName.textContent = 'ACTB';
+svg.appendChild(geneName);
+
+// Horizontal rule
+const hr = document.createElementNS(NS, 'line');
+hr.setAttribute('x1', CX - 50); hr.setAttribute('y1', CY - 52);
+hr.setAttribute('x2', CX + 50); hr.setAttribute('y2', CY - 52);
+hr.setAttribute('stroke', '#1e2536'); hr.setAttribute('stroke-width', '1');
+svg.appendChild(hr);
+
+// Stats
+const stats = [
+  { label: 'PROBES', value: PROBES.length.toString(), y: CY - 28 },
+  { label: 'AVG QUALITY', value: avgQuality, y: CY + 2 },
+  { label: 'COVERAGE', value: coverage + '%', y: CY + 32 },
+  { label: 'GENE LENGTH', value: GENE_LENGTH.toLocaleString() + ' bp', y: CY + 62 },
+];
+
+stats.forEach(s => {
+  const val = document.createElementNS(NS, 'text');
+  val.setAttribute('x', CX); val.setAttribute('y', s.y);
+  val.setAttribute('text-anchor', 'middle'); val.setAttribute('dominant-baseline', 'central');
+  val.setAttribute('fill', '#e2e6ed'); val.setAttribute('font-size', '20');
+  val.setAttribute('font-family', 'JetBrains Mono, monospace'); val.setAttribute('font-weight', '600');
+  val.textContent = s.value;
+  svg.appendChild(val);
+
+  const lbl = document.createElementNS(NS, 'text');
+  lbl.setAttribute('x', CX); lbl.setAttribute('y', s.y + 16);
+  lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('dominant-baseline', 'central');
+  lbl.setAttribute('fill', '#4a5568'); lbl.setAttribute('font-size', '9');
+  lbl.setAttribute('font-family', 'DM Sans, sans-serif'); lbl.setAttribute('font-weight', '500');
+  lbl.setAttribute('letter-spacing', '2');
+  lbl.textContent = s.label;
+  svg.appendChild(lbl);
+});
+
+// --- Selection logic ---
+function updateSelection() {
+  probeElements.forEach(({ arc }, i) => {
+    if (selectedProbe === null) {
+      arc.setAttribute('opacity', '0.75');
+      arc.removeAttribute('filter');
+    } else if (selectedProbe === i) {
+      arc.setAttribute('opacity', '1');
+      arc.setAttribute('filter', 'url(#selectedGlow)');
+    } else {
+      arc.setAttribute('opacity', '0.2');
+      arc.removeAttribute('filter');
+    }
+  });
+}
+
+// --- Tooltip logic ---
+function showTooltip(e, p) {
+  const color = qualityColor(p.quality);
+  tooltip.innerHTML = `
+    <div class="tt-name">${p.name}</div>
+    <div class="tt-row"><span class="tt-label">Position</span><span class="tt-value">${p.start}–${p.end}</span></div>
+    <div class="tt-row"><span class="tt-label">Length</span><span class="tt-value">${p.len} bp</span></div>
+    <div class="tt-row"><span class="tt-label">Tm</span><span class="tt-value">${p.tm.toFixed(1)} &deg;C</span></div>
+    <div class="tt-row"><span class="tt-label">GC%</span><span class="tt-value">${p.gc}%</span></div>
+    <div class="tt-row"><span class="tt-label">Quality</span><span class="tt-value" style="color:${color}">${p.quality.toFixed(1)}</span></div>
+    <div class="tt-quality-bar"><div class="tt-quality-fill" style="width:${p.quality}%;background:${color}"></div></div>
+    <div class="tt-seq">${p.seq}</div>
+  `;
+  tooltip.classList.add('visible');
+  moveTooltip(e);
+}
+
+function moveTooltip(e) {
+  const pad = 16;
+  let x = e.clientX + pad;
+  let y = e.clientY + pad;
+  const rect = tooltip.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth - pad) x = e.clientX - rect.width - pad;
+  if (y + rect.height > window.innerHeight - pad) y = e.clientY - rect.height - pad;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
+
+// Click outside to deselect
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.arc-svg')) {
+    selectedProbe = null;
+    updateSelection();
+  }
+});
+</script>
+</body>
+</html>
