@@ -11,7 +11,6 @@ from rich.progress import (
     BarColumn,
     Progress,
     SpinnerColumn,
-    TaskProgressColumn,
     TextColumn,
     TimeElapsedColumn,
 )
@@ -589,7 +588,6 @@ def spinner(description: str):
 
     # If we're inside pipeline_progress, update the description to show subprocess
     if _pipeline_progress is not None and _pipeline_task_id is not None:
-        old_desc = _pipeline_progress.tasks[_pipeline_task_id].description
         _pipeline_progress.update(_pipeline_task_id, description=f"[dim]{description}[/dim]")
         yield
         # Restore to show step progress

@@ -1,11 +1,9 @@
 """Tests for console UX features."""
 
 import argparse
-import io
 
 import pandas as pd
 import pytest
-from rich.console import Console
 
 from eFISHent.cli import validate_parameter_warnings
 from eFISHent.console import (
