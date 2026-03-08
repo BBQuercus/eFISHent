@@ -55,13 +55,13 @@ class TestPresets:
         p = get_preset("smfish")["params"]
         assert p["min_length"] == 20
         assert p["max_length"] == 20
-        assert p["formamide_concentration"] == 10.0
+        assert p["formamide_concentration"] == pytest.approx(10.0)
 
     def test_merfish_preset_values(self):
         p = get_preset("merfish")["params"]
-        assert p["min_tm"] == 45.0
-        assert p["max_tm"] == 55.0
-        assert p["formamide_concentration"] == 30.0
+        assert p["min_tm"] == pytest.approx(45.0)
+        assert p["max_tm"] == pytest.approx(55.0)
+        assert p["formamide_concentration"] == pytest.approx(30.0)
 
     def test_strict_vs_relaxed(self):
         strict = get_preset("strict")["params"]

@@ -16,6 +16,7 @@ from .config import GeneralConfig
 from .config import ProbeConfig
 from .config import SequenceConfig
 from .indexing import BuildBowtieIndex
+from .indexing import BuildBowtie2Index
 
 
 class AlignProbeCandidates(luigi.Task):
@@ -28,9 +29,23 @@ class AlignProbeCandidates(luigi.Task):
         self.is_endogenous = SequenceConfig().is_endogenous
         self.max_off_targets = ProbeConfig().max_off_targets
         self.no_alternative_loci = ProbeConfig().no_alternative_loci
+        self.aligner = ProbeConfig().aligner
+        self.encode_count_table = ProbeConfig().encode_count_table
+        self.has_expression_filter = bool(
+            self.encode_count_table
+            and GeneralConfig().reference_annotation
+            and self.is_endogenous
+        )
 
     def requires(self):
-        tasks = {"probes": BasicFiltering(), "bowtie": BuildBowtieIndex()}
+        if self.aligner == "bowtie2":
+            index_task = BuildBowtie2Index()
+        else:
+            index_task = BuildBowtieIndex()
+        tasks = {"probes": BasicFiltering(), "bowtie": index_task}
+        if self.has_expression_filter:
+            from .indexing import PrepareAnnotationFile
+            tasks["annotation"] = PrepareAnnotationFile()
         return tasks
 
     def output(self):
@@ -92,7 +107,8 @@ class AlignProbeCandidates(luigi.Task):
     def norm_table(self) -> pd.DataFrame:
         """Merge gtf and count table."""
         df = pd.merge(
-            self.count_table, self.gtf_table, how="left", on="gene_id"
+            self.count_table, self.gtf_table, how="left", on="gene_id",
+            validate="many_to_many",
         ).dropna()
         return df
 
@@ -133,6 +149,50 @@ class AlignProbeCandidates(luigi.Task):
                 args_bowtie, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
             )
 
+    def align_probes_bowtie2(self, threads: int):
+        """Align probes using Bowtie2 with OligoMiner/Tigerfish parameters.
+
+        Parameters are from OligoMiner (Beliveau et al., 2018, MIT license)
+        and validated by Tigerfish (Kuo et al., 2024). Tuned for short
+        oligonucleotide probe alignment with mismatch tolerance.
+        """
+        # Bowtie2 misparses FASTA descriptions containing angle brackets
+        # (e.g., BioPython's "<unknown description>"). Write a clean FASTA
+        # with IDs only to avoid read name corruption.
+        fname_clean = self.fname_fasta + ".bt2.fa"
+        with open(fname_clean, "w") as out:
+            for record in Bio.SeqIO.parse(self.fname_fasta, "fasta"):
+                out.write(f">{record.id}\n{record.seq}\n")
+
+        k_value = str(max(self.max_off_targets + 2, 100))
+        args = [
+            "bowtie2",
+            "-f",  # FASTA input
+            "-x", self.fname_genome,
+            "-U", fname_clean,
+            "--threads", str(threads),
+            "--local",  # Local alignment (soft-clip ends)
+            "-D", "20",  # 20 seed extension attempts
+            "-R", "3",  # 3 re-seeding rounds
+            "-N", "1",  # 1 mismatch allowed in seed
+            "-L", "20",  # Seed length 20bp
+            "-i", "C,4",  # Seed interval: constant, every 4 bases
+            "--score-min", "G,1,4",  # Min score: log-based threshold
+            "-k", k_value,  # Report up to k alignments per probe
+            "-S", self.fname_sam,
+        ]
+        # Only suppress unaligned for endogenous (exogenous needs unmapped reads)
+        if self.is_endogenous:
+            args.insert(-2, "--no-unal")
+        self.logger.debug(f"Running bowtie2 with - {' '.join(args)}")
+        from .console import spinner
+
+        with spinner("Aligning probes to genome (Bowtie2)..."):
+            subprocess.check_call(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            )
+        os.remove(fname_clean)
+
     @staticmethod
     def parse_raw_pysam(sam: str) -> pd.DataFrame:
         """Convert string based pysam output to a DataFrame."""
@@ -152,10 +212,21 @@ class AlignProbeCandidates(luigi.Task):
         Filtering explanations:
             * mapq 60: uniquely mapped read, regardless of number of mismatches / indels
             * flag 4: unmapped read
+        For Bowtie2:
+            * Endogenous: keep all mapped reads, filter by hit count
+            * Exogenous: keep only unmapped (flag 4)
         """
-        flags = ["--min-MQ", "60"] if self.is_endogenous else ["--require-flags", "4"]
-        self.logger.debug(f"Running samtools with - {' '.join(flags)}")
-        filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
+        if self.aligner == "bowtie2":
+            if self.is_endogenous:
+                # Keep all mapped reads, filter by hit count below
+                filtered_sam = pysam.view(self.fname_sam, "--exclude-flags", "4")  # type: ignore
+            else:
+                filtered_sam = pysam.view(self.fname_sam, "--require-flags", "4")  # type: ignore
+        else:
+            flags = ["--min-MQ", "60"] if self.is_endogenous else ["--require-flags", "4"]
+            self.logger.debug(f"Running samtools with - {' '.join(flags)}")
+            filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
+
         df = self.parse_raw_pysam(filtered_sam)
 
         if self.no_alternative_loci:
@@ -171,6 +242,52 @@ class AlignProbeCandidates(luigi.Task):
             ]
         return df
 
+    def get_most_expressed_genes(self, percentage: float) -> pd.Series:
+        """Get gene IDs expressed above percentile threshold."""
+        threshold = self.norm_table["count"].quantile(1 - percentage / 100)
+        return self.norm_table[self.norm_table["count"] >= threshold]["gene_id"]
+
+    def filter_expression_off_targets(self, df_sam: pd.DataFrame) -> pd.DataFrame:
+        """Remove probes aligning to highly expressed off-target genes."""
+        self.fname_count = self.encode_count_table
+        self.fname_gtf = self.input()["annotation"].path
+
+        expressed_genes = self.get_most_expressed_genes(
+            ProbeConfig().max_expression_percentage
+        )
+        self.logger.debug(
+            f"Found {len(expressed_genes)} highly expressed genes "
+            f"(top {ProbeConfig().max_expression_percentage}%)"
+        )
+
+        # Join alignments with gene annotations by position overlap
+        gtf = self.gtf_table
+        gtf = gtf[gtf["feature"] == "gene"]
+
+        # For each alignment, find overlapping genes
+        probes_to_remove = set()
+        for _, row in df_sam.iterrows():
+            chrom = row["rname"]
+            pos = int(row["pos"])
+            # Find genes overlapping this position
+            overlapping = gtf[
+                (gtf["seqname"] == chrom)
+                & (gtf["start"] <= pos)
+                & (gtf["end"] >= pos)
+            ]
+            for _, gene in overlapping.iterrows():
+                gene_id = gene["gene_id"]
+                if gene_id in expressed_genes.values:
+                    probes_to_remove.add(row["qname"])
+
+        if probes_to_remove:
+            self.logger.debug(
+                f"Removing {len(probes_to_remove)} probes hitting highly expressed off-targets"
+            )
+            df_sam = df_sam[~df_sam["qname"].isin(probes_to_remove)]
+
+        return df_sam
+
     def run(self):
         util.log_stage_start(self.logger, "AlignProbeCandidates")
         # Naming
@@ -178,9 +295,19 @@ class AlignProbeCandidates(luigi.Task):
         self.fname_sam = os.path.splitext(self.fname_fasta)[0] + ".sam"
         self.fname_genome = util.get_genome_name()
 
-        # Alignment and filtering
-        self.align_probes(threads=GeneralConfig().threads)
+        # Alignment
+        if self.aligner == "bowtie2":
+            self.align_probes_bowtie2(threads=GeneralConfig().threads)
+        else:
+            self.align_probes(threads=GeneralConfig().threads)
+
+        # Filtering
         df_sam = self.filter_unique_probes()
+
+        # Expression-weighted filtering
+        if self.has_expression_filter:
+            df_sam = self.filter_expression_off_targets(df_sam)
+
         df_sam.to_csv(self.output()["table"].path, index=False)
 
         # Save output

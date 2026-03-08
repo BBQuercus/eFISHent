@@ -203,14 +203,13 @@ PARAM_METAVAR = {
     "max_transcriptome_off_targets": "N",
     "blast_identity_threshold": "%",
     "reference_transcriptome": "FILE",
-    "filter_low_complexity": "yes/no",
-    # Boolean parameters - show yes/no
-    "build_indices": "yes/no",
-    "save_intermediates": "yes/no",
-    "is_plus_strand": "yes/no",
-    "is_endogenous": "yes/no",
-    "no_alternative_loci": "yes/no",
 }
+_BOOL_METAVAR = "yes/no"
+for _bool_param in [
+    "filter_low_complexity", "build_indices", "save_intermediates",
+    "is_plus_strand", "is_endogenous", "no_alternative_loci",
+]:
+    PARAM_METAVAR[_bool_param] = _BOOL_METAVAR
 
 
 def get_parameter_type(param: luigi.Parameter) -> Any:

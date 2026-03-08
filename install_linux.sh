@@ -19,11 +19,7 @@ echo "=================================================="
 
 # Detect architecture
 ARCH=$(uname -m)
-if [ "$ARCH" = "x86_64" ]; then
-    ARCH_SUFFIX="x64"
-elif [ "$ARCH" = "aarch64" ]; then
-    ARCH_SUFFIX="aarch64"
-else
+if [ "$ARCH" != "x86_64" ] && [ "$ARCH" != "aarch64" ]; then
     echo "Unsupported architecture: $ARCH"
     exit 1
 fi
@@ -32,7 +28,7 @@ cd "${INSTALL_DIR}"
 
 # 1. Bowtie (pre-compiled)
 echo ""
-echo "[1/5] Installing Bowtie..."
+echo "[1/7] Installing Bowtie..."
 if [ ! -f "${BIN_DIR}/bowtie" ]; then
     wget -q "https://sourceforge.net/projects/bowtie-bio/files/bowtie/1.3.1/bowtie-1.3.1-linux-x86_64.zip/download" -O bowtie.zip
     unzip -q bowtie.zip
@@ -43,9 +39,22 @@ else
     echo "  Bowtie already installed"
 fi
 
-# 2. Jellyfish (compile from source)
+# 2. Bowtie2 (pre-compiled)
 echo ""
-echo "[2/5] Installing Jellyfish..."
+echo "[2/7] Installing Bowtie2..."
+if [ ! -f "${BIN_DIR}/bowtie2" ]; then
+    wget -q "https://sourceforge.net/projects/bowtie-bio/files/bowtie2/2.5.4/bowtie2-2.5.4-linux-x86_64.zip/download" -O bowtie2.zip
+    unzip -q bowtie2.zip
+    cp bowtie2-2.5.4-linux-x86_64/bowtie2* "${BIN_DIR}/"
+    rm -rf bowtie2.zip bowtie2-2.5.4-linux-x86_64
+    echo "  Bowtie2 installed successfully"
+else
+    echo "  Bowtie2 already installed"
+fi
+
+# 3. Jellyfish (compile from source)
+echo ""
+echo "[3/7] Installing Jellyfish..."
 if [ ! -f "${BIN_DIR}/jellyfish" ]; then
     echo "  Downloading and compiling (this may take a minute)..."
     wget -q "https://github.com/gmarcais/Jellyfish/releases/download/v2.3.1/jellyfish-2.3.1.tar.gz"
@@ -61,9 +70,9 @@ else
     echo "  Jellyfish already installed"
 fi
 
-# 3. GLPK (compile from source - needed for pyomo solver)
+# 4. GLPK (compile from source - needed for pyomo solver)
 echo ""
-echo "[3/5] Installing GLPK..."
+echo "[4/7] Installing GLPK..."
 if [ ! -f "${BIN_DIR}/glpsol" ]; then
     echo "  Downloading and compiling (this may take a minute)..."
     wget -q "https://ftp.gnu.org/gnu/glpk/glpk-5.0.tar.gz"
@@ -79,9 +88,22 @@ else
     echo "  GLPK already installed"
 fi
 
-# 4. Entrez Direct (official installer)
+# 5. BLAST+ (pre-compiled)
 echo ""
-echo "[4/5] Installing Entrez Direct..."
+echo "[5/7] Installing BLAST+..."
+if [ ! -f "${BIN_DIR}/blastn" ]; then
+    wget -q "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz" -O blast.tar.gz
+    tar -xzf blast.tar.gz
+    cp ncbi-blast-*/bin/blastn ncbi-blast-*/bin/makeblastdb "${BIN_DIR}/"
+    rm -rf blast.tar.gz ncbi-blast-*
+    echo "  BLAST+ installed successfully"
+else
+    echo "  BLAST+ already installed"
+fi
+
+# 6. Entrez Direct (official installer)
+echo ""
+echo "[6/7] Installing Entrez Direct..."
 if [ ! -f "${EDIRECT_DIR}/esearch" ]; then
     echo "  Downloading and setting up..."
     mkdir -p "${EDIRECT_DIR}"
@@ -95,9 +117,9 @@ else
     echo "  Entrez Direct already installed"
 fi
 
-# 5. RNAstructure Fold (Linux only - macOS has bundled binary)
+# 7. RNAstructure Fold (Linux only - macOS has bundled binary)
 echo ""
-echo "[5/5] Installing RNAstructure Fold..."
+echo "[7/7] Installing RNAstructure Fold..."
 if [ ! -f "${BIN_DIR}/Fold" ]; then
     echo "  RNAstructure requires manual download due to registration requirement."
     echo "  Please:"
@@ -130,7 +152,9 @@ echo "=================================================="
 echo "Installation complete! Installed versions:"
 echo ""
 echo "  bowtie:      $(bowtie --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+echo "  bowtie2:     $(bowtie2 --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 echo "  jellyfish:   $(jellyfish --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+echo "  blastn:      $(blastn -version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 echo "  glpsol:      $(glpsol --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+')"
 echo "  edirect:     $(esearch -version 2>&1 | head -1)"
 if [ -f "${BIN_DIR}/Fold" ]; then

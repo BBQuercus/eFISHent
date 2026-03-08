@@ -36,10 +36,10 @@ fi
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-info()  { printf "${GREEN}✓${RESET} %s\n" "$1"; }
-warn()  { printf "${YELLOW}!${RESET} %s\n" "$1"; }
-err()   { printf "${RED}✗${RESET} %s\n" "$1" >&2; }
-step()  { printf "\n${BOLD}%s${RESET}\n" "$1"; }
+info()  { printf "%s %s\n" "${GREEN}✓${RESET}" "$1"; }
+warn()  { printf "%s %s\n" "${YELLOW}!${RESET}" "$1"; }
+err()   { printf "%s %s\n" "${RED}✗${RESET}" "$1" >&2; }
+step()  { printf "\n%s\n" "${BOLD}$1${RESET}"; }
 
 need_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -116,9 +116,9 @@ esac
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 
-printf "\n${BOLD}eFISHent Installer${RESET}\n"
-printf "${DIM}Platform: %s/%s${RESET}\n" "$PLATFORM" "$ARCH_NAME"
-printf "${DIM}Install:  %s${RESET}\n" "$INSTALL_PREFIX"
+printf "\n%s\n" "${BOLD}eFISHent Installer${RESET}"
+printf "%s\n" "${DIM}Platform: ${PLATFORM}/${ARCH_NAME}${RESET}"
+printf "%s\n" "${DIM}Install:  ${INSTALL_PREFIX}${RESET}"
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
@@ -417,7 +417,7 @@ if [ "$MODIFY_RC" = true ]; then
         info "PATH already configured in ${RC_FILE}"
     else
         printf "\n"
-        printf "Add ${WRAPPER_DIR} to PATH in ${RC_FILE}? [Y/n] "
+        printf "Add %s to PATH in %s? [Y/n] " "$WRAPPER_DIR" "$RC_FILE"
 
         # Handle non-interactive (piped) input — default to yes
         if [ -t 0 ]; then
@@ -485,18 +485,18 @@ fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
-printf "\n${BOLD}${GREEN}Installation complete!${RESET}\n\n"
+printf "\n%s\n\n" "${BOLD}${GREEN}Installation complete!${RESET}"
 
 if [ "$RC_UPDATED" = true ]; then
     printf "  Restart your shell or run:\n"
-    printf "    ${CYAN}source %s${RESET}\n\n" "$RC_FILE"
+    printf "    %s\n\n" "${CYAN}source ${RC_FILE}${RESET}"
 fi
 
 printf "  Then run:\n"
-printf "    ${CYAN}efishent --check${RESET}       Verify all dependencies\n"
-printf "    ${CYAN}efishent --help${RESET}        Show usage\n"
-printf "    ${CYAN}efishent --preset list${RESET}  Show parameter presets\n"
+printf "    %s       Verify all dependencies\n" "${CYAN}efishent --check${RESET}"
+printf "    %s        Show usage\n" "${CYAN}efishent --help${RESET}"
+printf "    %s  Show parameter presets\n" "${CYAN}efishent --preset list${RESET}"
 printf "\n"
 printf "  To uninstall:\n"
-printf "    ${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall${RESET}\n"
+printf "    %s\n" "${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall${RESET}"
 printf "\n"

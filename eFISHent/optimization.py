@@ -93,7 +93,7 @@ class OptimizeProbeCoverage(luigi.Task):
             ]
         )  # type: ignore
 
-        trouble_makers = np.unique(np.where(binding_matrix)[1])  # type: ignore
+        trouble_makers = np.unique(np.nonzero(binding_matrix)[1])  # type: ignore
         self.logger.debug(f"Found {len(trouble_makers)} trouble makers to be removed.")
         assigned = [
             name for idx, name in enumerate(assigned) if idx not in trouble_makers

@@ -89,7 +89,8 @@ class CleanUpOutput(luigi.Task):
         df_counts = pd.read_csv(alignment_path)
         df_counts = df_counts.groupby("qname", as_index=False).size()
         df["count"] = pd.merge(
-            df, df_counts, how="left", left_on="name", right_on="qname"
+            df, df_counts, how="left", left_on="name", right_on="qname",
+            validate="many_to_one",
         )["size"].fillna(0)
         df["count"] -= 1
 

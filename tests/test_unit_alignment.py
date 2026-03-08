@@ -7,6 +7,7 @@ import pytest
 from eFISHent.alignment import AlignProbeCandidates
 
 BOWTIE_AVAILABLE = shutil.which("bowtie") is not None
+BOWTIE2_AVAILABLE = shutil.which("bowtie2") is not None
 
 
 @pytest.fixture
@@ -69,49 +70,6 @@ def test_filter_unique_probes(task_align: AlignProbeCandidates, gene):
     assert "qname" in df_endo
     assert "qname" in df_exo
     assert len(pd.merge(df_endo, df_exo, how="inner", on="qname")) == 0
-
-
-# def test_exclude_gene_of_interest_ensembl(task_align: AlignProbeCandidates):
-#     df = pd.read_csv("./tests/data/count_table2.csv")
-#     ensembl = "ENSG00000281100"
-#     out = task_align.exclude_gene_of_interest(
-#         df, ensembl_id=ensembl, fname_full_gene="", threads=2
-#     )
-#     assert ensembl not in out["gene_id"]
-
-
-# def test_exclude_gene_of_interest_blast(task_align: AlignProbeCandidates):
-#     df = pd.read_csv("./tests/data/count_table2.csv")
-#     aad4_gene_id = "YDL243C"
-#     out = task_align.exclude_gene_of_interest(
-#         df, ensembl_id="", fname_full_gene="./tests/data/aad4.fasta", threads=2
-#     )
-#     assert aad4_gene_id not in out["gene_id"]
-
-
-# TODO add test for filter_using_count
-# TODO add test for fwd and rev strand
-# def test_join_alignment_with_annotation(task_align: AlignProbeCandidates):
-#     task_align.fname_sam = "./tests/data/aad4_basic.sam"
-#     task_align.fname_count = "./tests/data/count_table1.tsv"
-#     task_align.fname_gtf = "./tests/data/sacCer3.gtf.parq"
-#     task_align.is_endogenous = True
-#     df_sam = task_align.filter_unique_probes()
-#     df_norm = task_align.norm_table
-
-#     df = task_align.join_alignment_with_annotation(df_sam, df_norm)
-#     assert len(df) >= len(df_sam)
-#     for col in ["gene_id", "count", "qname"]:
-#         assert col in df.columns
-
-
-# def test_get_most_expressed_genes(task_align: AlignProbeCandidates):
-#     task_align.fname_count = "./tests/data/count_table1.tsv"
-#     task_align.fname_gtf = "./tests/data/sacCer3.gtf.parq"
-
-#     percentage10 = task_align.get_most_expressed_genes(task_align.norm_table, 10)
-#     percentage90 = task_align.get_most_expressed_genes(task_align.norm_table, 90)
-#     assert len(percentage10) >= len(percentage90)
 
 
 class TestParseRawPysam:
@@ -188,3 +146,57 @@ class TestParseRawPysam:
 
         assert len(result) == 1
         assert result.iloc[0]["flag"] == "16"
+
+
+@pytest.mark.skipif(not BOWTIE2_AVAILABLE, reason="bowtie2 not installed")
+@pytest.mark.parametrize("gene,endogenous", [("renilla", False), ("aad4", True)])
+def test_align_probes_bowtie2(gene, endogenous):
+    """Verify bowtie2 produces valid SAM output."""
+    # Check if bt2 index exists
+    if not os.path.isfile("./tests/data/sacCer3.1.bt2"):
+        pytest.skip("bowtie2 index not built")
+
+    task = AlignProbeCandidates()
+    task.fname_genome = "./tests/data/sacCer3"
+    task.aligner = "bowtie2"
+    fname_sam = f"./tests/data/{gene}_basic_bt2.sam"
+    task.fname_fasta = f"./tests/data/{gene}_basic.fasta"
+    task.fname_sam = fname_sam
+    task.max_off_targets = 0
+    task.is_endogenous = endogenous
+    task.align_probes_bowtie2(threads=2)
+    assert os.path.isfile(fname_sam)
+
+    # Clean up
+    if os.path.exists(fname_sam):
+        os.remove(fname_sam)
+
+
+@pytest.mark.skipif(not BOWTIE2_AVAILABLE, reason="bowtie2 not installed")
+def test_filter_unique_probes_bowtie2():
+    """Verify filtering works with bowtie2 SAM output."""
+    if not os.path.isfile("./tests/data/sacCer3.1.bt2"):
+        pytest.skip("bowtie2 index not built")
+
+    task = AlignProbeCandidates()
+    task.fname_genome = "./tests/data/sacCer3"
+    task.aligner = "bowtie2"
+    fname_sam = "./tests/data/aad4_basic_bt2_test.sam"
+    task.fname_fasta = "./tests/data/aad4_basic.fasta"
+    task.fname_sam = fname_sam
+    task.max_off_targets = 0
+    task.no_alternative_loci = False
+
+    task.is_endogenous = True
+    task.align_probes_bowtie2(threads=2)
+    df_endo = task.filter_unique_probes()
+    assert "qname" in df_endo.columns
+
+    task.is_endogenous = False
+    task.align_probes_bowtie2(threads=2)
+    df_exo = task.filter_unique_probes()
+    assert "qname" in df_exo.columns
+
+    # Clean up
+    if os.path.exists(fname_sam):
+        os.remove(fname_sam)

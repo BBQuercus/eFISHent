@@ -204,6 +204,20 @@ _FUNNEL_SHORT_NAMES = {
 _FUNNEL_SKIP_STAGES = {"Preparing gene sequence", "Finalizing output"}
 
 
+def _get_drop_pct(count: int, prev_count: int) -> float:
+    """Calculate percentage drop between two stage counts."""
+    return (prev_count - count) / prev_count * 100 if prev_count > 0 else 0
+
+
+def _get_stage_color(drop_pct: float) -> str:
+    """Return Rich color based on drop severity."""
+    if drop_pct > 50:
+        return "red"
+    if drop_pct > 20:
+        return "yellow"
+    return "green"
+
+
 def _build_funnel_table() -> Optional[Table]:
     """Build a Rich Table for the filtering funnel. Returns None if no data."""
     stages = [
@@ -219,6 +233,7 @@ def _build_funnel_table() -> Optional[Table]:
         return None
 
     bar_width = 24
+    last = len(stages) - 1
 
     table = Table(
         show_header=False, box=None, padding=(0, 1), show_edge=False,
@@ -230,37 +245,18 @@ def _build_funnel_table() -> Optional[Table]:
     table.add_column("Drop", min_width=8, no_wrap=True)
 
     for i, (stage_name, count) in enumerate(stages):
-        filled = max(1, round(count / max_count * bar_width)) if max_count > 0 else 0
+        filled = max(1, round(count / max_count * bar_width))
         bar = "\u2588" * filled
         short_name = _FUNNEL_SHORT_NAMES.get(stage_name, stage_name)
+        drop_pct = _get_drop_pct(count, stages[i - 1][1]) if i > 0 else 0
 
-        # Drop info
         if i == 0:
-            drop_str = ""
-        elif i == len(stages) - 1:
-            drop_str = "[cyan]selected[/cyan]"
+            color, drop_str = "green", ""
+        elif i == last:
+            color, drop_str = "cyan bold", "[cyan]selected[/cyan]"
         else:
-            prev_count = stages[i - 1][1]
-            if prev_count > 0:
-                drop_pct = (prev_count - count) / prev_count * 100
-                drop_str = f"[dim]\u2193{drop_pct:>3.0f}%[/dim]"
-            else:
-                drop_str = ""
-
-        # Color based on drop severity
-        if i == 0:
-            color = "green"
-        elif i == len(stages) - 1:
-            color = "cyan bold"
-        else:
-            prev_count = stages[i - 1][1]
-            drop_pct = (prev_count - count) / prev_count * 100 if prev_count > 0 else 0
-            if drop_pct > 50:
-                color = "red"
-            elif drop_pct > 20:
-                color = "yellow"
-            else:
-                color = "green"
+            color = _get_stage_color(drop_pct)
+            drop_str = f"[dim]\u2193{drop_pct:>3.0f}%[/dim]" if drop_pct else ""
 
         table.add_row(
             short_name,
