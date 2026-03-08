@@ -129,7 +129,7 @@ def print_completion(
 
     # 2. Probe table
     if probe_df is not None and len(probe_df) > 0:
-        probe_table = _build_probe_table(probe_df)
+        probe_table = _build_probe_table(probe_df, show_title=False)
         renderables.append(Text(""))
         renderables.append(probe_table)
 
@@ -173,14 +173,14 @@ def print_completion(
     # 4. Output files
     if output_files:
         renderables.append(Text(""))
-        file_lines = ["  [bold]Output:[/bold]"]
+        file_lines = [" [bold]Output:[/bold]"]
         for path in output_files:
-            file_lines.append(f"    [dim]\u2192[/dim] {path}")
+            file_lines.append(f"   [dim]\u2192[/dim] {path}")
         renderables.append(Text.from_markup("\n".join(file_lines)))
 
     # 5. Duration
     renderables.append(Text(""))
-    renderables.append(Text.from_markup(f"  [dim]Completed in {duration}[/dim]"))
+    renderables.append(Text.from_markup(f" [dim]Completed in {duration}[/dim]"))
 
     console.print(
         Panel(
@@ -409,9 +409,11 @@ def _compute_probe_quality(row: pd.Series, df: pd.DataFrame) -> str:
     return "\u2605" * score + "\u2606" * (3 - score)
 
 
-def _build_probe_table(df: pd.DataFrame, max_rows: int = 100) -> Table:
+def _build_probe_table(
+    df: pd.DataFrame, max_rows: int = 100, show_title: bool = True
+) -> Table:
     """Build a Rich Table for probe data. Returns the Table renderable."""
-    title = f"Probe Summary ({len(df)} probes)"
+    title = f"Probe Summary ({len(df)} probes)" if show_title else None
 
     table = Table(
         title=title, show_header=True, header_style="bold cyan", box=None
