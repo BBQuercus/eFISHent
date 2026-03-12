@@ -8,6 +8,7 @@ catches off-target binding to expressed transcripts that alignment-only methods 
 
 import logging
 import os
+import re
 import subprocess
 
 import Bio.SeqIO
@@ -136,13 +137,19 @@ class TranscriptomeFiltering(luigi.Task):
 
         # Count off-target hits per probe (exclude self-hits by checking
         # if the probe maps to its own target — we identify self-hits by
-        # the gene name appearing in the subject sequence ID)
-        gene_name = util.get_gene_name(hashed=False).lower()
+        # the gene name appearing as a word in the subject sequence ID)
+        gene_name = re.escape(util.get_gene_name(hashed=False).lower())
+        # Use word boundary or delimiter-boundary matching to avoid substring
+        # false positives (e.g., gene "NAG" matching transcript "GNAG1")
+        gene_pattern = rf"(?:^|[|_\-.\s]){gene_name}(?:$|[|_\-.\s])"
         off_target_counts = {}
         for probe_id, group in df_hits.groupby("qseqid"):
             # Filter out self-hits where sseqid contains the target gene name
+            # as a delimited word (not as a substring)
             off_targets = group[
-                ~group["sseqid"].str.lower().str.contains(gene_name, na=False)
+                ~group["sseqid"].str.lower().str.contains(
+                    gene_pattern, na=False, regex=True
+                )
             ]
             off_target_counts[probe_id] = len(off_targets["sseqid"].unique())
 

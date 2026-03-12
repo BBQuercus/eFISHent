@@ -65,9 +65,9 @@ def test_filter_unique_probes(task_align: AlignProbeCandidates, gene):
     task_align.fname_sam = fname_sam
 
     task_align.is_endogenous = True
-    df_endo = task_align.filter_unique_probes()
+    df_endo, _ = task_align.filter_unique_probes()
     task_align.is_endogenous = False
-    df_exo = task_align.filter_unique_probes()
+    df_exo, _ = task_align.filter_unique_probes()
     assert "qname" in df_endo
     assert "qname" in df_exo
     assert len(pd.merge(df_endo, df_exo, how="inner", on="qname")) == 0
@@ -190,12 +190,12 @@ def test_filter_unique_probes_bowtie2():
 
     task.is_endogenous = True
     task.align_probes_bowtie2(threads=2)
-    df_endo = task.filter_unique_probes()
+    df_endo, _ = task.filter_unique_probes()
     assert "qname" in df_endo.columns
 
     task.is_endogenous = False
     task.align_probes_bowtie2(threads=2)
-    df_exo = task.filter_unique_probes()
+    df_exo, _ = task.filter_unique_probes()
     assert "qname" in df_exo.columns
 
     # Clean up

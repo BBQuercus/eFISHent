@@ -139,6 +139,10 @@ class CleanUpOutput(luigi.Task):
         ot_max = max(cfg.max_off_targets + 1, 1)
         scores["ot"] = 1.0 - df["count"].clip(lower=0, upper=ot_max) / ot_max
 
+        # Clip all component scores to [0, 1] for robustness
+        for col in scores.columns:
+            scores[col] = scores[col].clip(lower=0.0, upper=1.0)
+
         # Weighted composite
         quality = (
             scores["tm"] * 0.30

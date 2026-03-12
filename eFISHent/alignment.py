@@ -51,7 +51,9 @@ class AlignProbeCandidates(luigi.Task):
             and self.is_endogenous
         )
         self.has_rrna_filter = bool(
-            self.filter_rrna and self.has_annotation
+            self.filter_rrna
+            and self.has_annotation
+            and self.is_endogenous
         )
 
     def requires(self):
@@ -223,7 +225,7 @@ class AlignProbeCandidates(luigi.Task):
             return pd.DataFrame(data, columns=columns).dropna()
         return pd.DataFrame(columns=columns)
 
-    def filter_unique_probes(self) -> pd.DataFrame:
+    def filter_unique_probes(self) -> tuple:
         """Filter sam file with probes based on alignment score and uniqueness.
 
         Filtering explanations:
@@ -232,6 +234,10 @@ class AlignProbeCandidates(luigi.Task):
         For Bowtie2:
             * Endogenous: keep all mapped reads, filter by hit count
             * Exogenous: keep only unmapped (flag 4)
+
+        Returns (df_filtered, df_pre_count) where df_pre_count is the DataFrame
+        after mask/intergenic filtering but before count-based filtering (used by
+        thermodynamic rescue to evaluate probes against the same filtered hits).
         """
         if self.aligner == "bowtie2":
             if self.is_endogenous:
@@ -257,6 +263,9 @@ class AlignProbeCandidates(luigi.Task):
         if self.has_intergenic_filter:
             df = self.filter_intergenic_off_targets(df)
 
+        # Snapshot before count-based filtering (for thermodynamic rescue)
+        df_pre_count = df.copy()
+
         # Filter to remove off-target rates
         if self.is_endogenous:
             group_sizes = df.groupby("qname").size()
@@ -265,7 +274,7 @@ class AlignProbeCandidates(luigi.Task):
                     group_sizes[group_sizes <= self.max_off_targets + 1].index
                 )
             ]
-        return df
+        return df, df_pre_count
 
     def get_most_expressed_genes(self, percentage: float) -> pd.Series:
         """Get gene IDs expressed above percentile threshold."""
@@ -372,6 +381,7 @@ class AlignProbeCandidates(luigi.Task):
 
         rRNA is ~80% of cellular RNA — even weak binding causes intense
         background. Checks gene_biotype/gene_type for rRNA and Mt_rRNA.
+        Any probe with at least one rRNA hit is vetoed entirely.
         """
         self.fname_gtf = self.input()["annotation"].path
         gtf_full = pd.read_parquet(self.fname_gtf)
@@ -402,18 +412,25 @@ class AlignProbeCandidates(luigi.Task):
 
         self.logger.debug(f"Found {len(rrna_genes)} rRNA gene regions in GTF")
 
-        # Find probes with hits overlapping rRNA genes
-        probes_to_remove = set()
-        for _, row in df_sam.iterrows():
+        # Build sorted interval lookup per chromosome for efficient overlap check
+        rrna_by_chrom = {}
+        for _, gene in rrna_genes.iterrows():
+            chrom = gene["seqname"]
+            if chrom not in rrna_by_chrom:
+                rrna_by_chrom[chrom] = ([], [])
+            rrna_by_chrom[chrom][0].append(gene["start"])
+            rrna_by_chrom[chrom][1].append(gene["end"])
+
+        def _hits_rrna(row):
             chrom = row["rname"]
+            if chrom not in rrna_by_chrom:
+                return False
             pos = int(row["pos"])
-            overlapping = rrna_genes[
-                (rrna_genes["seqname"] == chrom)
-                & (rrna_genes["start"] <= pos)
-                & (rrna_genes["end"] >= pos)
-            ]
-            if not overlapping.empty:
-                probes_to_remove.add(row["qname"])
+            starts, ends = rrna_by_chrom[chrom]
+            return any(s <= pos <= e for s, e in zip(starts, ends))
+
+        hits_rrna = df_sam.apply(_hits_rrna, axis=1)
+        probes_to_remove = set(df_sam.loc[hits_rrna, "qname"])
 
         if probes_to_remove:
             self.logger.debug(
@@ -453,13 +470,19 @@ class AlignProbeCandidates(luigi.Task):
         )
         return df_sam
 
-    def filter_thermodynamic_off_targets(self, df_sam: pd.DataFrame) -> pd.DataFrame:
+    def filter_thermodynamic_off_targets(
+        self, df_sam: pd.DataFrame, df_pre_count: pd.DataFrame
+    ) -> pd.DataFrame:
         """Rescue probes whose off-targets are thermodynamically unstable.
 
         Re-examines probes that were removed by count-based filtering.
         For each off-target alignment, extracts the genomic target sequence
         and computes the predicted Tm. If all off-target Tms are below
         off_target_min_tm, the probe is rescued.
+
+        Uses df_pre_count (the DataFrame after mask/intergenic filtering but
+        before count-based filtering) so rescue evaluation respects the same
+        pre-filters as the count-based step.
         """
         genome_path = os.path.abspath(GeneralConfig().reference_genome)
 
@@ -470,16 +493,9 @@ class AlignProbeCandidates(luigi.Task):
 
         genome = pysam.FastaFile(genome_path)
 
-        # Get all mapped reads from SAM (not just filtered ones)
-        all_mapped = pysam.view(self.fname_sam, "--exclude-flags", "4")  # type: ignore
-        df_all = self.parse_raw_pysam(all_mapped)
-
-        if self.no_alternative_loci:
-            df_all = df_all[~df_all["rname"].str.contains("_alt")]
-
         # Find probes that were removed by count-based filtering
         kept_probes = set(df_sam["qname"].unique())
-        all_probes = set(df_all["qname"].unique())
+        all_probes = set(df_pre_count["qname"].unique())
         removed_probes = all_probes - kept_probes
 
         if not removed_probes:
@@ -495,7 +511,7 @@ class AlignProbeCandidates(luigi.Task):
         rescued = []
 
         for probe_name in removed_probes:
-            hits = df_all[df_all["qname"] == probe_name]
+            hits = df_pre_count[df_pre_count["qname"] == probe_name]
             probe_seq = hits.iloc[0]["seq"]
 
             # Evaluate each off-target hit (skip self-hit for endogenous)
@@ -530,8 +546,8 @@ class AlignProbeCandidates(luigi.Task):
                 f"Rescued {len(rescued)} probes with thermodynamically "
                 f"unstable off-targets (Tm < {self.off_target_min_tm}°C)"
             )
-            # Add rescued probes back from the full alignment data
-            rescued_rows = df_all[df_all["qname"].isin(rescued)]
+            # Add rescued probes back from the pre-count data (respects prior filters)
+            rescued_rows = df_pre_count[df_pre_count["qname"].isin(rescued)]
             df_sam = pd.concat([df_sam, rescued_rows], ignore_index=True)
 
         return df_sam
@@ -591,11 +607,11 @@ class AlignProbeCandidates(luigi.Task):
             self.align_probes(threads=GeneralConfig().threads)
 
         # Filtering
-        df_sam = self.filter_unique_probes()
+        df_sam, df_pre_count = self.filter_unique_probes()
 
         # Thermodynamic off-target filtering (rescue probes with unstable off-targets)
         if self.off_target_min_tm > 0 and self.is_endogenous:
-            df_sam = self.filter_thermodynamic_off_targets(df_sam)
+            df_sam = self.filter_thermodynamic_off_targets(df_sam, df_pre_count)
 
         # rRNA off-target filtering
         if self.has_rrna_filter:
