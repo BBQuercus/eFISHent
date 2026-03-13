@@ -10,6 +10,7 @@
 #   --prefix DIR    Install to DIR (default: ~/.local/efishent)
 #   --no-modify-rc  Don't modify shell rc files
 #   --deps-only     Only install external dependencies (skip Python package)
+#   --with-blast    Also install BLAST+ (blastn, dustmasker) for transcriptome filtering
 #   --uninstall     Remove eFISHent and all dependencies
 
 set -e
@@ -20,6 +21,8 @@ EFISHENT_VERSION="latest"
 BOWTIE_VERSION="1.3.1"
 JELLYFISH_VERSION="2.3.1"
 GLPK_VERSION="5.0"
+BLAST_VERSION="2.17.0"
+RNASTRUCTURE_VERSION="6.4"
 
 # Colors (disabled if not a terminal)
 if [ -t 1 ]; then
@@ -68,12 +71,14 @@ INSTALL_PREFIX="${HOME}/.local/efishent"
 MODIFY_RC=true
 DEPS_ONLY=false
 UNINSTALL=false
+WITH_BLAST=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --prefix)    INSTALL_PREFIX="$2"; shift 2 ;;
         --no-modify-rc) MODIFY_RC=false; shift ;;
         --deps-only) DEPS_ONLY=true; shift ;;
+        --with-blast) WITH_BLAST=true; shift ;;
         --uninstall) UNINSTALL=true; shift ;;
         *)           err "Unknown option: $1"; exit 1 ;;
     esac
@@ -149,7 +154,7 @@ mkdir -p "${BIN_DIR}" "${DEPS_DIR}" "${WRAPPER_DIR}"
 
 # ── 1. Install Bowtie ────────────────────────────────────────────────────────
 
-step "[1/5] Bowtie (sequence aligner)"
+step "[1/7] Bowtie (sequence aligner)"
 
 if [ -f "${BIN_DIR}/bowtie" ]; then
     info "Already installed"
@@ -200,7 +205,7 @@ fi
 
 # ── 2. Install Jellyfish ─────────────────────────────────────────────────────
 
-step "[2/5] Jellyfish (k-mer counter)"
+step "[2/7] Jellyfish (k-mer counter)"
 
 if [ -f "${BIN_DIR}/jellyfish" ]; then
     info "Already installed"
@@ -245,7 +250,7 @@ fi
 
 # ── 3. Install GLPK ──────────────────────────────────────────────────────────
 
-step "[3/5] GLPK (linear programming solver)"
+step "[3/7] GLPK (linear programming solver)"
 
 if [ -f "${BIN_DIR}/glpsol" ]; then
     info "Already installed"
@@ -285,7 +290,7 @@ fi
 
 # ── 4. Install Entrez Direct ─────────────────────────────────────────────────
 
-step "[4/5] Entrez Direct (NCBI tools — optional)"
+step "[4/7] Entrez Direct (NCBI tools — optional)"
 
 if [ -f "${EDIRECT_DIR}/esearch" ]; then
     info "Already installed"
@@ -322,20 +327,112 @@ else
     fi
 fi
 
-# ── 5. Install eFISHent Python package ────────────────────────────────────────
+# ── 5. Install BLAST+ (optional) ────────────────────────────────────────────
+
+step "[5/7] BLAST+ (off-target filtering — optional)"
+
+if [ -f "${BIN_DIR}/blastn" ] && [ -f "${BIN_DIR}/dustmasker" ]; then
+    info "Already installed"
+elif [ "$WITH_BLAST" = true ]; then
+    # Determine download URL — NCBI uses x64-linux for newer releases
+    case "${PLATFORM}-${ARCH_NAME}" in
+        linux-x86_64)
+            BLAST_URL="https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/${BLAST_VERSION}/ncbi-blast-${BLAST_VERSION}+-x64-linux.tar.gz"
+            ;;
+        linux-aarch64)
+            BLAST_URL="https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/${BLAST_VERSION}/ncbi-blast-${BLAST_VERSION}+-aarch64-linux.tar.gz"
+            ;;
+        macos-x86_64)
+            BLAST_URL="https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/${BLAST_VERSION}/ncbi-blast-${BLAST_VERSION}+-x64-macosx.tar.gz"
+            ;;
+        macos-aarch64)
+            BLAST_URL="https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/${BLAST_VERSION}/ncbi-blast-${BLAST_VERSION}+-aarch64-macosx.tar.gz"
+            ;;
+    esac
+
+    printf "  Downloading BLAST+ ${BLAST_VERSION}...\n"
+    download "$BLAST_URL" "${DEPS_DIR}/blast.tar.gz"
+    cd "${DEPS_DIR}"
+    tar -xzf blast.tar.gz
+    BLAST_DIR=$(ls -d ncbi-blast-${BLAST_VERSION}+* 2>/dev/null | head -1)
+    if [ -n "$BLAST_DIR" ]; then
+        cp "${BLAST_DIR}/bin/blastn" "${BLAST_DIR}/bin/dustmasker" "${BIN_DIR}/"
+        rm -rf blast.tar.gz "${BLAST_DIR}"
+        info "Installed BLAST+ ${BLAST_VERSION} (blastn, dustmasker)"
+    else
+        err "BLAST+ extraction failed"
+        rm -f blast.tar.gz
+    fi
+    cd - >/dev/null
+else
+    warn "Skipped (use --with-blast to install). Needed for --reference-transcriptome."
+fi
+
+# ── 6. Install Fold (RNAstructure) ─────────────────────────────────────────
+
+step "[6/7] Fold / RNAstructure (secondary structure prediction)"
+
+# Fold is a bundled binary that must live inside the Python package directory.
+# We download the RNAstructure package and extract just the Fold binary.
+# The actual placement into site-packages happens after the Python package is installed (step 7).
+FOLD_BINARY=""
+if [ "$PLATFORM" = "linux" ]; then
+    FOLD_NAME="Fold"
+    FOLD_DEST_NAME="Fold_linux"
+    RNASTRUCTURE_URL="https://rna.urmc.rochester.edu/Releases/current/RNAstructureLinuxTextInterfaces64bit.tgz"
+elif [ "$PLATFORM" = "macos" ]; then
+    FOLD_NAME="Fold"
+    FOLD_DEST_NAME="Fold_osx"
+    RNASTRUCTURE_URL="https://rna.urmc.rochester.edu/Releases/current/RNAstructureMacTextInterfaces64bit.tgz"
+fi
+
+if [ -f "${BIN_DIR}/${FOLD_DEST_NAME}" ]; then
+    info "Already downloaded"
+    FOLD_BINARY="${BIN_DIR}/${FOLD_DEST_NAME}"
+else
+    printf "  Downloading RNAstructure...\n"
+    if download "$RNASTRUCTURE_URL" "${DEPS_DIR}/rnastructure.tgz" 2>/dev/null; then
+        cd "${DEPS_DIR}"
+        tar -xzf rnastructure.tgz
+        if [ -f "RNAstructure/exe/${FOLD_NAME}" ]; then
+            cp "RNAstructure/exe/${FOLD_NAME}" "${BIN_DIR}/${FOLD_DEST_NAME}"
+            chmod +x "${BIN_DIR}/${FOLD_DEST_NAME}"
+            # Also copy data tables needed by Fold at runtime
+            if [ -d "RNAstructure/data_tables" ]; then
+                mkdir -p "${DEPS_DIR}/data_tables"
+                cp -r RNAstructure/data_tables/* "${DEPS_DIR}/data_tables/"
+            fi
+            FOLD_BINARY="${BIN_DIR}/${FOLD_DEST_NAME}"
+            info "Installed Fold (RNAstructure)"
+        else
+            err "Fold binary not found in RNAstructure archive"
+        fi
+        rm -rf rnastructure.tgz RNAstructure
+        cd - >/dev/null
+    else
+        warn "Could not download RNAstructure. Fold will need to be installed manually."
+        warn "See: https://rna.urmc.rochester.edu/RNAstructure.html"
+    fi
+fi
+
+# ── 7. Install eFISHent Python package ────────────────────────────────────────
 
 if [ "$DEPS_ONLY" = false ]; then
-    step "[5/5] eFISHent (Python package)"
+    step "[7/7] eFISHent (Python package)"
 
     # Install uv if not present
     if ! command -v uv >/dev/null 2>&1; then
         printf "  Installing uv (Python package manager)...\n"
+        # Install uv into the prefix directory to avoid writing to ~/.local
+        export UV_INSTALL_DIR="${INSTALL_PREFIX}/bin"
+        mkdir -p "${UV_INSTALL_DIR}"
         if command -v curl >/dev/null 2>&1; then
             curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null
         else
             wget -qO- https://astral.sh/uv/install.sh | sh 2>/dev/null
         fi
         # Source cargo env to get uv on PATH
+        [ -f "${UV_INSTALL_DIR}/uv" ] && export PATH="${UV_INSTALL_DIR}:${PATH}"
         [ -f "${HOME}/.local/bin/uv" ] && export PATH="${HOME}/.local/bin:${PATH}"
         [ -f "${HOME}/.cargo/env" ] && . "${HOME}/.cargo/env"
         if ! command -v uv >/dev/null 2>&1; then
@@ -354,8 +451,26 @@ if [ "$DEPS_ONLY" = false ]; then
     printf "  Installing eFISHent...\n"
     uv pip install --python "${VENV_DIR}/bin/python" efishent 2>/dev/null
     info "Installed eFISHent"
+
+    # Place Fold binary into the Python package directory where --check expects it
+    if [ -n "${FOLD_BINARY:-}" ] && [ -f "${FOLD_BINARY}" ]; then
+        SITE_PACKAGES=$("${VENV_DIR}/bin/python" -c "import site; print([p for p in site.getsitepackages() if 'site-packages' in p][0])" 2>/dev/null)
+        EFISHENT_PKG_DIR="${SITE_PACKAGES}/eFISHent"
+        if [ -d "${EFISHENT_PKG_DIR}" ]; then
+            cp "${FOLD_BINARY}" "${EFISHENT_PKG_DIR}/${FOLD_DEST_NAME}"
+            chmod +x "${EFISHENT_PKG_DIR}/${FOLD_DEST_NAME}"
+            info "Placed ${FOLD_DEST_NAME} into package directory"
+            # Also copy data_tables if present
+            if [ -d "${DEPS_DIR}/data_tables" ] && [ ! -d "${EFISHENT_PKG_DIR}/data_tables" ]; then
+                cp -r "${DEPS_DIR}/data_tables" "${EFISHENT_PKG_DIR}/data_tables"
+                info "Placed RNAstructure data tables into package directory"
+            fi
+        else
+            warn "Could not find eFISHent package directory to place Fold binary"
+        fi
+    fi
 else
-    step "[5/5] Skipping Python package (--deps-only)"
+    step "[7/7] Skipping Python package (--deps-only)"
 fi
 
 # ── Create wrapper script ────────────────────────────────────────────────────
@@ -417,7 +532,7 @@ if [ "$MODIFY_RC" = true ]; then
         info "PATH already configured in ${RC_FILE}"
     else
         printf "\n"
-        printf "Add %s to PATH in %s? [Y/n] " "$WRAPPER_DIR" "$RC_FILE"
+        printf "Add eFISHent to PATH in %s? [Y/n] " "$RC_FILE"
 
         # Handle non-interactive (piped) input — default to yes
         if [ -t 0 ]; then
@@ -429,16 +544,16 @@ if [ "$MODIFY_RC" = true ]; then
 
         case "$response" in
             [nN]*)
-                warn "Skipped. Add manually: export PATH=\"${WRAPPER_DIR}:\$PATH\""
+                warn "Skipped. Add manually: export PATH=\"${WRAPPER_DIR}:${BIN_DIR}:\$PATH\""
                 ;;
             *)
                 if [ "$SHELL_NAME" = "fish" ]; then
                     mkdir -p "$(dirname "$RC_FILE")"
-                    printf '\n%s\nfish_add_path "%s"\n' "$MARKER" "${WRAPPER_DIR}" >> "$RC_FILE"
+                    printf '\n%s\nfish_add_path "%s"\nfish_add_path "%s"\n' "$MARKER" "${WRAPPER_DIR}" "${BIN_DIR}" >> "$RC_FILE"
                 else
-                    printf '\n%s\nexport PATH="%s:$PATH"\n' "$MARKER" "${WRAPPER_DIR}" >> "$RC_FILE"
+                    printf '\n%s\nexport PATH="%s:%s:$PATH"\n' "$MARKER" "${WRAPPER_DIR}" "${BIN_DIR}" >> "$RC_FILE"
                 fi
-                info "Added to ${RC_FILE}"
+                info "Added to ${RC_FILE} (wrapper + dependency binaries)"
                 RC_UPDATED=true
                 ;;
         esac
@@ -465,7 +580,7 @@ for tool in bowtie jellyfish; do
 done
 
 # Optional tools
-for tool in glpsol esearch; do
+for tool in glpsol esearch blastn dustmasker gffread; do
     if command -v "$tool" >/dev/null 2>&1; then
         info "$tool: $(command -v "$tool")"
     else
@@ -499,6 +614,18 @@ printf "    ${CYAN}efishent --check${RESET}       Verify all dependencies\n"
 printf "    ${CYAN}efishent --help${RESET}        Show usage\n"
 printf "    ${CYAN}efishent --preset list${RESET}  Show parameter presets\n"
 printf "\n"
+
+# Print optional dependency notes
+if [ "$WITH_BLAST" = false ] && ! command -v blastn >/dev/null 2>&1; then
+    printf "  ${YELLOW}Note:${RESET} BLAST+ not installed. Re-run with ${CYAN}--with-blast${RESET} if you need\n"
+    printf "  transcriptome off-target filtering (${CYAN}--reference-transcriptome${RESET}).\n\n"
+fi
+if ! command -v gffread >/dev/null 2>&1; then
+    printf "  ${YELLOW}Note:${RESET} gffread is not installed. It is needed to build a transcriptome\n"
+    printf "  from genome + GTF. Install via: ${CYAN}conda install -c bioconda gffread${RESET}\n"
+    printf "  or compile from source: ${CYAN}https://github.com/gpertea/gffread${RESET}\n\n"
+fi
+
 printf "  To uninstall:\n"
 printf "    ${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall${RESET}\n"
 printf "\n"

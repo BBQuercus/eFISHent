@@ -535,6 +535,10 @@ DEPENDENCIES = {
         "version_args": ["esearch", "-version"],
         "needed_for": "NCBI gene download (optional if providing sequence file)",
     },
+    "gffread": {
+        "version_args": ["gffread", "--version"],
+        "needed_for": "building transcriptome from genome + GTF (optional)",
+    },
 }
 
 
