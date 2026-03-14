@@ -195,6 +195,8 @@ class TestParameterWarnings:
             kmer_length=15,
             max_deltag=-10.0,
             spacing=2,
+            is_endogenous=True,
+            reference_transcriptome="",
         )
 
     def test_no_warnings_default_params(self, default_args):

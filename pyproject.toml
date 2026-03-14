@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eFISHent"
-version = "0.0.9"
+version = "0.0.10"
 description = "RNA FISH oligos/probes design tool."
 readme = "README.md"
 license = "MIT"

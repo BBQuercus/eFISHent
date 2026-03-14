@@ -5,4 +5,4 @@ try:
 
     __version__ = version("efishent")
 except Exception:
-    __version__ = "0.0.9"
+    __version__ = "0.0.10"

@@ -175,12 +175,40 @@ def print_completion(
             lo, hi = summary["tm_range"]
             med = summary.get("tm_median", "")
             med_str = f" (median {med:.1f}\u00b0C)" if med else ""
+            tm_std = summary.get("tm_std")
+            if tm_std is not None:
+                med_str += f", \u03c3 {tm_std:.1f}\u00b0C"
             stats_table.add_row("TM range:", f"{lo:.1f}-{hi:.1f}\u00b0C{med_str}")
         if summary.get("gc_range"):
             lo, hi = summary["gc_range"]
             med = summary.get("gc_median", "")
             med_str = f" (median {med:.1f}%)" if med else ""
             stats_table.add_row("GC range:", f"{lo:.1f}-{hi:.1f}%{med_str}")
+
+        # Recommendation breakdown from probe data
+        if probe_df is not None and "recommendation" in probe_df.columns:
+            counts = probe_df["recommendation"].value_counts()
+            parts = []
+            for label in ("PASS", "FLAG", "FAIL"):
+                n = counts.get(label, 0)
+                if n > 0:
+                    style = {"PASS": "green", "FLAG": "yellow", "FAIL": "red"}[label]
+                    parts.append(f"[{style}]{n} {label}[/{style}]")
+            if parts:
+                stats_table.add_row("Quality:", ", ".join(parts))
+
+        # Off-target summary from probe data
+        if probe_df is not None and "txome_off_targets" in probe_df.columns:
+            total_ot = int(probe_df["txome_off_targets"].sum())
+            probes_with_ot = int((probe_df["txome_off_targets"] > 0).sum())
+            if probes_with_ot > 0:
+                stats_table.add_row(
+                    "Off-targets:",
+                    f"{probes_with_ot}/{len(probe_df)} probes have transcriptome off-targets ({total_ot} total)",
+                )
+            else:
+                stats_table.add_row("Off-targets:", "[green]none detected[/green]")
+
         renderables.append(stats_table)
 
     # 5. BLAST verification
@@ -534,30 +562,47 @@ def _build_probe_table(
     table = Table(
         title=title, show_header=True, header_style="bold cyan", box=None
     )
+    has_recommendation = "recommendation" in df.columns
+    has_off_targets = "txome_off_targets" in df.columns
+
     table.add_column("Name", style="green")
     table.add_column("Sequence", style="dim", max_width=25)
     table.add_column("Length", justify="right")
     table.add_column("GC%", justify="right")
     table.add_column("TM", justify="right")
     table.add_column("deltaG", justify="right")
+    if has_off_targets:
+        table.add_column("Off-targets", justify="right")
+    if has_recommendation:
+        table.add_column("Rec.", justify="center")
     table.add_column("Score", justify="center")
 
     for _, row in df.head(max_rows).iterrows():
         seq = row["sequence"]
         seq_display = seq[:22] + "..." if len(seq) > 25 else seq
         quality = _compute_probe_quality(row, df)
-        table.add_row(
+        cells = [
             str(row["name"]),
             seq_display,
             str(row["length"]),
             f"{row['GC']:.1f}",
             f"{row['TM']:.1f}",
             f"{row['deltaG']:.1f}",
-            quality,
-        )
+        ]
+        if has_off_targets:
+            ot = int(row.get("txome_off_targets", 0))
+            cells.append(str(ot) if ot > 0 else "[dim]0[/dim]")
+        if has_recommendation:
+            rec = str(row.get("recommendation", ""))
+            rec_style = {"PASS": "[green]PASS[/green]", "FLAG": "[yellow]FLAG[/yellow]", "FAIL": "[red]FAIL[/red]"}
+            cells.append(rec_style.get(rec, rec))
+        cells.append(quality)
+        table.add_row(*cells)
 
     if len(df) > max_rows:
-        table.add_row("...", f"({len(df) - max_rows} more)", "", "", "", "", "")
+        ncols = 7 + int(has_off_targets) + int(has_recommendation)
+        filler = [""] * (ncols - 2)
+        table.add_row("...", f"({len(df) - max_rows} more)", *filler)
 
     return table
 

@@ -168,6 +168,8 @@ PARAM_VALIDATORS = {
     "max_expression_percentage": percentage,
     "blast_identity_threshold": percentage,
     "off_target_min_tm": float,
+    "min_blast_match_length": non_negative_int,
+    "max_probes_per_off_target": non_negative_int,
 }
 
 # Metavar hints for cleaner help output
@@ -205,12 +207,15 @@ PARAM_METAVAR = {
     "blast_identity_threshold": "%",
     "reference_transcriptome": "FILE",
     "off_target_min_tm": "°C",
+    "min_blast_match_length": "N",
+    "max_probes_per_off_target": "N",
 }
 _BOOL_METAVAR = "yes/no"
 for _bool_param in [
     "filter_low_complexity", "build_indices", "save_intermediates",
     "is_plus_strand", "is_endogenous", "no_alternative_loci",
     "mask_repeats", "intergenic_off_targets", "filter_rrna",
+    "adaptive_length",
 ]:
     PARAM_METAVAR[_bool_param] = _BOOL_METAVAR
 
@@ -268,7 +273,7 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
             "Apply a parameter preset for common FISH protocols. "
             "Explicit arguments override preset values. "
             "Use --preset list to see available presets. "
-            "[options: smfish, merfish, dna-fish, strict, relaxed]"
+            "[options: smfish, merfish, dna-fish, strict, relaxed, exogenous]"
         ),
     )
     utility.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
@@ -462,6 +467,15 @@ def validate_parameter_warnings(args: argparse.Namespace) -> List[str]:
             "  Consider --spacing 2 for denser probe tiling."
         )
 
+    # Exogenous gene with aggressive k-mer settings
+    if not args.is_endogenous:
+        if not args.reference_transcriptome:
+            warnings.append(
+                "Exogenous gene without --reference-transcriptome.\n"
+                "  K-mer filtering is skipped for exogenous genes — transcriptome BLAST\n"
+                "  is the primary off-target check. Consider adding --reference-transcriptome."
+            )
+
     return warnings
 
 
@@ -522,6 +536,10 @@ DEPENDENCIES = {
     "blastn": {
         "version_args": ["blastn", "-version"],
         "needed_for": "transcriptome off-target filtering (optional)",
+    },
+    "makeblastdb": {
+        "version_args": ["makeblastdb", "-version"],
+        "needed_for": "building BLAST databases for transcriptome filtering (optional)",
     },
     "dustmasker": {
         "version_args": ["dustmasker", "-version-full"],
@@ -602,6 +620,7 @@ def check_required_dependencies(args: argparse.Namespace) -> List[str]:
     # BLAST required if transcriptome filtering or repeat masking is enabled
     if getattr(args, "reference_transcriptome", ""):
         required.append("blastn")
+        required.append("makeblastdb")
     if getattr(args, "mask_repeats", False):
         required.append("dustmasker")
 

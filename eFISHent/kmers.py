@@ -194,28 +194,44 @@ class KMerFiltering(luigi.Task):
         )
 
     def run(self):
+        from .config import SequenceConfig
+
         util.log_stage_start(self.logger, "KMerFiltering")
         sequences = list(
             Bio.SeqIO.parse(self.input()["probes"]["fasta"].path, format="fasta")
         )
 
-        jellyfish_path = self.input()["jellyfish"].path
-        counts = get_max_kmer_counts_batch(sequences, jellyfish_path)
+        config = ProbeConfig()
+        is_endogenous = SequenceConfig().is_endogenous
 
-        # Diagnostic: warn about probes with potential unique contiguous matches
-        for seq, count in zip(sequences, counts):
-            if count == 1:
-                self.logger.debug(
-                    f"Probe {seq.id} has max k-mer count of 1 — "
-                    "may have a unique contiguous match in genome. "
-                    "Consider enabling transcriptome filtering."
-                )
+        # For exogenous genes, skip k-mer filtering entirely.
+        # Short k-mer matches in the host genome are random chance for foreign
+        # sequences (4^12 = 16M possible 12-mers vs ~3B genome positions).
+        # The transcriptome BLAST filter catches real off-targets.
+        if not is_endogenous:
+            self.logger.info(
+                f"{util.UniCode.dna} Exogenous gene detected — skipping k-mer filter. "
+                "Transcriptome BLAST provides meaningful off-target detection for foreign sequences."
+            )
+            candidates = sequences
+        else:
+            jellyfish_path = self.input()["jellyfish"].path
+            counts = get_max_kmer_counts_batch(sequences, jellyfish_path)
 
-        candidates = [
-            seq
-            for seq, count in zip(sequences, counts)
-            if count <= ProbeConfig().max_kmers
-        ]
+            # Diagnostic: warn about probes with potential unique contiguous matches
+            for seq, count in zip(sequences, counts):
+                if count == 1:
+                    self.logger.debug(
+                        f"Probe {seq.id} has max k-mer count of 1 — "
+                        "may have a unique contiguous match in genome. "
+                        "Consider enabling transcriptome filtering."
+                    )
+
+            candidates = [
+                seq
+                for seq, count in zip(sequences, counts)
+                if count <= config.max_kmers
+            ]
 
         util.log_and_check_candidates(
             self.logger, "KMerFiltering", len(candidates), len(sequences)

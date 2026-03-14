@@ -154,7 +154,7 @@ mkdir -p "${BIN_DIR}" "${DEPS_DIR}" "${WRAPPER_DIR}"
 
 # ── 1. Install Bowtie ────────────────────────────────────────────────────────
 
-step "[1/7] Bowtie (sequence aligner)"
+step "[1/8] Bowtie (sequence aligner)"
 
 if [ -f "${BIN_DIR}/bowtie" ]; then
     info "Already installed"
@@ -205,7 +205,7 @@ fi
 
 # ── 2. Install Jellyfish ─────────────────────────────────────────────────────
 
-step "[2/7] Jellyfish (k-mer counter)"
+step "[2/8] Jellyfish (k-mer counter)"
 
 if [ -f "${BIN_DIR}/jellyfish" ]; then
     info "Already installed"
@@ -250,7 +250,7 @@ fi
 
 # ── 3. Install GLPK ──────────────────────────────────────────────────────────
 
-step "[3/7] GLPK (linear programming solver)"
+step "[3/8] GLPK (linear programming solver)"
 
 if [ -f "${BIN_DIR}/glpsol" ]; then
     info "Already installed"
@@ -290,7 +290,7 @@ fi
 
 # ── 4. Install Entrez Direct ─────────────────────────────────────────────────
 
-step "[4/7] Entrez Direct (NCBI tools — optional)"
+step "[4/8] Entrez Direct (NCBI tools — optional)"
 
 if [ -f "${EDIRECT_DIR}/esearch" ]; then
     info "Already installed"
@@ -329,9 +329,9 @@ fi
 
 # ── 5. Install BLAST+ (optional) ────────────────────────────────────────────
 
-step "[5/7] BLAST+ (off-target filtering — optional)"
+step "[5/8] BLAST+ (off-target filtering — optional)"
 
-if [ -f "${BIN_DIR}/blastn" ] && [ -f "${BIN_DIR}/dustmasker" ]; then
+if [ -f "${BIN_DIR}/blastn" ] && [ -f "${BIN_DIR}/dustmasker" ] && [ -f "${BIN_DIR}/makeblastdb" ]; then
     info "Already installed"
 elif [ "$WITH_BLAST" = true ]; then
     # Determine download URL — NCBI uses x64-linux for newer releases
@@ -356,9 +356,9 @@ elif [ "$WITH_BLAST" = true ]; then
     tar -xzf blast.tar.gz
     BLAST_DIR=$(ls -d ncbi-blast-${BLAST_VERSION}+* 2>/dev/null | head -1)
     if [ -n "$BLAST_DIR" ]; then
-        cp "${BLAST_DIR}/bin/blastn" "${BLAST_DIR}/bin/dustmasker" "${BIN_DIR}/"
+        cp "${BLAST_DIR}/bin/blastn" "${BLAST_DIR}/bin/dustmasker" "${BLAST_DIR}/bin/makeblastdb" "${BIN_DIR}/"
         rm -rf blast.tar.gz "${BLAST_DIR}"
-        info "Installed BLAST+ ${BLAST_VERSION} (blastn, dustmasker)"
+        info "Installed BLAST+ ${BLAST_VERSION} (blastn, dustmasker, makeblastdb)"
     else
         err "BLAST+ extraction failed"
         rm -f blast.tar.gz
@@ -368,9 +368,65 @@ else
     warn "Skipped (use --with-blast to install). Needed for --reference-transcriptome."
 fi
 
-# ── 6. Install Fold (RNAstructure) ─────────────────────────────────────────
+# ── 6. Install gffread (optional, for transcriptome building) ──────────────
 
-step "[6/7] Fold / RNAstructure (secondary structure prediction)"
+step "[6/8] gffread (build transcriptome from genome + GTF — optional)"
+
+if [ -f "${BIN_DIR}/gffread" ]; then
+    info "Already installed"
+elif [ "$WITH_BLAST" = true ]; then
+    GFFREAD_VERSION="0.12.7"
+    case "${PLATFORM}-${ARCH_NAME}" in
+        linux-x86_64)
+            GFFREAD_URL="https://github.com/gpertea/gffread/releases/download/v${GFFREAD_VERSION}/gffread-${GFFREAD_VERSION}.Linux_x86_64.tar.gz"
+            ;;
+        linux-aarch64)
+            GFFREAD_URL="https://github.com/gpertea/gffread/releases/download/v${GFFREAD_VERSION}/gffread-${GFFREAD_VERSION}.Linux_x86_64.tar.gz"
+            warn "gffread aarch64 not available, trying x86_64 (may not work)"
+            ;;
+        macos-x86_64)
+            GFFREAD_URL="https://github.com/gpertea/gffread/releases/download/v${GFFREAD_VERSION}/gffread-${GFFREAD_VERSION}.OSX_x86_64.tar.gz"
+            ;;
+        macos-aarch64)
+            GFFREAD_URL="https://github.com/gpertea/gffread/releases/download/v${GFFREAD_VERSION}/gffread-${GFFREAD_VERSION}.OSX_x86_64.tar.gz"
+            ;;
+    esac
+
+    if [ -n "$GFFREAD_URL" ]; then
+        printf "  Downloading gffread ${GFFREAD_VERSION}...\n"
+        if download "$GFFREAD_URL" "${DEPS_DIR}/gffread.tar.gz" 2>/dev/null; then
+            cd "${DEPS_DIR}"
+            tar -xzf gffread.tar.gz
+            GFFREAD_DIR=$(ls -d gffread-${GFFREAD_VERSION}* 2>/dev/null | head -1)
+            if [ -n "$GFFREAD_DIR" ] && [ -f "${GFFREAD_DIR}/gffread" ]; then
+                cp "${GFFREAD_DIR}/gffread" "${BIN_DIR}/"
+                chmod +x "${BIN_DIR}/gffread"
+                rm -rf gffread.tar.gz "${GFFREAD_DIR}"
+                info "Installed gffread ${GFFREAD_VERSION}"
+            else
+                # Try direct binary in archive
+                if [ -f "gffread" ]; then
+                    cp gffread "${BIN_DIR}/"
+                    chmod +x "${BIN_DIR}/gffread"
+                    info "Installed gffread ${GFFREAD_VERSION}"
+                else
+                    warn "gffread extraction failed"
+                fi
+                rm -f gffread.tar.gz
+                rm -rf "${GFFREAD_DIR}" 2>/dev/null
+            fi
+            cd - >/dev/null
+        else
+            warn "Could not download gffread. Install manually from https://github.com/gpertea/gffread"
+        fi
+    fi
+else
+    warn "Skipped (use --with-blast to install). Needed to build transcriptome FASTA."
+fi
+
+# ── 7. Install Fold (RNAstructure) ─────────────────────────────────────────
+
+step "[7/8] Fold / RNAstructure (secondary structure prediction)"
 
 # Fold is a bundled binary that must live inside the Python package directory.
 # We download the RNAstructure package and extract just the Fold binary.
@@ -418,7 +474,7 @@ fi
 # ── 7. Install eFISHent Python package ────────────────────────────────────────
 
 if [ "$DEPS_ONLY" = false ]; then
-    step "[7/7] eFISHent (Python package)"
+    step "[8/8] eFISHent (Python package)"
 
     # Install uv if not present
     if ! command -v uv >/dev/null 2>&1; then
@@ -470,7 +526,7 @@ if [ "$DEPS_ONLY" = false ]; then
         fi
     fi
 else
-    step "[7/7] Skipping Python package (--deps-only)"
+    step "[8/8] Skipping Python package (--deps-only)"
 fi
 
 # ── Create wrapper script ────────────────────────────────────────────────────

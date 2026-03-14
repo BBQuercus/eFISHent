@@ -128,7 +128,11 @@ class TranscriptomeFiltering(luigi.Task):
 
         # Post-BLAST filtering (per TrueProbes approach):
         # effective match length = alignment length - gaps
-        min_match_len = 15
+        # Default min_match_len: max(18, 0.8 * min_probe_length)
+        min_match_len = config.min_blast_match_length
+        if min_match_len == 0:
+            min_match_len = max(18, int(0.8 * config.min_length))
+        self.logger.debug(f"Using min_blast_match_length = {min_match_len}")
         df_blast["effective_len"] = df_blast["length"] - df_blast["gapopen"]
         df_hits = df_blast[
             (df_blast["effective_len"] >= min_match_len)
@@ -159,6 +163,30 @@ class TranscriptomeFiltering(luigi.Task):
             seq for seq in sequences
             if off_target_counts.get(seq.id, 0) <= max_off
         ]
+
+        # Secondary check: flag probes with >=16nt contiguous match at >=95% identity
+        # These are warnings, not hard rejections
+        cross_hyb_threshold = 16
+        df_cross_hyb = df_blast[
+            (df_blast["effective_len"] >= cross_hyb_threshold)
+            & (df_blast["pident"] >= 95.0)
+            & (df_blast["gapopen"] == 0)  # contiguous = no gaps
+        ]
+        if not df_cross_hyb.empty:
+            cross_hyb_probes = set()
+            for probe_id, group in df_cross_hyb.groupby("qseqid"):
+                off_targets = group[
+                    ~group["sseqid"].str.lower().str.contains(
+                        gene_pattern, na=False, regex=True
+                    )
+                ]
+                if len(off_targets["sseqid"].unique()) > 0:
+                    cross_hyb_probes.add(probe_id)
+            if cross_hyb_probes:
+                self.logger.debug(
+                    f"Cross-hybridization warning: {len(cross_hyb_probes)} probes have "
+                    f">=16nt contiguous match at >=95% identity to off-target transcripts"
+                )
 
         # Save hits table
         df_hits.to_csv(self.output()["table"].path, index=False)

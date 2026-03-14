@@ -25,6 +25,8 @@ class TestPresets:
             "sequence_similarity", "is_endogenous", "optimization_method",
             "filter_low_complexity", "mask_repeats", "off_target_min_tm",
             "intergenic_off_targets", "max_homopolymer_length", "filter_rrna",
+            "min_blast_match_length", "max_probes_per_off_target",
+            "adaptive_length", "max_transcriptome_off_targets",
         }
         for name, preset in PRESETS.items():
             for param in preset["params"]:
@@ -34,7 +36,7 @@ class TestPresets:
 
     def test_get_preset(self):
         preset = get_preset("smfish")
-        assert preset["params"]["min_length"] == 20
+        assert preset["params"]["min_length"] == 18
 
     def test_get_preset_unknown(self):
         with pytest.raises(KeyError):
@@ -45,6 +47,7 @@ class TestPresets:
         assert "smfish" in names
         assert "merfish" in names
         assert "strict" in names
+        assert "exogenous" in names
 
     def test_format_preset_list(self):
         output = format_preset_list()
@@ -55,9 +58,10 @@ class TestPresets:
 
     def test_smfish_preset_values(self):
         p = get_preset("smfish")["params"]
-        assert p["min_length"] == 20
-        assert p["max_length"] == 20
+        assert p["min_length"] == 18
+        assert p["max_length"] == 22
         assert p["formamide_concentration"] == pytest.approx(10.0)
+        assert p["adaptive_length"] is True
 
     def test_merfish_preset_values(self):
         p = get_preset("merfish")["params"]
@@ -70,3 +74,11 @@ class TestPresets:
         relaxed = get_preset("relaxed")["params"]
         assert strict["max_kmers"] < relaxed["max_kmers"]
         assert strict["max_off_targets"] < relaxed["max_off_targets"]
+
+    def test_exogenous_preset_values(self):
+        p = get_preset("exogenous")["params"]
+        assert p["is_endogenous"] is False
+        assert p["max_transcriptome_off_targets"] == 0
+        assert p["adaptive_length"] is True
+        assert p["min_length"] == 19
+        assert p["max_length"] == 22

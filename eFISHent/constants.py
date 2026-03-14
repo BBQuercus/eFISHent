@@ -103,4 +103,7 @@ CLI_SHORTFORM: Dict[str, str] = {
     "intergenic_off_targets": "iot",
     "mask_repeats": "mr",
     "off_target_min_tm": "ottm",
+    "min_blast_match_length": "bml",
+    "max_probes_per_off_target": "mpot",
+    "adaptive_length": "adl",
 }

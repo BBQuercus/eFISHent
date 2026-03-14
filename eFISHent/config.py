@@ -217,7 +217,7 @@ class ProbeConfig(luigi.Config):
     max_transcriptome_off_targets = luigi.IntParameter(
         description=(
             "Maximum number of transcriptome off-target hits per probe. "
-            "A hit = >= 75%% identity over >= 15nt. "
+            "A hit = >= blast_identity_threshold identity over >= min_blast_match_length. "
             "Only used when reference_transcriptome is provided."
         ),
         default=0,
@@ -263,6 +263,32 @@ class ProbeConfig(luigi.Config):
             "causes intense background. Requires --reference-annotation. "
             "Catches 5S and mitochondrial rRNA from standard GTFs; "
             "for 18S/28S use --reference-transcriptome with rRNA sequences."
+        ),
+        default=False,
+    )
+    min_blast_match_length = luigi.IntParameter(
+        description=(
+            "Minimum effective alignment length (alignment_length - gaps) for a "
+            "BLAST hit to count as an off-target in transcriptome filtering. "
+            "Default is max(18, 0.8 * min_probe_length). Lower values increase "
+            "sensitivity but may cause excessive filtering for exogenous genes."
+        ),
+        default=0,
+    )
+    max_probes_per_off_target = luigi.IntParameter(
+        description=(
+            "Maximum number of probes in the final set allowed to hit the same "
+            "off-target gene. If exceeded, the weakest probes hitting that gene "
+            "are removed. Set to 0 to disable. "
+            "Prevents correlated off-target binding that creates false FISH spots."
+        ),
+        default=0,
+    )
+    adaptive_length = luigi.BoolParameter(
+        description=(
+            "Adjust probe length based on local GC content to normalize Tm. "
+            "High-GC regions get shorter probes, low-GC regions get longer probes. "
+            "Requires min_length < max_length with a range of at least 2nt."
         ),
         default=False,
     )

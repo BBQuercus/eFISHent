@@ -125,6 +125,9 @@ class OptimizeProbeCoverage(luigi.Task):
             match_percentage = ProbeConfig().sequence_similarity / 100
             assigned = self.filter_binding_probes(assigned, match_percentage)
 
+        # Tm uniformity refinement: swap outlier probes for better alternatives
+        assigned = self.refine_tm_uniformity(assigned, sequences)
+
         visualize_assignment(self.df, assigned, self.output()["coverage"].path)
 
         candidates = [sequence for sequence in sequences if sequence.id in assigned]
@@ -132,6 +135,111 @@ class OptimizeProbeCoverage(luigi.Task):
             self.logger, "OptimizeProbeCoverage", len(candidates), len(sequences)
         )
         Bio.SeqIO.write(candidates, self.output()["probes"].path, format="fasta")
+
+    def refine_tm_uniformity(
+        self,
+        assigned: List[str],
+        sequences: List[Bio.SeqRecord.SeqRecord],
+    ) -> List[str]:
+        """Refine probe selection for Tm uniformity.
+
+        For each probe whose Tm deviates > 5°C from the set median, check
+        if an alternative probe at a nearby position has better Tm and swap.
+        """
+        from .basic_filtering import get_melting_temp
+
+        if len(assigned) < 3:
+            return assigned
+
+        config = ProbeConfig()
+        na = config.na_concentration
+        formamide = config.formamide_concentration
+
+        # Build sequence lookup
+        seq_map = {s.id: s for s in sequences}
+
+        # Compute Tm for all assigned probes
+        assigned_tms = {}
+        for name in assigned:
+            if name in seq_map:
+                assigned_tms[name] = get_melting_temp(
+                    seq_map[name].seq, na, formamide
+                )
+
+        if not assigned_tms:
+            return assigned
+
+        median_tm = float(np.median(list(assigned_tms.values())))
+        max_deviation = 5.0
+
+        # Build position index of unassigned probes
+        assigned_set = set(assigned)
+        unassigned = [s for s in sequences if s.id not in assigned_set]
+
+        swaps_made = 0
+        new_assigned = list(assigned)
+
+        for i, name in enumerate(new_assigned):
+            if name not in assigned_tms:
+                continue
+            tm = assigned_tms[name]
+            deviation = abs(tm - median_tm)
+            if deviation <= max_deviation:
+                continue
+
+            # This probe is an outlier — look for better alternatives
+            probe_start = int(name.split("-")[-1])
+            probe_row = self.df[self.df["name"] == name]
+            if probe_row.empty:
+                continue
+            probe_end = int(probe_row.iloc[0]["end"])
+
+            best_alt = None
+            best_alt_deviation = deviation
+
+            for alt in unassigned:
+                alt_start = int(alt.id.split("-")[-1])
+                alt_end = alt_start + len(alt)
+
+                # Alternative must be at a nearby position (overlapping region)
+                if alt_end < probe_start or alt_start > probe_end:
+                    continue
+
+                # Check it doesn't overlap with other assigned probes
+                overlaps = False
+                for j, other_name in enumerate(new_assigned):
+                    if j == i:
+                        continue
+                    other_row = self.df[self.df["name"] == other_name]
+                    if not other_row.empty:
+                        other_start = int(other_row.iloc[0]["start"])
+                        other_end = int(other_row.iloc[0]["end"])
+                        if is_overlapping(
+                            (alt_start, alt_end), (other_start, other_end)
+                        ):
+                            overlaps = True
+                            break
+
+                if overlaps:
+                    continue
+
+                alt_tm = get_melting_temp(alt.seq, na, formamide)
+                alt_deviation = abs(alt_tm - median_tm)
+                if alt_deviation < best_alt_deviation:
+                    best_alt = alt
+                    best_alt_deviation = alt_deviation
+
+            if best_alt and best_alt_deviation < deviation - 1.0:
+                new_assigned[i] = best_alt.id
+                swaps_made += 1
+
+        if swaps_made > 0:
+            self.logger.debug(
+                f"Tm uniformity: swapped {swaps_made} probes for better Tm match "
+                f"(median Tm: {median_tm:.1f}°C)"
+            )
+
+        return new_assigned
 
 
 def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
@@ -161,23 +269,32 @@ def is_binding(seq1: str, seq2: str, match_percentage: float = 0.75) -> bool:
 
 
 def greedy_model(df: pd.DataFrame) -> List[str]:
-    """Run the greedy/fast model."""
-    rec_array = df[["start", "end"]].to_records(index=False)
-    probes = df["name"].values
+    """Run the greedy/fast model.
 
-    # Create overlap matrix of all vs all
-    vect = np.vectorize(is_overlapping)
-    matrix = vect(rec_array[:, None], rec_array)
-    overlap = {probe: row for probe, row in zip(probes, matrix)}
+    Probes are sorted by start position, then selected greedily ensuring
+    no overlaps. Within groups at the same start position, longer probes
+    are preferred (more coverage per probe).
+    """
+    df_sorted = df.sort_values(
+        ["start", "length"], ascending=[True, False]
+    ).reset_index(drop=True)
+    rec_array = df_sorted[["start", "end"]].to_records(index=False)
+    probes = df_sorted["name"].values
 
-    # Assign non-overlapping probes - must check ALL assigned probes, not just last
-    assign = {}
-    assigned = [probes[0]]
-    for idx, probe in enumerate(probes[1:], start=1):
+    # Assign non-overlapping probes greedily
+    assigned = []
+    assigned_intervals = []
+
+    for idx, probe in enumerate(probes):
+        start, end = rec_array[idx]
         # Check if probe overlaps with ANY already assigned probe
-        if all(not overlap[assigned_probe][idx] for assigned_probe in assigned):
+        if all(
+            not is_overlapping((start, end), interval)
+            for interval in assigned_intervals
+        ):
             assigned.append(probe)
-        assign[probe] = probe in assigned
+            assigned_intervals.append((start, end))
+
     return assigned
 
 

@@ -4,14 +4,15 @@ from typing import Dict
 
 PRESETS: Dict[str, Dict] = {
     "smfish": {
-        "description": "Standard smFISH (20nt probes, 10% formamide)",
+        "description": "Standard smFISH (18-22nt probes, adaptive length, 10% formamide)",
         "params": {
-            "min_length": 20,
-            "max_length": 20,
+            "min_length": 18,
+            "max_length": 22,
             "min_tm": 40.0,
             "max_tm": 60.0,
             "formamide_concentration": 10.0,
             "spacing": 2,
+            "adaptive_length": True,
         },
     },
     "merfish": {
@@ -53,6 +54,20 @@ PRESETS: Dict[str, Dict] = {
             "max_deltag": -15.0,
             "mask_repeats": True,
             "off_target_min_tm": 37.0,
+        },
+    },
+    "exogenous": {
+        "description": "Exogenous genes (GFP, Renilla, reporters — no k-mer filter, strict BLAST)",
+        "params": {
+            "min_length": 19,
+            "max_length": 22,
+            "adaptive_length": True,
+            "is_endogenous": False,
+            "max_transcriptome_off_targets": 0,
+            "min_tm": 38.0,
+            "max_tm": 62.0,
+            "formamide_concentration": 10.0,
+            "spacing": 2,
         },
     },
 }
