@@ -193,6 +193,11 @@ def aggregate_off_target_genes(
         }
     """
     target_lower = target_gene.lower()
+    # Strip common suffixes to get clean gene name for matching
+    # e.g., "EIF2B1_cds" -> "eif2b1", "METTL3_cds_odd" -> "mettl3"
+    target_clean = re.sub(
+        r"[_\-]?(cds|mrna|transcript|seq|odd|even).*$", "", target_lower
+    )
     results: Dict[str, Dict] = {}
 
     for probe_id, group in blast_hits.groupby("qseqid"):
@@ -204,11 +209,13 @@ def aggregate_off_target_genes(
         for _, hit in group.iterrows():
             gene = map_transcript_to_gene(str(hit["sseqid"]), mapping)
 
-            # Skip self-hits
-            if gene.lower() == target_lower:
+            # Skip self-hits (match against both raw and cleaned gene name)
+            gene_lower = gene.lower()
+            if gene_lower == target_lower or gene_lower == target_clean:
                 continue
             # Also skip if the sseqid contains the target gene name
-            if target_lower in str(hit["sseqid"]).lower():
+            sseqid_lower = str(hit["sseqid"]).lower()
+            if target_lower in sseqid_lower or target_clean in sseqid_lower:
                 continue
 
             gene_counts[gene] = gene_counts.get(gene, 0) + 1

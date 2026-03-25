@@ -139,22 +139,64 @@ class TranscriptomeFiltering(luigi.Task):
             & (df_blast["pident"] >= config.blast_identity_threshold)
         ]
 
-        # Count off-target hits per probe (exclude self-hits by checking
-        # if the probe maps to its own target — we identify self-hits by
-        # the gene name appearing as a word in the subject sequence ID)
-        gene_name = re.escape(util.get_gene_name(hashed=False).lower())
-        # Use word boundary or delimiter-boundary matching to avoid substring
-        # false positives (e.g., gene "NAG" matching transcript "GNAG1")
+        # Count off-target hits per probe (exclude self-hits)
+        # Strategy 1: gene name in subject ID (works for gffread-style headers)
+        # Strategy 2: GTF-based transcript-to-gene mapping (works for Ensembl IDs)
+        gene_name_raw = util.get_gene_name(hashed=False).lower()
+        gene_name = re.escape(gene_name_raw)
         gene_pattern = rf"(?:^|[|_\-.\s]){gene_name}(?:$|[|_\-.\s])"
+
+        # Also try extracting a cleaner gene name by stripping common suffixes
+        # (e.g., "EIF2B1_cds" -> "EIF2B1", "METTL3_cds_odd" -> "METTL3")
+        gene_name_clean = re.sub(r"[_-]?(cds|mrna|transcript|seq|odd|even).*$", "", gene_name_raw)
+        if gene_name_clean != gene_name_raw:
+            gene_name_clean_esc = re.escape(gene_name_clean)
+            gene_pattern_clean = rf"(?:^|[|_\-.\s]){gene_name_clean_esc}(?:$|[|_\-.\s])"
+        else:
+            gene_pattern_clean = None
+
+        # Build transcript-to-gene mapping from GTF if available
+        self_transcript_ids = set()
+        gtf_path = GeneralConfig().reference_annotation
+        if gtf_path:
+            try:
+                from .gene_annotation import build_transcript_gene_map
+                tx_map = build_transcript_gene_map(gtf_path)
+                # Find all transcript IDs that belong to the target gene
+                # Try both raw and cleaned gene names
+                for search_name in {gene_name_raw, gene_name_clean}:
+                    for tid, gname in tx_map.items():
+                        if gname.lower() == search_name:
+                            self_transcript_ids.add(tid.lower())
+                if self_transcript_ids:
+                    self.logger.debug(
+                        f"GTF mapping: found {len(self_transcript_ids)} transcripts "
+                        f"for target gene '{gene_name_clean}'"
+                    )
+            except Exception as e:
+                self.logger.debug(f"GTF mapping failed, using name-based exclusion: {e}")
+
+        def is_self_hit(sseqid):
+            """Check if a subject sequence ID is a self-hit."""
+            sid_lower = sseqid.lower()
+            # Check gene name in ID (gffread-style)
+            if re.search(gene_pattern, sid_lower):
+                return True
+            # Check cleaned gene name pattern
+            if gene_pattern_clean and re.search(gene_pattern_clean, sid_lower):
+                return True
+            # Check GTF mapping (Ensembl-style)
+            if sid_lower in self_transcript_ids:
+                return True
+            # Check without version suffix
+            base = sid_lower.split(".")[0]
+            if base in self_transcript_ids:
+                return True
+            return False
+
         off_target_counts = {}
         for probe_id, group in df_hits.groupby("qseqid"):
-            # Filter out self-hits where sseqid contains the target gene name
-            # as a delimited word (not as a substring)
-            off_targets = group[
-                ~group["sseqid"].str.lower().str.contains(
-                    gene_pattern, na=False, regex=True
-                )
-            ]
+            off_targets = group[~group["sseqid"].apply(is_self_hit)]
             off_target_counts[probe_id] = len(off_targets["sseqid"].unique())
 
         # Filter probes
@@ -175,11 +217,7 @@ class TranscriptomeFiltering(luigi.Task):
         if not df_cross_hyb.empty:
             cross_hyb_probes = set()
             for probe_id, group in df_cross_hyb.groupby("qseqid"):
-                off_targets = group[
-                    ~group["sseqid"].str.lower().str.contains(
-                        gene_pattern, na=False, regex=True
-                    )
-                ]
+                off_targets = group[~group["sseqid"].apply(is_self_hit)]
                 if len(off_targets["sseqid"].unique()) > 0:
                     cross_hyb_probes.add(probe_id)
             if cross_hyb_probes:
