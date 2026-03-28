@@ -47,7 +47,7 @@ eFISHent is tested on macOS and Linux with Python 3.9+. Works on shared HPC/clus
 A single command installs eFISHent and all dependencies:
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash
 ```
 
 This will:
@@ -67,7 +67,7 @@ efishent --help     # Show usage
 For transcriptome-level off-target filtering, install BLAST+ and gffread:
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --with-blast
+curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash -s -- --with-blast
 ```
 
 This installs `blastn`, `makeblastdb`, `dustmasker`, and `gffread` alongside the core dependencies.
@@ -75,7 +75,7 @@ This installs `blastn`, `makeblastdb`, `dustmasker`, and `gffread` alongside the
 ### Custom Installation Path
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --prefix /path/to/install
+curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash -s -- --prefix /path/to/install
 ```
 
 ### Updating
@@ -121,7 +121,7 @@ uv pip install -e .
 ### Uninstalling
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall
+curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash -s -- --uninstall
 ```
 
 Or simply remove the install directory: `rm -rf ~/.local/efishent`

@@ -3,8 +3,8 @@
 # Installs eFISHent and all dependencies. No sudo, Docker, or conda required.
 #
 # Usage:
-#   curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh
-#   curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --prefix ~/.local/efishent
+#   curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash
+#   curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash -s -- --prefix ~/.local/efishent
 #
 # Options:
 #   --prefix DIR    Install to DIR (default: ~/.local/efishent)
@@ -14,6 +14,16 @@
 #   --uninstall     Remove eFISHent and all dependencies
 
 set -e
+
+# Re-exec under bash if the current shell is not bash (e.g. dash on Debian/Ubuntu)
+if [ -z "$BASH_VERSION" ]; then
+    if command -v bash >/dev/null 2>&1; then
+        exec bash "$0" "$@"
+    else
+        printf "Error: bash is required but not found. Install bash and retry.\n" >&2
+        exit 1
+    fi
+fi
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -683,5 +693,5 @@ if ! command -v gffread >/dev/null 2>&1; then
 fi
 
 printf "  To uninstall:\n"
-printf "    ${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | sh -s -- --uninstall${RESET}\n"
+printf "    ${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash -s -- --uninstall${RESET}\n"
 printf "\n"
