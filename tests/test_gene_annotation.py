@@ -7,7 +7,6 @@ import pandas as pd
 import pytest
 
 from eFISHent.gene_annotation import (
-    _parse_raw_gtf,
     aggregate_off_target_genes,
     build_transcript_gene_map,
     map_transcript_to_gene,

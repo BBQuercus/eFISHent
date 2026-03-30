@@ -1,6 +1,5 @@
 """Tests for quality scores, recommendation, and off-target cap."""
 
-import re
 from unittest.mock import patch, MagicMock
 
 import pandas as pd
