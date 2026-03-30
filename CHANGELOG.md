@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.11
+
+### Bug Fixes
+- Fix secondary structure filtering crash on Linux: use bundled `Fold_linux` binary instead of expecting `Fold` on system PATH
+
 ## v0.0.10
 
 ### New Features
