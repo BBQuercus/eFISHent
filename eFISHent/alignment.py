@@ -16,6 +16,7 @@ from . import constants
 from . import util
 from .basic_filtering import BasicFiltering
 from .basic_filtering import compute_off_target_tm
+from .rdna_filter import FilterRibosomalRNA
 from .config import GeneralConfig
 from .config import ProbeConfig
 from .config import SequenceConfig
@@ -53,7 +54,6 @@ class AlignProbeCandidates(luigi.Task):
         self.has_rrna_filter = bool(
             self.filter_rrna
             and self.has_annotation
-            and self.is_endogenous
         )
 
     def requires(self):
@@ -61,7 +61,12 @@ class AlignProbeCandidates(luigi.Task):
             index_task = BuildBowtie2Index()
         else:
             index_task = BuildBowtieIndex()
-        tasks = {"probes": BasicFiltering(), "bowtie": index_task}
+        # FilterRibosomalRNA sits between BasicFiltering and alignment
+        if ProbeConfig().filter_rdna_45s:
+            probe_task = FilterRibosomalRNA()
+        else:
+            probe_task = BasicFiltering()
+        tasks = {"probes": probe_task, "bowtie": index_task}
         if self.has_expression_filter or self.has_intergenic_filter or self.has_rrna_filter:
             from .indexing import PrepareAnnotationFile
             tasks["annotation"] = PrepareAnnotationFile()
@@ -184,6 +189,16 @@ class AlignProbeCandidates(luigi.Task):
                 out.write(f">{record.id}\n{record.seq}\n")
 
         k_value = str(max(self.max_off_targets + 2, 100))
+
+        # Adaptive seed length: use shorter seeds for short probes (<=22nt)
+        # to avoid the blind spot where -L 20 makes Bowtie2 non-functional
+        # (seed is essentially probe-length, so any mismatch causes a miss)
+        min_probe_len = ProbeConfig().min_length
+        if min_probe_len <= 22:
+            seed_length = "10"
+        else:
+            seed_length = "20"
+
         args = [
             "bowtie2",
             "-f",  # FASTA input
@@ -194,7 +209,7 @@ class AlignProbeCandidates(luigi.Task):
             "-D", "20",  # 20 seed extension attempts
             "-R", "3",  # 3 re-seeding rounds
             "-N", "1",  # 1 mismatch allowed in seed
-            "-L", "20",  # Seed length 20bp
+            "-L", seed_length,  # Seed length (adaptive for short probes)
             "-i", "C,4",  # Seed interval: constant, every 4 bases
             "--score-min", "G,1,4",  # Min score: log-based threshold
             "-k", k_value,  # Report up to k alignments per probe
@@ -251,6 +266,18 @@ class AlignProbeCandidates(luigi.Task):
             filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
 
         df = self.parse_raw_pysam(filtered_sam)
+
+        # Warn when all exogenous probes pass unmapped — indicates alignment
+        # parameters may be too strict to find off-targets
+        if not self.is_endogenous and self.aligner == "bowtie2" and hasattr(self, "fname_fasta"):
+            total_probes = len(list(Bio.SeqIO.parse(self.fname_fasta, "fasta")))
+            if total_probes > 0 and len(df) == total_probes:
+                self.logger.warning(
+                    f"All {total_probes} exogenous probes passed Bowtie2 unmapped. "
+                    "This may indicate alignment parameters are too strict to detect "
+                    "off-targets. The rDNA/satellite filter and transcriptome BLAST "
+                    "provide additional protection."
+                )
 
         if self.no_alternative_loci:
             df = df[~df["rname"].str.contains("_alt")]

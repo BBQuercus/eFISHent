@@ -170,6 +170,7 @@ PARAM_VALIDATORS = {
     "off_target_min_tm": float,
     "min_blast_match_length": non_negative_int,
     "max_probes_per_off_target": non_negative_int,
+    "custom_rdna_fasta": existing_fasta_file,
 }
 
 # Metavar hints for cleaner help output
@@ -209,13 +210,15 @@ PARAM_METAVAR = {
     "off_target_min_tm": "°C",
     "min_blast_match_length": "N",
     "max_probes_per_off_target": "N",
+    "custom_rdna_fasta": "FILE",
 }
 _BOOL_METAVAR = "yes/no"
 for _bool_param in [
     "filter_low_complexity", "build_indices", "save_intermediates",
     "is_plus_strand", "is_endogenous", "no_alternative_loci",
     "mask_repeats", "intergenic_off_targets", "filter_rrna",
-    "adaptive_length",
+    "adaptive_length", "filter_rdna_45s", "reject_cross_hybridization",
+    "allow_no_transcriptome",
 ]:
     PARAM_METAVAR[_bool_param] = _BOOL_METAVAR
 
@@ -400,6 +403,24 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
     if getattr(args, "filter_rrna", False) and not args.reference_annotation:
         errors.append("--filter-rrna requires --reference-annotation")
 
+    # Exogenous genes without transcriptome BLAST are under-protected:
+    # k-mer filtering is skipped, and genome alignment is fragile for short probes.
+    # Require explicit override to proceed without transcriptome.
+    if (
+        not getattr(args, "is_endogenous", True)
+        and not args.reference_transcriptome
+        and not getattr(args, "allow_no_transcriptome", False)
+        and not args.build_indices
+        and not args.analyze_probeset
+    ):
+        errors.append(
+            "Exogenous probe design requires --reference-transcriptome for reliable "
+            "off-target detection. K-mer filtering is skipped for exogenous genes, so "
+            "transcriptome BLAST is the primary off-target check.\n"
+            "  To proceed without a transcriptome (reduced protection), add "
+            "--allow-no-transcriptome."
+        )
+
     if errors:
         parser.error("\n  " + "\n  ".join(errors))
 
@@ -466,15 +487,6 @@ def validate_parameter_warnings(args: argparse.Namespace) -> List[str]:
             f"Probe spacing of {args.spacing}nt is large \u2014 may reduce coverage.\n"
             "  Consider --spacing 2 for denser probe tiling."
         )
-
-    # Exogenous gene with aggressive k-mer settings
-    if not args.is_endogenous:
-        if not args.reference_transcriptome:
-            warnings.append(
-                "Exogenous gene without --reference-transcriptome.\n"
-                "  K-mer filtering is skipped for exogenous genes — transcriptome BLAST\n"
-                "  is the primary off-target check. Consider adding --reference-transcriptome."
-            )
 
     return warnings
 
@@ -617,8 +629,11 @@ def check_required_dependencies(args: argparse.Namespace) -> List[str]:
     else:
         required = ["bowtie", "jellyfish"]
 
-    # BLAST required if transcriptome filtering or repeat masking is enabled
+    # BLAST required if transcriptome filtering, repeat masking, or rDNA filter is enabled
     if getattr(args, "reference_transcriptome", ""):
+        required.append("blastn")
+        required.append("makeblastdb")
+    if getattr(args, "filter_rdna_45s", True) and "blastn" not in required:
         required.append("blastn")
         required.append("makeblastdb")
     if getattr(args, "mask_repeats", False):
@@ -989,7 +1004,7 @@ def main():
                 with pipeline_progress(total_stages=2, mode="pipeline"):
                     luigi.build(tasks, local_scheduler=True)
             else:
-                with pipeline_progress(total_stages=8):
+                with pipeline_progress(total_stages=9):
                     luigi.build(tasks, local_scheduler=True)
         else:
             luigi.build(tasks, local_scheduler=True)

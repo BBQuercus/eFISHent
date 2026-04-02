@@ -206,21 +206,32 @@ class TranscriptomeFiltering(luigi.Task):
             if off_target_counts.get(seq.id, 0) <= max_off
         ]
 
-        # Secondary check: flag probes with >=16nt contiguous match at >=95% identity
-        # These are warnings, not hard rejections
+        # Cross-hybridization check: probes with >=16nt contiguous match at
+        # >=95% identity to off-target transcripts. These near-perfect matches
+        # to abundant or spatially concentrated RNAs create noisy images.
         cross_hyb_threshold = 16
         df_cross_hyb = df_blast[
             (df_blast["effective_len"] >= cross_hyb_threshold)
             & (df_blast["pident"] >= 95.0)
             & (df_blast["gapopen"] == 0)  # contiguous = no gaps
         ]
+        cross_hyb_probes = set()
         if not df_cross_hyb.empty:
-            cross_hyb_probes = set()
             for probe_id, group in df_cross_hyb.groupby("qseqid"):
                 off_targets = group[~group["sseqid"].apply(is_self_hit)]
                 if len(off_targets["sseqid"].unique()) > 0:
                     cross_hyb_probes.add(probe_id)
-            if cross_hyb_probes:
+
+        if cross_hyb_probes:
+            if config.reject_cross_hybridization:
+                self.logger.debug(
+                    f"Rejecting {len(cross_hyb_probes)} probes with strong "
+                    f"cross-hybridization (>=16nt contiguous at >=95% identity)"
+                )
+                candidates = [
+                    seq for seq in candidates if seq.id not in cross_hyb_probes
+                ]
+            else:
                 self.logger.debug(
                     f"Cross-hybridization warning: {len(cross_hyb_probes)} probes have "
                     f">=16nt contiguous match at >=95% identity to off-target transcripts"

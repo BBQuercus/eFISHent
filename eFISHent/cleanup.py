@@ -686,6 +686,30 @@ class CleanUpOutput(luigi.Task):
         sequences = self.prettify_sequences(df)
         config = self.prettify_configuration()
 
+        # Write initial output for BLAST verification
+        Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")
+
+        # Run BLAST verification and remove flagged probes
+        self._verification = self._run_blast_verification(
+            self.output()["fasta"].path
+        )
+        if self._verification and self._verification["flagged"]:
+            flagged_names = set(self._verification["flagged"].keys())
+            pre_count = len(df)
+            df = df[~df["name"].isin(flagged_names)].reset_index(drop=True)
+            self.logger.debug(
+                f"BLAST verification removed {pre_count - len(df)} probes with "
+                f"unexpected genomic hits: {sorted(flagged_names)[:5]}"
+                f"{'...' if len(flagged_names) > 5 else ''}"
+            )
+            # Rewrite output with cleaned probes
+            sequences = self.prettify_sequences(df)
+            Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")
+            # Update verification counts
+            self._verification["total"] = len(df)
+            self._verification["clean"] = len(df)
+            self._verification["flagged"] = {}
+
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
 
         # Store summary stats and probe data for completion message
@@ -693,15 +717,9 @@ class CleanUpOutput(luigi.Task):
         self._probe_df = df
 
         df.to_csv(self.output()["table"].path, index=False)
-        Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")
         with open(self.output()["config"].path, "w") as f:
             f.write(config)
         self.logger.debug(f'Saving all files using hash "{util.get_gene_name()}"')
-
-        # Run BLAST verification on final probes
-        self._verification = self._run_blast_verification(
-            self.output()["fasta"].path
-        )
 
         # Files to be deleted
         if not RunConfig().save_intermediates:

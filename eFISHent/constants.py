@@ -106,4 +106,8 @@ CLI_SHORTFORM: Dict[str, str] = {
     "min_blast_match_length": "bml",
     "max_probes_per_off_target": "mpot",
     "adaptive_length": "adl",
+    "filter_rdna_45s": "rdna45",
+    "custom_rdna_fasta": "rdnaf",
+    "reject_cross_hybridization": "rxh",
+    "allow_no_transcriptome": "ant",
 }

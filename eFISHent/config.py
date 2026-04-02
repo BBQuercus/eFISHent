@@ -292,3 +292,39 @@ class ProbeConfig(luigi.Config):
         ),
         default=False,
     )
+    filter_rdna_45s = luigi.BoolParameter(
+        description=(
+            "Screen probes against bundled 45S rDNA (U13369.1) and alpha satellite "
+            "consensus to prevent nucleolar/centromeric off-target signal. "
+            "The 45S rDNA is absent from standard genome assemblies (GRCh38) but "
+            "present at ~300-400 copies — a single near-match probe creates "
+            "overwhelming nucleolar background. Requires BLAST+."
+        ),
+        default=True,
+    )
+    custom_rdna_fasta = luigi.Parameter(
+        description=(
+            "Path to a custom rDNA FASTA file for non-human species. "
+            "Overrides the bundled human 45S rDNA (U13369.1). "
+            "Only used when --filter-rdna-45s is enabled."
+        ),
+        default="",
+    )
+    reject_cross_hybridization = luigi.BoolParameter(
+        description=(
+            "Hard-reject probes with strong cross-hybridization to off-target "
+            "transcripts (>=16nt contiguous match at >=95%% identity, no gaps). "
+            "Without this, such probes are only flagged as warnings."
+        ),
+        default=True,
+    )
+    allow_no_transcriptome = luigi.BoolParameter(
+        description=(
+            "Allow exogenous probe design without --reference-transcriptome. "
+            "Without a transcriptome, exogenous off-target detection relies "
+            "almost entirely on the rDNA/satellite filter and genome alignment, "
+            "which may miss abundant expressed off-targets. "
+            "Only use this if you accept reduced off-target protection."
+        ),
+        default=False,
+    )
