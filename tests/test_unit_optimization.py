@@ -212,3 +212,52 @@ def test_fill_coverage_gaps_no_gaps():
     assigned = ["p1", "p2"]
     result = fill_coverage_gaps(df, assigned, spacing=2)
     assert result == ["p1", "p2"]
+
+
+def test_greedy_prefers_optimal_gc():
+    """Greedy should prefer probes with GC in the 45-52% optimal range."""
+    from eFISHent.optimization import compute_pre_optimization_quality
+
+    # Two overlapping probes at the same position, different GC content
+    df = pd.DataFrame(
+        {
+            "name": ["good_gc", "bad_gc"],
+            # ~50% GC vs ~80% GC (20nt probes)
+            "sequence": [
+                "ATGCATGCATGCATGCATGC",  # 50% GC
+                "GCGCGCGCGCGCGCGCATGC",  # 80% GC
+            ],
+            "length": [20, 20],
+            "start": [0, 0],
+            "end": [20, 20],
+        }
+    )
+    quality = compute_pre_optimization_quality(df)
+    # Optimal GC (50%) should score higher than 80% GC
+    assert quality.iloc[0] > quality.iloc[1]
+
+    assigned = greedy_model(df)
+    # Should pick the one with better GC
+    assert assigned == ["good_gc"]
+
+
+def test_compute_pre_optimization_quality_range():
+    """Pre-optimization quality scores should be in (0, 1]."""
+    from eFISHent.optimization import compute_pre_optimization_quality
+
+    df = pd.DataFrame(
+        {
+            "name": ["p1", "p2", "p3"],
+            "sequence": [
+                "ATGCATGCATGCATGCATGC",  # 50% GC
+                "GCGCGCGCGCGCGCGCGCGC",  # 100% GC
+                "AAAAAAAAAAAAAAAAAAAT",  # ~5% GC
+            ],
+            "length": [20, 20, 20],
+            "start": [0, 20, 40],
+            "end": [20, 40, 60],
+        }
+    )
+    quality = compute_pre_optimization_quality(df)
+    assert (quality > 0).all()
+    assert (quality <= 1).all()
