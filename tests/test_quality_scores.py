@@ -207,6 +207,21 @@ class TestComputeQualityScores:
         scores = CleanUpOutput._compute_quality_scores(df)
         assert scores.iloc[0] > scores.iloc[1]
 
+    def test_binding_dg_boosts_score(self):
+        """Probes with strong on-target binding (negative ΔG) should score higher."""
+        df = pd.DataFrame(
+            {
+                "GC": [50.0, 50.0],
+                "TM": [55.0, 55.0],
+                "deltaG": [0.0, 0.0],
+                "kmers": [0, 0],
+                "count": [0, 0],
+                "on_target_dg": [-40.0, -10.0],
+            }
+        )
+        scores = CleanUpOutput._compute_quality_scores(df)
+        assert scores.iloc[0] > scores.iloc[1]
+
     def test_quality_without_optional_columns(self):
         """Quality score should work with only the core columns."""
         df = pd.DataFrame(

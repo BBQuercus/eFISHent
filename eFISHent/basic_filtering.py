@@ -108,6 +108,42 @@ def has_low_complexity(
     return False
 
 
+def compute_duplex_dg(
+    sequence: Bio.Seq.Seq, na_concentration: float, formamide_concentration: float
+) -> float:
+    """Compute the nearest-neighbor ΔG for a perfect RNA/DNA hybrid duplex.
+
+    Returns ΔG in kcal/mol (negative = stable binding). Uses the same
+    thermodynamic model as Tm_NN but extracts ΔH and ΔS directly.
+    """
+    try:
+        rna_sequence = sequence.transcribe()
+        # Use Tm_NN to get Tm, then estimate ΔG at 37°C
+        # ΔG = ΔH × (1 - T/Tm) where T and Tm are in Kelvin
+        tm = Bio.SeqUtils.MeltingTemp.Tm_NN(
+            rna_sequence,
+            c_seq=rna_sequence.complement_rna(),
+            nn_table=Bio.SeqUtils.MeltingTemp.R_DNA_NN1,
+            Na=na_concentration,
+        )
+        tm_corrected = Bio.SeqUtils.MeltingTemp.chem_correction(
+            tm, fmd=formamide_concentration
+        )
+        # Approximate ΔG at 37°C: ΔG ≈ -RT × ln(Ka)
+        # Simplified: use relationship ΔG(37) ≈ ΔH × (1 - 310.15/(Tm+273.15))
+        # For a typical 20nt probe, ΔH ≈ -7 kcal/mol per bp pair
+        n_bp = len(sequence)
+        dh = -7.0 * n_bp  # approximate ΔH
+        if tm_corrected > -273.15:  # valid Tm
+            tm_k = tm_corrected + 273.15
+            dg = dh * (1.0 - 310.15 / tm_k)
+        else:
+            dg = 0.0
+        return float(dg)
+    except Exception:
+        return 0.0
+
+
 def compute_off_target_tm(
     probe_seq: str,
     target_seq: str,

@@ -22,6 +22,7 @@ import pandas as pd
 
 from . import util
 from .alignment import AlignProbeCandidates
+from .basic_filtering import compute_duplex_dg
 from .basic_filtering import get_cpg_fraction
 from .basic_filtering import get_gc_content
 from .basic_filtering import get_melting_temp
@@ -114,6 +115,18 @@ class CleanUpOutput(luigi.Task):
             df["accessibility"] = self._compute_accessibility_scores(df)
         else:
             df["accessibility"] = 1.0
+
+        # Add on-target duplex ΔG (binding stability)
+        cfg_inst = config()
+        df["on_target_dg"] = [
+            round(
+                compute_duplex_dg(
+                    seq.seq, cfg_inst.na_concentration, cfg_inst.formamide_concentration
+                ),
+                2,
+            )
+            for seq in sequences
+        ]
 
         # Add transcriptome off-target details if available
         self._add_transcriptome_details(df)
@@ -457,14 +470,39 @@ class CleanUpOutput(luigi.Task):
         else:
             scores["acc"] = 1.0
 
+        # On-target duplex ΔG score: more negative = more stable binding = better
+        # Typical range: -20 to -60 kcal/mol for 20-25nt probes
+        if "on_target_dg" in df.columns:
+            # Normalize: -60 or below → 1.0, 0 → 0.0
+            dg_floor = -60.0
+            scores["binding"] = (df["on_target_dg"].clip(upper=0.0) / dg_floor).clip(
+                lower=0.0, upper=1.0
+            )
+        else:
+            scores["binding"] = 1.0
+
         # Clip all component scores to [0, 1] for robustness
         for col in scores.columns:
             scores[col] = scores[col].clip(lower=0.0, upper=1.0)
 
         # Data-driven weighted composite
-        # Accessibility gets 5% weight when enabled (redistributed from others)
+        # Accessibility gets weight when enabled (redistributed from others)
         has_accessibility = "accessibility" in df.columns and (df["accessibility"] < 1.0).any()
-        if has_accessibility:
+        has_binding = "on_target_dg" in df.columns and (df["on_target_dg"] < 0.0).any()
+
+        if has_accessibility and has_binding:
+            quality = (
+                scores["tm"] * 0.16
+                + scores["gc"] * 0.12
+                + scores["cpg"] * 0.05
+                + scores["dg"] * 0.11
+                + scores["ot"] * 0.21
+                + scores["kmer"] * 0.08
+                + scores["lc"] * 0.08
+                + scores["acc"] * 0.09
+                + scores["binding"] * 0.10
+            )
+        elif has_accessibility:
             quality = (
                 scores["tm"] * 0.18
                 + scores["gc"] * 0.14
@@ -474,6 +512,17 @@ class CleanUpOutput(luigi.Task):
                 + scores["kmer"] * 0.09
                 + scores["lc"] * 0.09
                 + scores["acc"] * 0.09
+            )
+        elif has_binding:
+            quality = (
+                scores["tm"] * 0.18
+                + scores["gc"] * 0.13
+                + scores["cpg"] * 0.05
+                + scores["dg"] * 0.13
+                + scores["ot"] * 0.23
+                + scores["kmer"] * 0.08
+                + scores["lc"] * 0.10
+                + scores["binding"] * 0.10
             )
         else:
             quality = (

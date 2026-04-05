@@ -4,6 +4,7 @@ import luigi
 import pytest
 
 from eFISHent.basic_filtering import BasicFiltering
+from eFISHent.basic_filtering import compute_duplex_dg
 from eFISHent.basic_filtering import compute_off_target_tm
 from eFISHent.basic_filtering import get_cpg_fraction
 from eFISHent.basic_filtering import get_dinucleotide_repeat_count
@@ -240,6 +241,40 @@ def test_is_valid_rejects_high_cpg():
     # Low CpG: ATGATGATGATG = 0 CpG
     low_cpg = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATGATGATGATG"), id="seq")
     assert BasicFiltering().is_candidate_valid(low_cpg, Config()) is True
+
+
+# Duplex ΔG tests
+
+
+def test_compute_duplex_dg_returns_negative():
+    """On-target duplex ΔG should be negative (stable binding)."""
+    seq = Bio.Seq.Seq("ATCGATCGATCGATCGATCG")
+    dg = compute_duplex_dg(seq, na_concentration=330, formamide_concentration=10)
+    assert dg < 0.0
+
+
+def test_compute_duplex_dg_longer_more_stable():
+    """Longer probes should have more negative (more stable) ΔG."""
+    short = Bio.Seq.Seq("ATCGATCGATCG")
+    long = Bio.Seq.Seq("ATCGATCGATCGATCGATCGATCG")
+    dg_short = compute_duplex_dg(short, 330, 10)
+    dg_long = compute_duplex_dg(long, 330, 10)
+    assert dg_long < dg_short  # more negative = more stable
+
+
+def test_compute_duplex_dg_gc_rich_more_stable():
+    """GC-rich probes should have more negative ΔG than AT-rich probes."""
+    at_rich = Bio.Seq.Seq("ATATATATATATATATATATAT")
+    gc_rich = Bio.Seq.Seq("GCGCGCGCGCGCGCGCGCGCG")
+    dg_at = compute_duplex_dg(at_rich, 330, 10)
+    dg_gc = compute_duplex_dg(gc_rich, 330, 10)
+    assert dg_gc < dg_at
+
+
+def test_compute_duplex_dg_error_returns_zero():
+    """Error cases should return 0.0."""
+    dg = compute_duplex_dg(Bio.Seq.Seq(""), 330, 10)
+    assert dg == 0.0
 
 
 def test_cpg_filter_disabled_by_default():
