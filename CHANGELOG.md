@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.12
+
+### Bug Fixes
+- Fix rDNA/satellite off-target blind spots for exogenous probes: probes are now screened against 45S rDNA (U13369.1) and centromeric alpha satellite consensus sequences, which are absent from the GRCh38 primary assembly but can cause intense nucleolar/centromeric background signal
+- Bundle `Fold_linux` binary in the package and sync `uv.lock`
+- Remove unused imports flagged by ruff
+
 ## v0.0.11
 
 ### Bug Fixes
