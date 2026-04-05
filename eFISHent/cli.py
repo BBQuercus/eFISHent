@@ -171,6 +171,7 @@ PARAM_VALIDATORS = {
     "min_blast_match_length": non_negative_int,
     "max_probes_per_off_target": non_negative_int,
     "custom_rdna_fasta": existing_fasta_file,
+    "max_cpg_fraction": float,
 }
 
 # Metavar hints for cleaner help output
@@ -211,6 +212,7 @@ PARAM_METAVAR = {
     "min_blast_match_length": "N",
     "max_probes_per_off_target": "N",
     "custom_rdna_fasta": "FILE",
+    "max_cpg_fraction": "FRAC",
 }
 _BOOL_METAVAR = "yes/no"
 for _bool_param in [
@@ -487,6 +489,24 @@ def validate_parameter_warnings(args: argparse.Namespace) -> List[str]:
             f"Probe spacing of {args.spacing}nt is large \u2014 may reduce coverage.\n"
             "  Consider --spacing 2 for denser probe tiling."
         )
+
+    # High-GC target warning: compute gene GC from sequence file if available
+    seq_file = getattr(args, "sequence_file", None)
+    if seq_file and os.path.isfile(seq_file):
+        try:
+            import Bio.SeqIO
+            import Bio.SeqUtils
+            seq = next(Bio.SeqIO.parse(seq_file, "fasta"))
+            gene_gc = float(Bio.SeqUtils.gc_fraction(seq.seq)) * 100
+            if gene_gc > 55:
+                warnings.append(
+                    f"High-GC target detected ({gene_gc:.1f}% GC) \u2014 elevated risk of "
+                    "nuclear/nucleolar background.\n"
+                    "  Probes from high-GC genes cross-hybridize with rRNA (~60-67% GC).\n"
+                    "  Consider tightening --max-gc (e.g., 60) or using --max-cpg-fraction 0.10."
+                )
+        except Exception:
+            pass
 
     return warnings
 

@@ -37,13 +37,14 @@ PRESETS: Dict[str, Dict] = {
         },
     },
     "strict": {
-        "description": "Maximum specificity (low k-mer tolerance, low-complexity filter)",
+        "description": "Maximum specificity (low k-mer tolerance, low-complexity filter, CpG depletion)",
         "params": {
             "max_off_targets": 0,
             "max_kmers": 3,
             "max_deltag": -5.0,
             "filter_low_complexity": True,
             "sequence_similarity": 80,
+            "max_cpg_fraction": 0.10,
         },
     },
     "relaxed": {

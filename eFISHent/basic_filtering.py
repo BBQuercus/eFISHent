@@ -80,6 +80,20 @@ def get_dinucleotide_repeat_count(sequence: Bio.Seq.Seq, min_repeats: int = 4) -
     return count
 
 
+def get_cpg_fraction(sequence: Bio.Seq.Seq) -> float:
+    """Get the fraction of CpG dinucleotides in the sequence.
+
+    CpG frequency is significantly elevated in probes causing nuclear/nucleolar
+    background (p=0.004, n=84 probe sets), likely from cross-hybridization with
+    GC-rich rRNA (~60-67% GC).
+    """
+    seq_str = str(sequence).upper()
+    if len(seq_str) < 2:
+        return 0.0
+    cpg_count = sum(1 for i in range(len(seq_str) - 1) if seq_str[i:i+2] == "CG")
+    return cpg_count / (len(seq_str) - 1)
+
+
 def has_low_complexity(
     sequence: Bio.Seq.Seq, window: int = 10, threshold: float = 1.0
 ) -> bool:
@@ -173,6 +187,12 @@ class BasicFiltering(luigi.Task):
         else:
             # Legacy fallback: only filter GGGG
             if get_g_quadruplet_count(sequence) > 0:
+                return False
+
+        # CpG depletion filter (optional)
+        max_cpg = getattr(config, "max_cpg_fraction", 0.0)
+        if max_cpg > 0:
+            if get_cpg_fraction(sequence) > max_cpg:
                 return False
 
         # Low-complexity filter (optional)

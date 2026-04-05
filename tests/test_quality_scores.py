@@ -131,6 +131,67 @@ class TestComputeQualityScores:
         scores = CleanUpOutput._compute_quality_scores(df)
         assert scores.iloc[0] > scores.iloc[1]
 
+    def test_gc_optimal_range_scores_highest(self):
+        """Probes in the 45-52% GC range should score highest on GC component."""
+        df = pd.DataFrame(
+            {
+                "GC": [48.0, 60.0, 30.0],
+                "TM": [55.0, 55.0, 55.0],
+                "deltaG": [0.0, 0.0, 0.0],
+                "kmers": [0, 0, 0],
+                "count": [0, 0, 0],
+            }
+        )
+        scores = CleanUpOutput._compute_quality_scores(df)
+        # 48% (optimal) should beat 60% (high) and 30% (low)
+        assert scores.iloc[0] > scores.iloc[1]
+        assert scores.iloc[0] > scores.iloc[2]
+
+    def test_high_gc_penalized_more_than_low_gc(self):
+        """GC above 55% should be penalized more steeply (rRNA cross-hybridization)."""
+        df = pd.DataFrame(
+            {
+                "GC": [60.0, 35.0],
+                "TM": [55.0, 55.0],
+                "deltaG": [0.0, 0.0],
+                "kmers": [0, 0],
+                "count": [0, 0],
+            }
+        )
+        scores = CleanUpOutput._compute_quality_scores(df)
+        # 35% is closer to optimal than 60% given the steep penalty above 55%
+        assert scores.iloc[1] > scores.iloc[0]
+
+    def test_cpg_fraction_penalizes_score(self):
+        """High CpG fraction should reduce quality score."""
+        df = pd.DataFrame(
+            {
+                "GC": [50.0, 50.0],
+                "TM": [55.0, 55.0],
+                "deltaG": [0.0, 0.0],
+                "kmers": [0, 0],
+                "count": [0, 0],
+                "cpg_fraction": [0.0, 0.10],
+            }
+        )
+        scores = CleanUpOutput._compute_quality_scores(df)
+        assert scores.iloc[0] > scores.iloc[1]
+
+    def test_low_complexity_penalizes_score(self):
+        """High low-complexity fraction should reduce quality score."""
+        df = pd.DataFrame(
+            {
+                "GC": [50.0, 50.0],
+                "TM": [55.0, 55.0],
+                "deltaG": [0.0, 0.0],
+                "kmers": [0, 0],
+                "count": [0, 0],
+                "low_complexity": [0.0, 0.30],
+            }
+        )
+        scores = CleanUpOutput._compute_quality_scores(df)
+        assert scores.iloc[0] > scores.iloc[1]
+
 
 class TestComputeRecommendation:
     def test_pass_high_quality_no_off_targets(self):

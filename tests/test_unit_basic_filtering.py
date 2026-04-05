@@ -5,6 +5,7 @@ import pytest
 
 from eFISHent.basic_filtering import BasicFiltering
 from eFISHent.basic_filtering import compute_off_target_tm
+from eFISHent.basic_filtering import get_cpg_fraction
 from eFISHent.basic_filtering import get_dinucleotide_repeat_count
 from eFISHent.basic_filtering import get_g_quadruplet_count
 from eFISHent.basic_filtering import get_gc_content
@@ -200,3 +201,59 @@ def test_compute_off_target_tm_invalid_seq():
     tm = compute_off_target_tm("NNNNNN", "ATCGAT", 330, 10)
     # Should not crash, returns some value (may or may not be 0 depending on NN table)
     assert isinstance(tm, float)
+
+
+# CpG fraction tests
+
+
+@pytest.mark.parametrize(
+    "seq,expected",
+    [
+        (Bio.Seq.Seq("ATATAT"), 0.0),  # No CpG
+        (Bio.Seq.Seq("CGCGCG"), 0.6),  # 3 CpG out of 5 dinucleotides
+        (Bio.Seq.Seq("ACGTACGT"), 2 / 7),  # 2 CpG out of 7 dinucleotides
+        (Bio.Seq.Seq("A"), 0.0),  # Too short
+        (Bio.Seq.Seq(""), 0.0),  # Empty
+    ],
+)
+def test_cpg_fraction(seq, expected):
+    assert get_cpg_fraction(seq) == pytest.approx(expected, abs=0.01)
+
+
+def test_is_valid_rejects_high_cpg():
+    """Probes with CpG fraction above threshold should be rejected."""
+    class Config(luigi.Config):
+        min_tm = luigi.FloatParameter(0)
+        max_tm = luigi.FloatParameter(100)
+        min_gc = luigi.FloatParameter(0)
+        max_gc = luigi.FloatParameter(100)
+        na_concentration = luigi.IntParameter(390)
+        formamide_concentration = luigi.IntParameter(10)
+        max_homopolymer_length = luigi.IntParameter(0)
+        filter_low_complexity = luigi.BoolParameter(False)
+        max_cpg_fraction = luigi.FloatParameter(0.10)
+
+    # High CpG: CGCGCGCGATCG = 4 CpG out of 11 dinucleotides = 0.36
+    high_cpg = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("CGCGCGCGATCG"), id="seq")
+    assert BasicFiltering().is_candidate_valid(high_cpg, Config()) is False
+
+    # Low CpG: ATGATGATGATG = 0 CpG
+    low_cpg = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATGATGATGATG"), id="seq")
+    assert BasicFiltering().is_candidate_valid(low_cpg, Config()) is True
+
+
+def test_cpg_filter_disabled_by_default():
+    """When max_cpg_fraction=0, CpG filter should not reject anything."""
+    class Config(luigi.Config):
+        min_tm = luigi.FloatParameter(0)
+        max_tm = luigi.FloatParameter(100)
+        min_gc = luigi.FloatParameter(0)
+        max_gc = luigi.FloatParameter(100)
+        na_concentration = luigi.IntParameter(390)
+        formamide_concentration = luigi.IntParameter(10)
+        max_homopolymer_length = luigi.IntParameter(0)
+        filter_low_complexity = luigi.BoolParameter(False)
+        max_cpg_fraction = luigi.FloatParameter(0.0)
+
+    high_cpg = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("CGCGCGCGATCG"), id="seq")
+    assert BasicFiltering().is_candidate_valid(high_cpg, Config()) is True

@@ -22,6 +22,7 @@ import pandas as pd
 
 from . import util
 from .alignment import AlignProbeCandidates
+from .basic_filtering import get_cpg_fraction
 from .basic_filtering import get_gc_content
 from .basic_filtering import get_melting_temp
 from .config import GeneralConfig
@@ -99,6 +100,14 @@ class CleanUpOutput(luigi.Task):
             validate="many_to_one",
         )["size"].fillna(0)
         df["count"] -= 1
+
+        # Add CpG fraction and low-complexity score for quality scoring
+        df["cpg_fraction"] = [
+            round(get_cpg_fraction(seq.seq), 4) for seq in sequences
+        ]
+        df["low_complexity"] = [
+            self._compute_low_complexity_score(seq.seq) for seq in sequences
+        ]
 
         # Add transcriptome off-target details if available
         self._add_transcriptome_details(df)
@@ -373,24 +382,46 @@ class CleanUpOutput(luigi.Task):
     def _compute_quality_scores(df: pd.DataFrame) -> pd.Series:
         """Compute a composite quality score (0-100) for each probe.
 
-        Stellaris-informed weights:
-        - Tm: deviation from set median (not config midpoint) (25%)
-        - GC: closeness to 50% (15%)
-        - deltaG: less negative is better, 0 is ideal (20%)
+        Data-driven weights (n=84 probe sets):
+        - Tm: deviation from set median (not config midpoint) (20%)
+        - GC: optimal 45-52%, steep penalty above 55% (15%)
+        - CpG: CpG dinucleotide frequency penalty (5%)
+        - deltaG: less negative is better, 0 is ideal (15%)
         - off-target count: genome + transcriptome (25%)
-        - kmers: lower is better (15%)
+        - kmers: lower is better (10%)
+        - low-complexity: penalize low-complexity probes (10%)
         """
         cfg = ProbeConfig()
         scores = pd.DataFrame(index=df.index)
 
         # Tm score: distance from the *actual median Tm* of the selected set
-        # This penalizes outliers within the set rather than deviation from config midpoint
         tm_median = df["TM"].median()
         tm_range = max((cfg.max_tm - cfg.min_tm) / 2, 1)
         scores["tm"] = 1.0 - (df["TM"] - tm_median).abs().clip(upper=tm_range) / tm_range
 
-        # GC score: distance from 50%
-        scores["gc"] = 1.0 - (df["GC"] - 50.0).abs() / 50.0
+        # GC score: data-driven optimal range 45-52%
+        # Full score in 45-52%, linear penalty outside, steep above 55%
+        def _gc_score(gc: float) -> float:
+            if 45.0 <= gc <= 52.0:
+                return 1.0
+            elif gc < 45.0:
+                # Linear decay from 45% down to 20% (score 0)
+                return max(0.0, (gc - 20.0) / 25.0)
+            elif gc <= 55.0:
+                # Gentle penalty 52-55%
+                return 1.0 - (gc - 52.0) / 10.0
+            else:
+                # Steep penalty above 55% (p=0.002 for unspecific binding)
+                return max(0.0, 0.7 - (gc - 55.0) / 15.0)
+
+        scores["gc"] = df["GC"].apply(_gc_score)
+
+        # CpG score: CpG frequency penalty (p=0.004 for nuclear background)
+        if "cpg_fraction" in df.columns:
+            # 0.0 CpG = perfect, 0.10+ = zero score
+            scores["cpg"] = (1.0 - df["cpg_fraction"].clip(upper=0.10) / 0.10)
+        else:
+            scores["cpg"] = 1.0
 
         # deltaG score: 0 is ideal, more negative is worse
         dg_max = abs(cfg.max_deltag) if cfg.max_deltag < 0 else 10.0
@@ -408,19 +439,49 @@ class CleanUpOutput(luigi.Task):
             txome_ot_score = 1.0 - df["txome_off_targets"].clip(lower=0, upper=5) / 5
         scores["ot"] = (genome_ot_score * 0.5 + txome_ot_score * 0.5)
 
+        # Low-complexity score: penalize probes with low Shannon entropy
+        if "low_complexity" in df.columns:
+            scores["lc"] = 1.0 - df["low_complexity"].clip(upper=0.3) / 0.3
+        else:
+            scores["lc"] = 1.0
+
         # Clip all component scores to [0, 1] for robustness
         for col in scores.columns:
             scores[col] = scores[col].clip(lower=0.0, upper=1.0)
 
-        # Stellaris-informed weighted composite
+        # Data-driven weighted composite
         quality = (
-            scores["tm"] * 0.25
+            scores["tm"] * 0.20
             + scores["gc"] * 0.15
-            + scores["dg"] * 0.20
+            + scores["cpg"] * 0.05
+            + scores["dg"] * 0.15
             + scores["ot"] * 0.25
-            + scores["kmer"] * 0.15
+            + scores["kmer"] * 0.10
+            + scores["lc"] * 0.10
         )
         return (quality * 100).round(1)
+
+    @staticmethod
+    def _compute_low_complexity_score(sequence: Bio.Seq.Seq) -> float:
+        """Compute a low-complexity fraction for a probe sequence.
+
+        Returns the fraction of 10bp windows with Shannon entropy < 1.5 bits.
+        Higher values indicate more repetitive/low-complexity sequence.
+        """
+        import math
+        seq_str = str(sequence)
+        window = 10
+        if len(seq_str) < window:
+            return 0.0
+        n_windows = len(seq_str) - window + 1
+        low_count = 0
+        for i in range(n_windows):
+            w = seq_str[i:i + window]
+            freqs = [w.count(b) / window for b in "ACGT"]
+            entropy = -sum(f * math.log2(f) for f in freqs if f > 0)
+            if entropy < 1.5:
+                low_count += 1
+        return low_count / n_windows
 
     def _get_gene_length(self) -> int:
         """Get the actual gene sequence length from the sequence file."""

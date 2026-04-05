@@ -27,6 +27,7 @@ class TestPresets:
             "intergenic_off_targets", "max_homopolymer_length", "filter_rrna",
             "min_blast_match_length", "max_probes_per_off_target",
             "adaptive_length", "max_transcriptome_off_targets",
+            "max_cpg_fraction",
         }
         for name, preset in PRESETS.items():
             for param in preset["params"]:

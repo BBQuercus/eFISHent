@@ -214,6 +214,15 @@ class ProbeConfig(luigi.Config):
         description="Filter probes containing low-complexity regions (dinucleotide repeats, low entropy).",
         default=False,
     )
+    max_cpg_fraction = luigi.FloatParameter(
+        description=(
+            "Maximum CpG dinucleotide fraction allowed per probe (0.0-1.0). "
+            "CpG-rich probes cross-hybridize with GC-rich rRNA causing nucleolar "
+            "background (p=0.004 in 84-probe-set analysis). "
+            "Set to 0 to disable. Recommended: 0.10 for stringent designs."
+        ),
+        default=0.0,
+    )
     max_transcriptome_off_targets = luigi.IntParameter(
         description=(
             "Maximum number of transcriptome off-target hits per probe. "
