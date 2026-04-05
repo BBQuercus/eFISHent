@@ -220,7 +220,7 @@ for _bool_param in [
     "is_plus_strand", "is_endogenous", "no_alternative_loci",
     "mask_repeats", "intergenic_off_targets", "filter_rrna",
     "adaptive_length", "filter_rdna_45s", "reject_cross_hybridization",
-    "allow_no_transcriptome",
+    "allow_no_transcriptome", "accessibility_scoring",
 ]:
     PARAM_METAVAR[_bool_param] = _BOOL_METAVAR
 

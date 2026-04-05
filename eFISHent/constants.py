@@ -110,4 +110,6 @@ CLI_SHORTFORM: Dict[str, str] = {
     "custom_rdna_fasta": "rdnaf",
     "reject_cross_hybridization": "rxh",
     "allow_no_transcriptome": "ant",
+    "max_cpg_fraction": "cpg",
+    "accessibility_scoring": "acc",
 }

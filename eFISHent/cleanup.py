@@ -109,6 +109,12 @@ class CleanUpOutput(luigi.Task):
             self._compute_low_complexity_score(seq.seq) for seq in sequences
         ]
 
+        # Add target site accessibility scoring if enabled
+        if ProbeConfig().accessibility_scoring:
+            df["accessibility"] = self._compute_accessibility_scores(df)
+        else:
+            df["accessibility"] = 1.0
+
         # Add transcriptome off-target details if available
         self._add_transcriptome_details(df)
 
@@ -445,21 +451,141 @@ class CleanUpOutput(luigi.Task):
         else:
             scores["lc"] = 1.0
 
+        # Accessibility score: higher = more unpaired target bases = better binding
+        if "accessibility" in df.columns:
+            scores["acc"] = df["accessibility"].clip(lower=0.0, upper=1.0)
+        else:
+            scores["acc"] = 1.0
+
         # Clip all component scores to [0, 1] for robustness
         for col in scores.columns:
             scores[col] = scores[col].clip(lower=0.0, upper=1.0)
 
         # Data-driven weighted composite
-        quality = (
-            scores["tm"] * 0.20
-            + scores["gc"] * 0.15
-            + scores["cpg"] * 0.05
-            + scores["dg"] * 0.15
-            + scores["ot"] * 0.25
-            + scores["kmer"] * 0.10
-            + scores["lc"] * 0.10
-        )
+        # Accessibility gets 5% weight when enabled (redistributed from others)
+        has_accessibility = "accessibility" in df.columns and (df["accessibility"] < 1.0).any()
+        if has_accessibility:
+            quality = (
+                scores["tm"] * 0.18
+                + scores["gc"] * 0.14
+                + scores["cpg"] * 0.05
+                + scores["dg"] * 0.13
+                + scores["ot"] * 0.23
+                + scores["kmer"] * 0.09
+                + scores["lc"] * 0.09
+                + scores["acc"] * 0.09
+            )
+        else:
+            quality = (
+                scores["tm"] * 0.20
+                + scores["gc"] * 0.15
+                + scores["cpg"] * 0.05
+                + scores["dg"] * 0.15
+                + scores["ot"] * 0.25
+                + scores["kmer"] * 0.10
+                + scores["lc"] * 0.10
+            )
         return (quality * 100).round(1)
+
+    def _compute_accessibility_scores(self, df: pd.DataFrame) -> pd.Series:
+        """Compute target RNA accessibility for each probe's binding site.
+
+        Uses local RNA folding (200nt window) around each probe binding site
+        to determine what fraction of the target is unpaired (accessible).
+        Returns a Series of accessibility scores in [0, 1].
+        """
+        # Load the target sequence
+        sequence_fasta = os.path.join(
+            util.get_output_dir(), f"{util.get_gene_name()}_sequence.fasta"
+        )
+        if not os.path.isfile(sequence_fasta):
+            cfg = SequenceConfig()
+            if cfg.sequence_file and os.path.isfile(cfg.sequence_file):
+                sequence_fasta = cfg.sequence_file
+            else:
+                self.logger.debug("No target sequence for accessibility scoring")
+                return pd.Series(1.0, index=df.index)
+
+        try:
+            target_seq = str(next(Bio.SeqIO.parse(sequence_fasta, "fasta")).seq)
+        except Exception:
+            return pd.Series(1.0, index=df.index)
+
+        window = 200  # nucleotides of context around binding site
+        scores = []
+
+        for _, row in df.iterrows():
+            start = int(row["start"])
+            end = int(row["end"])
+
+            # Extract local window around probe binding site
+            win_start = max(0, start - window // 2)
+            win_end = min(len(target_seq), end + window // 2)
+            local_seq = target_seq[win_start:win_end]
+
+            if len(local_seq) < 10:
+                scores.append(1.0)
+                continue
+
+            # Fold the local window
+            try:
+                dot_bracket = self._fold_sequence(local_seq)
+                if dot_bracket is None:
+                    scores.append(1.0)
+                    continue
+
+                # Count unpaired bases in the probe binding site region
+                probe_start_in_window = start - win_start
+                probe_end_in_window = end - win_start
+                binding_region = dot_bracket[probe_start_in_window:probe_end_in_window]
+
+                if len(binding_region) == 0:
+                    scores.append(1.0)
+                    continue
+
+                unpaired = binding_region.count(".")
+                accessibility = unpaired / len(binding_region)
+                scores.append(round(accessibility, 4))
+            except Exception:
+                scores.append(1.0)
+
+        return pd.Series(scores, index=df.index)
+
+    @staticmethod
+    def _fold_sequence(sequence: str) -> Optional[str]:
+        """Fold a sequence and return the dot-bracket notation."""
+        from pathlib import Path
+
+        file_path = Path(__file__).resolve().parent.as_posix()
+        data_table = os.path.join(file_path, "data_tables/")
+        if sys.platform in ("linux", "linux2"):
+            fold_path = os.path.join(file_path, "Fold_linux")
+        elif sys.platform == "darwin":
+            fold_path = os.path.join(file_path, "Fold_osx")
+        else:
+            return None
+
+        if not os.path.isfile(fold_path):
+            return None
+
+        os.environ["DATAPATH"] = data_table
+        fasta_input = f">target\n{sequence}\n"
+        try:
+            result = subprocess.run(
+                [fold_path, "-", "-", "--bracket", "--MFE"],
+                input=fasta_input,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
+            )
+            lines = result.stdout.strip().split("\n")
+            # Last line is the dot-bracket notation
+            if len(lines) >= 3:
+                return lines[-1]
+        except Exception:
+            pass
+        return None
 
     @staticmethod
     def _compute_low_complexity_score(sequence: Bio.Seq.Seq) -> float:

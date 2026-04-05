@@ -327,6 +327,15 @@ class ProbeConfig(luigi.Config):
         ),
         default=True,
     )
+    accessibility_scoring = luigi.BoolParameter(
+        description=(
+            "Score probes by target RNA accessibility — probes targeting accessible "
+            "(unpaired) regions hybridize more efficiently. Uses local RNA folding "
+            "(200nt window) around each probe binding site. Requires the Fold binary. "
+            "Adds an accessibility component to the quality score."
+        ),
+        default=False,
+    )
     allow_no_transcriptome = luigi.BoolParameter(
         description=(
             "Allow exogenous probe design without --reference-transcriptome. "
