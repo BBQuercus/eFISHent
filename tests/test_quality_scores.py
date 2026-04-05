@@ -382,6 +382,42 @@ class TestDetectOffTargetClustering:
         warnings = task._detect_off_target_clustering(df)
         assert len(warnings) == 0
 
+    def test_undruggable_50_percent_threshold(self):
+        """>=50% of probes hitting same gene should trigger UNDRUGGABLE warning."""
+        task = CleanUpOutput()
+        # 6 out of 10 probes hit TP53 = 60%
+        df = self._make_df(["TP53(1)"] * 6 + [""] * 4)
+        with patch("eFISHent.cleanup.util") as mock_util:
+            mock_util.get_gene_name.return_value = "BRCA1"
+            warnings = task._detect_off_target_clustering(df)
+        assert len(warnings) == 1
+        assert "UNDRUGGABLE" in warnings[0]
+
+    def test_undruggable_paralog_family(self):
+        """Undruggable paralog should suggest intronic probes."""
+        task = CleanUpOutput()
+        # All 10 probes hit ACTG1 when targeting ACTB
+        df = self._make_df(["ACTG1(3)"] * 10)
+        with patch("eFISHent.cleanup.util") as mock_util:
+            mock_util.get_gene_name.return_value = "ACTB"
+            warnings = task._detect_off_target_clustering(df)
+        assert len(warnings) == 1
+        assert "UNDRUGGABLE" in warnings[0]
+        assert "paralog" in warnings[0]
+        assert "--target-regions intron" in warnings[0]
+
+    def test_not_undruggable_below_50_percent(self):
+        """<50% of probes hitting same gene should NOT trigger UNDRUGGABLE."""
+        task = CleanUpOutput()
+        # 4 out of 10 probes hit TP53 = 40% (below 50% but above cluster_threshold=5)
+        # Actually 4 is below cluster_threshold=5, so no warning at all
+        df = self._make_df(["TP53(1)"] * 4 + [""] * 6)
+        with patch("eFISHent.cleanup.util") as mock_util:
+            mock_util.get_gene_name.return_value = "BRCA1"
+            warnings = task._detect_off_target_clustering(df)
+        undruggable = [w for w in warnings if "UNDRUGGABLE" in w]
+        assert len(undruggable) == 0
+
 
 class TestApplyOffTargetCap:
     def _make_df_with_off_targets(self, off_target_genes, quality_scores):

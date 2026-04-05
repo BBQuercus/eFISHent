@@ -934,6 +934,7 @@ class CleanUpOutput(luigi.Task):
 
         warnings = []
         cluster_threshold = 5
+        n_probes = len(df)
         target_gene = util.get_gene_name(hashed=False)
 
         for gene, count in sorted(
@@ -952,16 +953,38 @@ class CleanUpOutput(luigi.Task):
                     is_paralog = True
                     break
 
-            if is_paralog:
+            # Undruggable detection: ≥50% of probes hit same off-target
+            is_undruggable = n_probes > 0 and count >= n_probes * 0.5
+
+            if is_undruggable and is_paralog:
                 warnings.append(
-                    f"Off-target clustering: {count}/{len(df)} probes hit {gene} "
+                    f"UNDRUGGABLE TARGET: {count}/{n_probes} probes "
+                    f"({count * 100 // n_probes}%) hit {gene} "
+                    f"(paralog of {target_gene}). "
+                    f"This gene cannot be uniquely targeted by exonic FISH probes "
+                    f"due to conserved gene family homology. "
+                    f"Alternatives: (1) use --target-regions intron for intronic probes "
+                    f"(introns diverge between paralogs), "
+                    f"(2) choose a different target gene."
+                )
+            elif is_undruggable:
+                warnings.append(
+                    f"UNDRUGGABLE TARGET: {count}/{n_probes} probes "
+                    f"({count * 100 // n_probes}%) hit off-target gene {gene}. "
+                    f"This target may not be uniquely targetable. "
+                    f"Consider intronic probes (--target-regions intron) or "
+                    f"a different target gene."
+                )
+            elif is_paralog:
+                warnings.append(
+                    f"Off-target clustering: {count}/{n_probes} probes hit {gene} "
                     f"(paralog of {target_gene}). This target may not be uniquely "
                     f"targetable by FISH due to gene family homology. "
                     f"Consider intronic probes instead."
                 )
             else:
                 warnings.append(
-                    f"Off-target clustering: {count}/{len(df)} probes hit "
+                    f"Off-target clustering: {count}/{n_probes} probes hit "
                     f"off-target gene {gene}."
                 )
 
