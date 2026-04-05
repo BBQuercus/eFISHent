@@ -1042,6 +1042,25 @@ class CleanUpOutput(luigi.Task):
 
         util.log_and_check_candidates(self.logger, "CleanUpOutput", len(sequences))
 
+        # Minimum probe count warning
+        min_probes = 25
+        if 0 < len(sequences) < min_probes:
+            from .console import is_silent, print_warning
+            avg_quality = df["quality"].mean() if "quality" in df.columns else 0
+            gc_range = f"{df['GC'].min():.0f}-{df['GC'].max():.0f}%" if "GC" in df.columns else "N/A"
+            msg = (
+                f"Low probe count: only {len(sequences)} probes in final set "
+                f"(recommended >=25 for smFISH). "
+                f"Mean quality: {avg_quality:.0f}/100, GC range: {gc_range}. "
+                f"Note: probe quality matters more than quantity — "
+                f"high-quality 12-probe sets can outperform low-quality 70-probe sets. "
+                f"To get more probes: try relaxing --min-tm/--max-gc, "
+                f"reducing --spacing, or using --target-regions both."
+            )
+            self.logger.warning(msg)
+            if not is_silent():
+                print_warning(msg)
+
         # Store summary stats and probe data for completion message
         self._summary = self._compute_summary(df)
         self._probe_df = df

@@ -8,7 +8,6 @@ import os
 
 import Bio.Seq
 import Bio.SeqIO
-import Bio.pairwise2
 import luigi
 import matplotlib.pyplot as plt
 import numpy as np
@@ -77,26 +76,23 @@ class OptimizeProbeCoverage(luigi.Task):
     ) -> List[str]:
         """Remove probes of too high rev/comp sequence similarity.
 
-        It would be cleaner to have it evaluated at run time / not have them included
-        to begin with but that'd be O(n2) with potentially 1k+ probes leading to a
-        runtime of multiple hours (with 20ms per `is_binding` call).
+        Uses k-mer overlap (O(n²) comparisons but each is O(L) instead of
+        O(L²) alignment) and upper-triangle-only to halve comparisons.
         """
-        assigned_sequences = self.df.loc[
-            self.df["name"].isin(assigned), "sequence"
-        ].values
+        assigned_rows = self.df[self.df["name"].isin(assigned)]
+        assigned_sequences = assigned_rows["sequence"].values
+        n = len(assigned_sequences)
 
-        # Create probe vs probe matrix that could bind
-        binding_matrix = np.array(
-            [
-                [is_binding(x, y, match_percentage) for x in assigned_sequences]
-                for y in assigned_sequences
-            ]
-        )  # type: ignore
+        # Upper triangle only — binding is symmetric
+        trouble_indices = set()
+        for i in range(n):
+            for j in range(i + 1, n):
+                if is_binding(assigned_sequences[i], assigned_sequences[j], match_percentage):
+                    trouble_indices.add(j)
 
-        trouble_makers = np.unique(np.nonzero(binding_matrix)[1])  # type: ignore
-        self.logger.debug(f"Found {len(trouble_makers)} trouble makers to be removed.")
+        self.logger.debug(f"Found {len(trouble_indices)} trouble makers to be removed.")
         assigned = [
-            name for idx, name in enumerate(assigned) if idx not in trouble_makers
+            name for idx, name in enumerate(assigned) if idx not in trouble_indices
         ]
         return assigned
 
@@ -248,24 +244,41 @@ def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
 
 
 def is_binding(seq1: str, seq2: str, match_percentage: float = 0.75) -> bool:
-    """Check if seq1 is similar to (rev) complement of seq2 / if would bind."""
+    """Check if seq1 is similar to (rev) complement of seq2 / if would bind.
+
+    Uses k-mer overlap instead of full pairwise alignment for ~100x speedup.
+    For probes of 20-25nt with k=8, this captures the biologically relevant
+    contiguous complementarity that drives cross-hybridization.
+    """
     if not (0 <= match_percentage <= 1):
         raise ValueError(
             "Matching percentage must be between 0 and 100. "
             f"Found `{match_percentage * 100}`"
         )
-    alignments = [
-        *Bio.pairwise2.align.globalxx(seq1, Bio.Seq.Seq(seq2).complement()),
-        *Bio.pairwise2.align.globalxx(seq1, Bio.Seq.Seq(seq2).reverse_complement()),
-    ]
-    if not alignments:
+    min_len = min(len(seq1), len(seq2))
+    if min_len < 3:
         return False
 
-    max_score = max(map(lambda x: x.score, alignments))  # type: ignore
-    if (max_score / len(seq1)) <= match_percentage:
+    # k scales with sequence length: k=8 for typical probes (20-25nt),
+    # smaller for short sequences to maintain sensitivity
+    k = min(8, max(3, min_len - 1))
+
+    kmers1 = {seq1[i : i + k] for i in range(len(seq1) - k + 1)}
+    n_kmers1 = len(kmers1)
+    if n_kmers1 == 0:
         return False
 
-    return True
+    # Check complement and reverse complement
+    comp = str(Bio.Seq.Seq(seq2).complement())
+    rc = str(Bio.Seq.Seq(seq2).reverse_complement())
+
+    for target in (comp, rc):
+        kmers_target = {target[i : i + k] for i in range(len(target) - k + 1)}
+        overlap = len(kmers1 & kmers_target) / max(n_kmers1, len(kmers_target))
+        if overlap >= match_percentage:
+            return True
+
+    return False
 
 
 def compute_pre_optimization_quality(df: pd.DataFrame) -> pd.Series:

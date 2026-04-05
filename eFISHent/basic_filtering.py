@@ -5,6 +5,7 @@ import logging
 import math
 import multiprocessing
 import os
+import re
 
 import Bio.Seq
 import Bio.SeqIO
@@ -44,6 +45,22 @@ def get_gc_content(sequence: Bio.Seq.Seq) -> float:
 def get_g_quadruplet_count(sequence: Bio.Seq.Seq) -> int:
     """Get number of G quadruplets in candidate."""
     return int(sequence.count("GGGG"))
+
+
+# G-quadruplex motif: 3+ guanines, short loop (1-7nt), repeated 4 times
+_G4_PATTERN = re.compile(r"G{3,}[ATCG]{1,7}G{3,}[ATCG]{1,7}G{3,}[ATCG]{1,7}G{3,}")
+_C4_PATTERN = re.compile(r"C{3,}[ATCG]{1,7}C{3,}[ATCG]{1,7}C{3,}[ATCG]{1,7}C{3,}")
+
+
+def has_g_quadruplex(sequence: Bio.Seq.Seq) -> bool:
+    """Check if sequence contains a G-quadruplex motif (G3+N1-7)x4 or C-quadruplex.
+
+    G-quadruplex structures in the target RNA are highly stable and resistant
+    to probe hybridization, making probes targeting these regions ineffective.
+    Checks both G4 (sense) and C4 (antisense/complementary) motifs.
+    """
+    seq_str = str(sequence).upper()
+    return bool(_G4_PATTERN.search(seq_str) or _C4_PATTERN.search(seq_str))
 
 
 def get_max_homopolymer_run(sequence: Bio.Seq.Seq) -> int:
@@ -234,6 +251,11 @@ class BasicFiltering(luigi.Task):
         # Low-complexity filter (optional)
         if getattr(config, "filter_low_complexity", False):
             if has_low_complexity(sequence) or get_dinucleotide_repeat_count(sequence) > 0:
+                return False
+
+        # G-quadruplex filter (optional)
+        if getattr(config, "filter_g_quadruplex", False):
+            if has_g_quadruplex(sequence):
                 return False
 
         return True

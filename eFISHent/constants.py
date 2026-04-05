@@ -67,6 +67,7 @@ CLI_SHORTFORM: Dict[str, str] = {
     "build_indices": "idx",
     "encode_count_table": "ct",
     "ensembl_id": "id",
+    "filter_g_quadruplex": "fgq",
     "filter_low_complexity": "flc",
     "formamide_concentration": "f",
     "gene_name": "gen",

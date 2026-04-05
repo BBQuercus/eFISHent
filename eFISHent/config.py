@@ -338,6 +338,15 @@ class ProbeConfig(luigi.Config):
         ),
         default=True,
     )
+    filter_g_quadruplex = luigi.BoolParameter(
+        description=(
+            "Filter probes containing G-quadruplex motifs (G3+N1-7)x4. "
+            "G-quadruplex structures in the target RNA are highly stable and "
+            "resistant to probe hybridization. Also checks C-quadruplex "
+            "(complementary strand)."
+        ),
+        default=False,
+    )
     accessibility_scoring = luigi.BoolParameter(
         description=(
             "Score probes by target RNA accessibility — probes targeting accessible "

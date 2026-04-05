@@ -7,6 +7,7 @@ from eFISHent.basic_filtering import BasicFiltering
 from eFISHent.basic_filtering import compute_duplex_dg
 from eFISHent.basic_filtering import compute_off_target_tm
 from eFISHent.basic_filtering import get_cpg_fraction
+from eFISHent.basic_filtering import has_g_quadruplex
 from eFISHent.basic_filtering import get_dinucleotide_repeat_count
 from eFISHent.basic_filtering import get_g_quadruplet_count
 from eFISHent.basic_filtering import get_gc_content
@@ -346,6 +347,52 @@ class TestSuggestParameters:
         suggestions = BasicFiltering.suggest_parameters(probes)
         for s in suggestions:
             assert "probes would pass" in s or "currently" in s
+
+
+# G-quadruplex tests
+
+
+@pytest.mark.parametrize(
+    "seq,expected",
+    [
+        # Classic G4 motif: G3+N1-7G3+N1-7G3+N1-7G3+
+        (Bio.Seq.Seq("GGGATTGGGATTGGGATTGGG"), True),
+        # C4 motif (complementary strand)
+        (Bio.Seq.Seq("CCCATTCCCATTCCCATTCCC"), True),
+        # No G4
+        (Bio.Seq.Seq("ATCGATCGATCGATCGATCG"), False),
+        # Only GGGG but not the full G4 pattern
+        (Bio.Seq.Seq("ATGGGGCGATCGATCGATCG"), False),
+        # Longer loops (still within 7nt)
+        (Bio.Seq.Seq("GGGAATTCCGGGAATTCCGGGAATTCCGGG"), True),
+    ],
+)
+def test_has_g_quadruplex(seq, expected):
+    assert has_g_quadruplex(seq) == expected
+
+
+def test_is_valid_rejects_g_quadruplex():
+    """Probes with G-quadruplex should be rejected when filter enabled."""
+    class Config(luigi.Config):
+        min_tm = luigi.FloatParameter(0)
+        max_tm = luigi.FloatParameter(100)
+        min_gc = luigi.FloatParameter(0)
+        max_gc = luigi.FloatParameter(100)
+        na_concentration = luigi.IntParameter(390)
+        formamide_concentration = luigi.IntParameter(10)
+        max_homopolymer_length = luigi.IntParameter(0)
+        filter_low_complexity = luigi.BoolParameter(False)
+        filter_g_quadruplex = luigi.BoolParameter(True)
+
+    g4_seq = Bio.SeqRecord.SeqRecord(
+        Bio.Seq.Seq("GGGATTGGGATTGGGATTGGG"), id="seq"
+    )
+    assert BasicFiltering().is_candidate_valid(g4_seq, Config()) is False
+
+    normal_seq = Bio.SeqRecord.SeqRecord(
+        Bio.Seq.Seq("ATCGATCGATCGATCGATCG"), id="seq"
+    )
+    assert BasicFiltering().is_candidate_valid(normal_seq, Config()) is True
 
 
 def test_cpg_filter_disabled_by_default():

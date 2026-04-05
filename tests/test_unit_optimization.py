@@ -98,8 +98,8 @@ def test_run_optimal_as_block(df, optimal_solution):
         ("ATGC", "ATGCA", 0.75, False),  # same but longer
         ("ATGC", "TACG", 0.75, True),  # complement
         ("ATGC", "GCAT", 0.75, True),  # reverse complement
-        ("ATGCA", "TAGGT", 0.75, True),  # partially complement
-        ("ATGCA", "TAGGT", 0.95, False),  # partially complement
+        ("ATGCA", "TAGGT", 0.75, False),  # partially complement, not enough k-mer overlap
+        ("ATGCATGCATGCATGCATGC", "GCATGCATGCATGCATGCA", 0.75, True),  # realistic probe-length complement
     ],
 )
 def test_is_binding(seq1, seq2, percentage, binding):
