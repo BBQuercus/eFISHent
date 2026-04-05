@@ -259,10 +259,118 @@ class BasicFiltering(luigi.Task):
         candidates = [seq for seq, valid in zip(sequences, valid) if valid]
         return candidates
 
+    @staticmethod
+    def suggest_parameters(
+        sequences: List[Bio.SeqRecord.SeqRecord],
+    ) -> List[str]:
+        """Analyze rejected probes and suggest parameter adjustments.
+
+        Computes the distribution of GC, Tm, etc. across all input probes
+        and suggests specific threshold changes that would rescue more probes.
+        """
+        if not sequences:
+            return []
+
+        config = ProbeConfig()
+        suggestions = []
+
+        # Compute stats for all input probes
+        gc_values = [get_gc_content(seq.seq) for seq in sequences]
+        tm_values = [
+            get_melting_temp(
+                Bio.Seq.Seq(seq.seq), config.na_concentration,
+                config.formamide_concentration,
+            )
+            for seq in sequences
+        ]
+
+        # GC suggestions
+        gc_in_range = sum(1 for gc in gc_values if config.min_gc <= gc <= config.max_gc)
+        if gc_in_range < len(sequences) * 0.5:
+            # Most probes fail GC filter
+            p5 = sorted(gc_values)[max(0, len(gc_values) // 20)]
+            p95 = sorted(gc_values)[min(len(gc_values) - 1, len(gc_values) * 19 // 20)]
+            if p5 < config.min_gc:
+                new_min = max(10.0, round(p5, 0))
+                would_pass = sum(1 for gc in gc_values if new_min <= gc <= config.max_gc)
+                suggestions.append(
+                    f"--min-gc {new_min:.0f}  (currently {config.min_gc:.0f}, "
+                    f"{would_pass} probes would pass)"
+                )
+            if p95 > config.max_gc:
+                new_max = min(95.0, round(p95, 0))
+                would_pass = sum(1 for gc in gc_values if config.min_gc <= gc <= new_max)
+                suggestions.append(
+                    f"--max-gc {new_max:.0f}  (currently {config.max_gc:.0f}, "
+                    f"{would_pass} probes would pass)"
+                )
+
+        # Tm suggestions
+        tm_in_range = sum(1 for tm in tm_values if config.min_tm <= tm <= config.max_tm)
+        if tm_in_range < len(sequences) * 0.5:
+            p5 = sorted(tm_values)[max(0, len(tm_values) // 20)]
+            p95 = sorted(tm_values)[min(len(tm_values) - 1, len(tm_values) * 19 // 20)]
+            if p5 < config.min_tm:
+                new_min = round(p5 - 1, 0)
+                would_pass = sum(1 for tm in tm_values if new_min <= tm <= config.max_tm)
+                suggestions.append(
+                    f"--min-tm {new_min:.0f}  (currently {config.min_tm:.0f}, "
+                    f"{would_pass} probes would pass)"
+                )
+            if p95 > config.max_tm:
+                new_max = round(p95 + 1, 0)
+                would_pass = sum(1 for tm in tm_values if config.min_tm <= tm <= new_max)
+                suggestions.append(
+                    f"--max-tm {new_max:.0f}  (currently {config.max_tm:.0f}, "
+                    f"{would_pass} probes would pass)"
+                )
+
+        # CpG suggestion
+        max_cpg = getattr(config, "max_cpg_fraction", 0.0)
+        if max_cpg > 0:
+            cpg_values = [get_cpg_fraction(seq.seq) for seq in sequences]
+            cpg_pass = sum(1 for c in cpg_values if c <= max_cpg)
+            if cpg_pass < len(sequences) * 0.3:
+                p80 = sorted(cpg_values)[min(len(cpg_values) - 1, len(cpg_values) * 4 // 5)]
+                new_cpg = round(p80 + 0.02, 2)
+                would_pass = sum(1 for c in cpg_values if c <= new_cpg)
+                suggestions.append(
+                    f"--max-cpg-fraction {new_cpg:.2f}  (currently {max_cpg:.2f}, "
+                    f"{would_pass} probes would pass)"
+                )
+
+        # Homopolymer suggestion
+        max_hp = getattr(config, "max_homopolymer_length", 0)
+        if max_hp > 0:
+            hp_values = [get_max_homopolymer_run(seq.seq) for seq in sequences]
+            hp_pass = sum(1 for hp in hp_values if hp < max_hp)
+            if hp_pass < len(sequences) * 0.5:
+                suggestions.append(
+                    f"--max-homopolymer-length {max_hp + 1}  "
+                    f"(currently {max_hp})"
+                )
+
+        return suggestions
+
     def run(self):
         util.log_stage_start(self.logger, "BasicFiltering")
         sequences = list(Bio.SeqIO.parse(self.input().path, "fasta"))
         candidates = self.screen_sequences(sequences)
+
+        # If few/no candidates remain, generate parameter suggestions
+        if len(candidates) < 10 and len(sequences) > 0:
+            suggestions = self.suggest_parameters(sequences)
+            if suggestions:
+                from .console import is_silent
+                suggestion_text = (
+                    "Suggested adjustments (based on probe distribution):\n"
+                    + "\n".join(f"  {s}" for s in suggestions)
+                )
+                if not is_silent():
+                    from .console import print_warning
+                    print_warning(suggestion_text)
+                self.logger.info(suggestion_text)
+
         util.log_and_check_candidates(
             self.logger, "BasicFiltering", len(candidates), len(sequences)
         )

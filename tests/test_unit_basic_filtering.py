@@ -277,6 +277,77 @@ def test_compute_duplex_dg_error_returns_zero():
     assert dg == 0.0
 
 
+# Parameter suggestion tests
+
+
+class TestSuggestParameters:
+    """Tests for the parameter recommendation engine."""
+
+    @staticmethod
+    def _make_probes(gc_values, length=20):
+        """Generate synthetic probes with approximate target GC contents."""
+        probes = []
+        for i, gc in enumerate(gc_values):
+            n_gc = int(length * gc / 100)
+            n_at = length - n_gc
+            # Alternate G and C for GC bases, A and T for AT bases
+            seq = "GC" * (n_gc // 2) + ("G" if n_gc % 2 else "") + "AT" * (n_at // 2) + ("A" if n_at % 2 else "")
+            seq = seq[:length]
+            probes.append(Bio.SeqRecord.SeqRecord(Bio.Seq.Seq(seq), id=f"probe-{i}"))
+        return probes
+
+    def test_suggests_gc_adjustment(self):
+        """When most probes fail GC, should suggest adjusting GC thresholds."""
+        # Create probes with GC values mostly outside default range (20-80%)
+        # Use very high GC probes that exceed 80%
+        probes = []
+        for i in range(20):
+            seq = "GCGCGCGCGCGCGCGCGCGC"  # 100% GC
+            probes.append(Bio.SeqRecord.SeqRecord(Bio.Seq.Seq(seq), id=f"probe-{i}"))
+        suggestions = BasicFiltering.suggest_parameters(probes)
+        # Should suggest raising max_gc
+        gc_suggestions = [s for s in suggestions if "--max-gc" in s]
+        assert len(gc_suggestions) > 0
+
+    def test_suggests_tm_adjustment(self):
+        """When most probes fail Tm, should suggest adjusting Tm thresholds."""
+        # Very short AT-rich probes will have very low Tm
+        probes = []
+        for i in range(20):
+            seq = "ATATAT"  # very short, AT-rich = low Tm
+            probes.append(Bio.SeqRecord.SeqRecord(Bio.Seq.Seq(seq), id=f"probe-{i}"))
+        suggestions = BasicFiltering.suggest_parameters(probes)
+        tm_suggestions = [s for s in suggestions if "--min-tm" in s]
+        assert len(tm_suggestions) > 0
+
+    def test_no_suggestions_when_all_pass(self):
+        """When probes are well within range, should return no suggestions."""
+        probes = []
+        for i in range(20):
+            # 50% GC, moderate length => moderate Tm
+            seq = "ATGCATGCATGCATGCATGC"
+            probes.append(Bio.SeqRecord.SeqRecord(Bio.Seq.Seq(seq), id=f"probe-{i}"))
+        suggestions = BasicFiltering.suggest_parameters(probes)
+        # GC and Tm should be fine, minimal suggestions expected
+        gc_tm_suggestions = [s for s in suggestions if "--min-gc" in s or "--max-gc" in s
+                             or "--min-tm" in s or "--max-tm" in s]
+        assert len(gc_tm_suggestions) == 0
+
+    def test_empty_input_returns_empty(self):
+        """Empty input should return no suggestions."""
+        assert BasicFiltering.suggest_parameters([]) == []
+
+    def test_suggestions_include_probe_counts(self):
+        """Suggestions should include how many probes would pass."""
+        probes = []
+        for i in range(20):
+            seq = "GCGCGCGCGCGCGCGCGCGC"
+            probes.append(Bio.SeqRecord.SeqRecord(Bio.Seq.Seq(seq), id=f"probe-{i}"))
+        suggestions = BasicFiltering.suggest_parameters(probes)
+        for s in suggestions:
+            assert "probes would pass" in s or "currently" in s
+
+
 def test_cpg_filter_disabled_by_default():
     """When max_cpg_fraction=0, CpG filter should not reject anything."""
     class Config(luigi.Config):
