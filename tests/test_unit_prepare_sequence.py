@@ -170,6 +170,34 @@ def test_non_existent_file(task_prepare, tmpdir):
     assert task_prepare.is_fasta_formatted(non_existent_file) is False
 
 
+class TestRegionSelection:
+    """Tests for target region selection (exon/intron/both)."""
+
+    def _make_seq(self, seq_str, seq_id="test_gene"):
+        return Bio.SeqRecord.SeqRecord(
+            Bio.Seq.Seq(seq_str), id=seq_id, name=seq_id, description=""
+        )
+
+    def test_exon_mode_returns_unchanged(self):
+        task = PrepareSequence()
+        seq = self._make_seq("ATCGATCG" * 10)
+        result = task._apply_region_selection(seq, "exon", "TP53")
+        assert str(result.seq) == str(seq.seq)
+
+    def test_intron_mode_fallback_without_annotation(self):
+        """Intron mode without annotation should return unchanged."""
+        task = PrepareSequence()
+        seq = self._make_seq("ATCGATCG" * 10)
+        result = task._apply_region_selection(seq, "intron", "TP53")
+        assert str(result.seq) == str(seq.seq)
+
+    def test_both_mode_fallback_without_annotation(self):
+        task = PrepareSequence()
+        seq = self._make_seq("ATCGATCG" * 10)
+        result = task._apply_region_selection(seq, "both", "TP53")
+        assert str(result.seq) == str(seq.seq)
+
+
 class TestEntrezSubprocessErrors:
     """Tests for proper error handling in entrez subprocess calls."""
 

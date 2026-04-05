@@ -112,4 +112,5 @@ CLI_SHORTFORM: Dict[str, str] = {
     "allow_no_transcriptome": "ant",
     "max_cpg_fraction": "cpg",
     "accessibility_scoring": "acc",
+    "target_regions": "tr",
 }

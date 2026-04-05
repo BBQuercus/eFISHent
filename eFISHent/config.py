@@ -102,6 +102,17 @@ class SequenceConfig(luigi.Config):
     is_endogenous = luigi.BoolParameter(
         description="Is the probe endogenous?", default=True
     )
+    target_regions = luigi.Parameter(
+        description=(
+            "Which transcript regions to target. "
+            "'exon' targets only exonic regions (mature mRNA, default behavior). "
+            "'intron' targets only intronic regions (nascent transcription / iceFISH). "
+            "'both' targets the full pre-mRNA (exons + introns). "
+            "Requires --reference-genome and --reference-annotation with a gene name. "
+            "[options: exon, intron, both]"
+        ),
+        default="exon",
+    )
 
 
 class ProbeConfig(luigi.Config):
