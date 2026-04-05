@@ -30,7 +30,7 @@ GENOME_ALIASES: Dict[str, str] = {
 }
 
 # HF Hub repository
-HF_REPO_ID = "efishent/genome-indices"
+HF_REPO_ID = "bbquercus/efishent"
 
 # Default cache directory
 DEFAULT_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".local", "efishent", "indices")
@@ -46,9 +46,10 @@ GENOME_FILES = [
     "genome.rev.1.bt2", "genome.rev.2.bt2",
     # Jellyfish index
     "genome_15.jf",
-    # BLAST transcriptome DB
-    "transcriptome.nsq", "transcriptome.nin", "transcriptome.nhr",
-    "transcriptome.nnd", "transcriptome.nni", "transcriptome.nog",
+    # BLAST transcriptome DB (BLAST+ v5 format)
+    "transcriptome.fa.nsq", "transcriptome.fa.nin", "transcriptome.fa.nhr",
+    "transcriptome.fa.ndb", "transcriptome.fa.not", "transcriptome.fa.ntf",
+    "transcriptome.fa.nto", "transcriptome.fa.njs",
     # Metadata
     "metadata.json",
 ]
