@@ -281,6 +281,64 @@ class TestComputeRecommendation:
         assert result != "FAIL"
 
 
+class TestDetectOffTargetClustering:
+    def _make_df(self, off_target_genes):
+        n = len(off_target_genes)
+        return pd.DataFrame(
+            {
+                "name": [f"probe-{i+1}" for i in range(n)],
+                "off_target_genes": off_target_genes,
+            }
+        )
+
+    def test_no_clustering(self):
+        """No warnings when probes hit different genes."""
+        task = CleanUpOutput()
+        df = self._make_df(["TP53(1)", "MYC(1)", "BRCA1(1)", ""])
+        with patch("eFISHent.cleanup.util") as mock_util:
+            mock_util.get_gene_name.return_value = "GAPDH"
+            warnings = task._detect_off_target_clustering(df)
+        assert len(warnings) == 0
+
+    def test_clustering_detected(self):
+        """Warning when >=5 probes hit the same off-target gene."""
+        task = CleanUpOutput()
+        df = self._make_df(["TP53(1)"] * 6 + [""])
+        with patch("eFISHent.cleanup.util") as mock_util:
+            mock_util.get_gene_name.return_value = "BRCA1"
+            warnings = task._detect_off_target_clustering(df)
+        assert len(warnings) == 1
+        assert "TP53" in warnings[0]
+        assert "6/" in warnings[0]
+
+    def test_paralog_detection(self):
+        """Paralog family should trigger undruggable warning."""
+        task = CleanUpOutput()
+        df = self._make_df(["ACTG1(3)"] * 5)
+        with patch("eFISHent.cleanup.util") as mock_util:
+            mock_util.get_gene_name.return_value = "ACTB"
+            warnings = task._detect_off_target_clustering(df)
+        assert len(warnings) == 1
+        assert "paralog" in warnings[0]
+        assert "ACTG1" in warnings[0]
+
+    def test_below_threshold_no_warning(self):
+        """4 probes hitting same gene should not trigger warning."""
+        task = CleanUpOutput()
+        df = self._make_df(["TP53(1)"] * 4)
+        with patch("eFISHent.cleanup.util") as mock_util:
+            mock_util.get_gene_name.return_value = "BRCA1"
+            warnings = task._detect_off_target_clustering(df)
+        assert len(warnings) == 0
+
+    def test_no_off_target_column(self):
+        """Missing column should return empty list."""
+        task = CleanUpOutput()
+        df = pd.DataFrame({"name": ["probe-1"]})
+        warnings = task._detect_off_target_clustering(df)
+        assert len(warnings) == 0
+
+
 class TestApplyOffTargetCap:
     def _make_df_with_off_targets(self, off_target_genes, quality_scores):
         """Helper to build a DataFrame for off-target cap testing."""

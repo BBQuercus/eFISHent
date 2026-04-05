@@ -729,6 +729,69 @@ class CleanUpOutput(luigi.Task):
 
         return df.reset_index(drop=True)
 
+    # Common gene family prefixes for paralog detection
+    _GENE_FAMILY_PREFIXES = [
+        "ACT", "MYH", "MYL", "HIST", "HLA", "KRT", "COL", "TUBB", "TUBA",
+        "HSP", "RPL", "RPS", "EIF", "PCDH", "CDH", "CLDN",
+    ]
+
+    def _detect_off_target_clustering(self, df: pd.DataFrame) -> List[str]:
+        """Detect when multiple probes hit the same off-target gene.
+
+        Returns a list of warning messages. Also detects paralog families
+        where the target may be inherently undruggable for FISH.
+        """
+        if "off_target_genes" not in df.columns:
+            return []
+
+        # Count how many probes hit each off-target gene
+        gene_probe_counts: Dict[str, int] = {}
+        for _, row in df.iterrows():
+            genes_str = row.get("off_target_genes", "")
+            if not genes_str:
+                continue
+            seen_genes = set()
+            for match in re.finditer(r"([^,\s]+)\(\d+\)", genes_str):
+                gene = match.group(1)
+                if gene not in seen_genes:
+                    seen_genes.add(gene)
+                    gene_probe_counts[gene] = gene_probe_counts.get(gene, 0) + 1
+
+        warnings = []
+        cluster_threshold = 5
+        target_gene = util.get_gene_name(hashed=False)
+
+        for gene, count in sorted(
+            gene_probe_counts.items(), key=lambda x: -x[1]
+        ):
+            if count < cluster_threshold:
+                break
+
+            # Check if this is a paralog family
+            is_paralog = False
+            for prefix in self._GENE_FAMILY_PREFIXES:
+                if (
+                    gene.upper().startswith(prefix)
+                    and target_gene.upper().startswith(prefix)
+                ):
+                    is_paralog = True
+                    break
+
+            if is_paralog:
+                warnings.append(
+                    f"Off-target clustering: {count}/{len(df)} probes hit {gene} "
+                    f"(paralog of {target_gene}). This target may not be uniquely "
+                    f"targetable by FISH due to gene family homology. "
+                    f"Consider intronic probes instead."
+                )
+            else:
+                warnings.append(
+                    f"Off-target clustering: {count}/{len(df)} probes hit "
+                    f"off-target gene {gene}."
+                )
+
+        return warnings
+
     def run(self):
         util.log_stage_start(self.logger, "CleanUpOutput")
         sequences = list(
@@ -743,6 +806,14 @@ class CleanUpOutput(luigi.Task):
 
         # Apply cumulative off-target cap (C3)
         df = self._apply_off_target_cap(df)
+
+        # Detect off-target clustering and emit warnings
+        clustering_warnings = self._detect_off_target_clustering(df)
+        if clustering_warnings:
+            from .console import print_warning
+            for warning in clustering_warnings:
+                self.logger.warning(warning)
+                print_warning(warning)
 
         sequences = self.prettify_sequences(df)
         config = self.prettify_configuration()
