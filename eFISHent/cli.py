@@ -283,6 +283,43 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
     )
     utility.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
 
+    genome_group = parser.add_argument_group("Pre-built genome indices")
+    genome_group.add_argument(
+        "--genome",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=(
+            "Use pre-built genome indices from Hugging Face Hub. "
+            "Skips all index building. Mutually exclusive with --reference-genome. "
+            "[options: hg38, mm39, dm6, human, mouse, fly]"
+        ),
+    )
+    genome_group.add_argument(
+        "--download-genome",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help="Pre-download genome indices without running the pipeline.",
+    )
+    genome_group.add_argument(
+        "--list-genomes",
+        action="store_true",
+        help="List available pre-built genomes and exit.",
+    )
+    genome_group.add_argument(
+        "--index-cache-dir",
+        type=str,
+        default=None,
+        metavar="DIR",
+        help="Override default cache directory for genome indices (~/.local/efishent/indices/).",
+    )
+    genome_group.add_argument(
+        "--force-download",
+        action="store_true",
+        help="Re-download genome indices even if already cached.",
+    )
+
 
 def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> None:
     """Add a single configuration class/group to a parser."""
@@ -961,6 +998,48 @@ def main():
     if getattr(args, "update", False):
         self_update()
         sys.exit(0)
+
+    # Handle --list-genomes: show available genomes and exit
+    if getattr(args, "list_genomes", False):
+        from .prebuilt import list_available_genomes
+        print("Available pre-built genomes:")
+        for genome in list_available_genomes():
+            print(f"  {genome['display']}")
+        print()
+        print("Usage: efishent --genome hg38 --gene-name TP53 --organism-name 'Homo sapiens'")
+        print("Pre-download: efishent --download-genome hg38")
+        sys.exit(0)
+
+    # Handle --download-genome: pre-download and exit
+    download_genome_arg = getattr(args, "download_genome", None)
+    if download_genome_arg:
+        from .prebuilt import download_genome, resolve_genome
+        genome_id = resolve_genome(download_genome_arg)
+        cache_dir = getattr(args, "index_cache_dir", None)
+        force = getattr(args, "force_download", False)
+        download_genome(genome_id, cache_dir=cache_dir, force=force)
+        print(f"Genome {genome_id} downloaded successfully.")
+        sys.exit(0)
+
+    # Handle --genome: resolve and set reference paths
+    genome_arg = getattr(args, "genome", None)
+    if genome_arg:
+        from .prebuilt import download_genome, get_reference_paths, is_genome_cached, resolve_genome
+        if getattr(args, "reference_genome", None):
+            print("Error: --genome and --reference-genome are mutually exclusive.")
+            sys.exit(1)
+
+        genome_id = resolve_genome(genome_arg)
+        cache_dir = getattr(args, "index_cache_dir", None)
+
+        if not is_genome_cached(genome_id, cache_dir):
+            print(f"Genome {genome_id} not cached. Downloading...")
+            download_genome(genome_id, cache_dir=cache_dir)
+
+        paths = get_reference_paths(genome_id, cache_dir)
+        args.reference_genome = paths["reference_genome"]
+        args.reference_annotation = paths["reference_annotation"]
+        args.reference_transcriptome = paths["reference_transcriptome"]
 
     logger = set_logging_level(args.silent, args.debug)
 
