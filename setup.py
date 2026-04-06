@@ -18,7 +18,7 @@ setup(
         """
     eFISHent is a command-line based tool to facilitate the creation of eFISHent RNA FISH oligonucleotide probes.
     This is just the python code which is reliant on multiple compiled bioinformatics libaries.
-    Therefore please install other dependencies separately or use the bioconda package.
+    Therefore please install other dependencies separately or use the one-line installer.
     """
     ),
     # Installation

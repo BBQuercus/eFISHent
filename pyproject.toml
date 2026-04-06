@@ -30,6 +30,7 @@ classifiers = [
 dependencies = [
     "biopython",
     "gtfparse",
+    "huggingface_hub",
     "luigi",
     "matplotlib",
     "numpy",
@@ -42,7 +43,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=7.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=7.1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/bbquercus/efishent/"

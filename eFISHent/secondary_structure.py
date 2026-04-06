@@ -24,7 +24,7 @@ def get_free_energy(sequence: Bio.SeqRecord.SeqRecord) -> float:
     Using "Fold" as part of the RNAstructure package from the Mathews lab.
 
     Not ideal to include Fold_osx executable but easiest solution since
-        there is no RNAstructure build on conda for MacOS and this is the only
+        there is no RNAstructure build for macOS and this is the only
         dependency not available.
     """
     file_path = Path(__file__).resolve().parent.as_posix()

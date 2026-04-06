@@ -209,6 +209,210 @@ class TestLogAndCheckCandidates:
         captured = capsys.readouterr().out
         assert "50" in captured
 
+    def test_zero_candidates_silent_mode(self, logger):
+        """Zero candidates in silent mode should still raise ValueError."""
+        from unittest.mock import patch
+        with patch("eFISHent.console.is_silent", return_value=True), \
+             patch("eFISHent.console.print_candidate_count"), \
+             patch("eFISHent.console.print_error_panel"), \
+             patch("eFISHent.console.print_warning"), \
+             patch("eFISHent.console.record_funnel_stage"):
+            with pytest.raises(ValueError, match="No probes remaining"):
+                log_and_check_candidates(logger, "BasicFiltering", count=0)
+
+    def test_silent_mode_logs_candidates(self, logger):
+        """In silent mode, candidate count should be logged, not printed."""
+        from unittest.mock import patch
+        with patch("eFISHent.console.is_silent", return_value=True), \
+             patch("eFISHent.console.print_candidate_count") as mock_print, \
+             patch("eFISHent.console.record_funnel_stage"):
+            with patch.object(logger, "info") as mock_info:
+                log_and_check_candidates(logger, "BasicFiltering", count=50, count_prev=100)
+                mock_print.assert_not_called()
+                mock_info.assert_called_once()
+                call_arg = mock_info.call_args[0][0]
+                assert "50" in call_arg
+                assert "100" in call_arg
+
+    def test_low_candidates_silent_mode_warns(self, logger):
+        """In silent mode, low candidates should log a warning."""
+        from unittest.mock import patch
+        with patch("eFISHent.console.is_silent", return_value=True), \
+             patch("eFISHent.console.print_candidate_count"), \
+             patch("eFISHent.console.print_warning") as mock_pw, \
+             patch("eFISHent.console.record_funnel_stage"):
+            with patch.object(logger, "warning") as mock_warn:
+                log_and_check_candidates(logger, "BasicFiltering", count=5)
+                mock_pw.assert_not_called()
+                mock_warn.assert_called_once()
+                assert "5" in mock_warn.call_args[0][0]
+
+
+class TestGetGenomeNameEdgeCases:
+    """Additional edge case tests for get_genome_name."""
+
+    def test_genome_with_fasta_extension(self):
+        """Valid .fasta extension should work."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".fasta", delete=False) as f:
+            f.write(b">chr1\nATCG\n")
+            fasta_path = f.name
+
+        class Config(luigi.Config):
+            reference_genome = luigi.Parameter(fasta_path)
+
+        try:
+            result = get_genome_name(config=Config)
+            assert result == os.path.abspath(os.path.splitext(fasta_path)[0])
+        finally:
+            os.unlink(fasta_path)
+
+    def test_genome_none_raises(self):
+        """None reference_genome should raise ValueError."""
+        class Config(luigi.Config):
+            reference_genome = luigi.Parameter(None)
+
+        with pytest.raises(ValueError, match="Reference genome must be passed"):
+            get_genome_name(config=Config)
+
+
+class TestGetGeneNameEdgeCases:
+    """Additional edge case tests for get_gene_name."""
+
+    def test_no_inputs_raises(self):
+        """No sequence_file, ensembl_id, or gene_name should raise ValueError."""
+        class Config(luigi.Config):
+            sequence_file = luigi.Parameter("")
+            ensembl_id = luigi.Parameter("")
+            gene_name = luigi.Parameter("")
+            organism_name = luigi.Parameter("")
+
+        with pytest.raises(ValueError, match="Could not determine gene name"):
+            get_gene_name(config=Config)
+
+    def test_gene_name_without_organism_raises(self):
+        """gene_name without organism_name should raise ValueError."""
+        class Config(luigi.Config):
+            sequence_file = luigi.Parameter("")
+            ensembl_id = luigi.Parameter("")
+            gene_name = luigi.Parameter("TP53")
+            organism_name = luigi.Parameter("")
+
+        with pytest.raises(ValueError, match="Could not determine gene name"):
+            get_gene_name(config=Config)
+
+
+class TestGetStageDescription:
+    """Tests for get_stage_description."""
+
+    def test_known_stage(self):
+        from eFISHent.util import get_stage_description
+        desc = get_stage_description("PrepareSequence")
+        assert desc == "Preparing gene sequence"
+
+    def test_unknown_stage_returns_name(self):
+        from eFISHent.util import get_stage_description
+        desc = get_stage_description("UnknownStage")
+        assert desc == "UnknownStage"
+
+
+class TestHashFn:
+    """Tests for hash_fn utility."""
+
+    def test_deterministic(self):
+        from eFISHent.util import hash_fn
+        assert hash_fn("test") == hash_fn("test")
+
+    def test_different_inputs(self):
+        from eFISHent.util import hash_fn
+        assert hash_fn("test1") != hash_fn("test2")
+
+    def test_length(self):
+        from eFISHent.util import hash_fn
+        assert len(hash_fn("anything")) == 10
+
+
+class TestLogStageStart:
+    """Tests for log_stage_start function."""
+
+    def test_known_stage_with_progress(self):
+        """A known stage with order>0 should call print_stage."""
+        import logging
+        from unittest.mock import patch, MagicMock
+        from eFISHent.util import log_stage_start
+
+        logger = logging.getLogger("test-log-stage")
+        with patch("eFISHent.config.RunConfig") as mock_rc, \
+             patch("eFISHent.console.print_stage") as mock_print, \
+             patch("eFISHent.console.is_silent", return_value=False):
+            mock_rc.return_value.analyze_probeset = ""
+            log_stage_start(logger, "PrepareSequence")
+            mock_print.assert_called_once_with(1, 9, "Preparing gene sequence")
+
+    def test_known_stage_silent_logs(self):
+        """A known stage in silent mode should log info."""
+        import logging
+        from unittest.mock import patch
+
+        from eFISHent.util import log_stage_start
+
+        logger = logging.getLogger("test-log-stage-silent")
+        with patch("eFISHent.config.RunConfig") as mock_rc, \
+             patch("eFISHent.console.print_stage"), \
+             patch("eFISHent.console.is_silent", return_value=True):
+            mock_rc.return_value.analyze_probeset = ""
+            with patch.object(logger, "info") as mock_info:
+                log_stage_start(logger, "PrepareSequence")
+                mock_info.assert_called_once_with("[1/9] Preparing gene sequence...")
+
+    def test_index_stage_no_order(self):
+        """A stage with order=0 should just log desc."""
+        import logging
+        from unittest.mock import patch
+
+        from eFISHent.util import log_stage_start
+
+        logger = logging.getLogger("test-log-stage-idx")
+        with patch("eFISHent.config.RunConfig") as mock_rc, \
+             patch("eFISHent.console.print_stage") as mock_print, \
+             patch("eFISHent.console.is_silent", return_value=False):
+            mock_rc.return_value.analyze_probeset = ""
+            with patch.object(logger, "info") as mock_info:
+                log_stage_start(logger, "BuildBowtieIndex")
+                mock_print.assert_not_called()
+                mock_info.assert_called_once_with("Building bowtie index...")
+
+    def test_unknown_stage_uses_name(self):
+        """An unknown stage name should be used as-is."""
+        import logging
+        from unittest.mock import patch
+
+        from eFISHent.util import log_stage_start
+
+        logger = logging.getLogger("test-log-stage-unknown")
+        with patch("eFISHent.config.RunConfig") as mock_rc, \
+             patch("eFISHent.console.print_stage"), \
+             patch("eFISHent.console.is_silent", return_value=False):
+            mock_rc.return_value.analyze_probeset = ""
+            with patch.object(logger, "info") as mock_info:
+                log_stage_start(logger, "SomeNewStage")
+                mock_info.assert_called_once_with("SomeNewStage...")
+
+    def test_analyze_mode_returns_early(self):
+        """In analyze mode, log_stage_start should return immediately."""
+        import logging
+        from unittest.mock import patch
+
+        from eFISHent.util import log_stage_start
+
+        logger = logging.getLogger("test-log-stage-analyze")
+        with patch("eFISHent.config.RunConfig") as mock_rc, \
+             patch("eFISHent.console.print_stage") as mock_print, \
+             patch("eFISHent.console.is_silent", return_value=False):
+            mock_rc.return_value.analyze_probeset = "/some/probe.fasta"
+            log_stage_start(logger, "PrepareSequence")
+            mock_print.assert_not_called()
+
 
 class TestSecureFilename:
     """Tests for secure_filename function."""

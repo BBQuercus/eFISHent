@@ -1096,8 +1096,8 @@ def main():
         # Run with progress tracking
         if not args.silent:
             if args.analyze_probeset:
-                # Analysis has 9 steps (preparing + 8 analysis plots)
-                with pipeline_progress(total_stages=9, mode="analyze"):
+                # Analysis has 7 steps
+                with pipeline_progress(total_stages=7, mode="analyze"):
                     luigi.build(tasks, local_scheduler=True)
             elif args.build_indices:
                 with pipeline_progress(total_stages=2, mode="pipeline"):

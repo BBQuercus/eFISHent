@@ -163,6 +163,7 @@ def test_passed_exogenous():
         "55",
         "--sequence-similarity",
         "95",
+        "--allow-no-transcriptome", "True",
         "--debug",
     ]
     subprocess.run(args, check=True)
@@ -170,7 +171,7 @@ def test_passed_exogenous():
     csv_files = sorted(glob.glob("./renilla_*.csv"))
     assert len(csv_files) == 2  # _counts and output
     verify_csv(csv_files[0], args)
-    [os.remove(f) for f in glob.glob("./renilla_*")]  # type: ignore
+    [os.remove(f) for f in glob.glob("./renilla_*") if os.path.isfile(f)]  # type: ignore
 
 
 @pytest.mark.skipif(not ALL_TOOLS_AVAILABLE, reason="bowtie/bowtie-build/jellyfish not installed")
@@ -310,12 +311,13 @@ def test_low_complexity_filters_active():
         "45",
         "--max-tm",
         "55",
+        "--allow-no-transcriptome", "True",
         "--debug",
     ]
     subprocess.run(args, check=True)
     csv_files = sorted(glob.glob("./renilla_*.csv"))
     assert len(csv_files) >= 1
-    [os.remove(f) for f in glob.glob("./renilla_*")]  # type: ignore
+    [os.remove(f) for f in glob.glob("./renilla_*") if os.path.isfile(f)]  # type: ignore
 
 
 def test_error():

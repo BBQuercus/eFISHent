@@ -1,10 +1,12 @@
 """Find the optimal probeset with the highest coverage (fast or optimal)."""
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import functools
 import logging
 import multiprocessing
 import os
+import subprocess
+import sys
 
 import Bio.Seq
 import Bio.SeqIO
@@ -102,6 +104,20 @@ class OptimizeProbeCoverage(luigi.Task):
         self.df = util.create_data_table(sequences)
         self.df["end"] += ProbeConfig().spacing
 
+        # Compute accessibility scores for optimization weighting (not filtering)
+        if ProbeConfig().accessibility_scoring:
+            target_seq = self._load_target_sequence()
+            if target_seq:
+                self.logger.debug("Computing accessibility scores for optimization...")
+                self.df["_accessibility"] = compute_accessibility_scores(
+                    self.df, target_seq
+                )
+                n_accessible = (self.df["_accessibility"] > 0.5).sum()
+                self.logger.debug(
+                    f"Accessibility: {n_accessible}/{len(self.df)} probes "
+                    f"target >50% accessible sites"
+                )
+
         if RunConfig().optimization_method == "greedy":
             assigned = self.run_greedy()
         elif RunConfig().optimization_method == "optimal":
@@ -131,6 +147,26 @@ class OptimizeProbeCoverage(luigi.Task):
             self.logger, "OptimizeProbeCoverage", len(candidates), len(sequences)
         )
         Bio.SeqIO.write(candidates, self.output()["probes"].path, format="fasta")
+
+    def _load_target_sequence(self) -> Optional[str]:
+        """Load the target gene sequence for accessibility scoring."""
+        from .config import SequenceConfig
+
+        sequence_fasta = os.path.join(
+            util.get_output_dir(), f"{util.get_gene_name()}_sequence.fasta"
+        )
+        if not os.path.isfile(sequence_fasta):
+            cfg = SequenceConfig()
+            if cfg.sequence_file and os.path.isfile(cfg.sequence_file):
+                sequence_fasta = cfg.sequence_file
+            else:
+                self.logger.debug("No target sequence for accessibility scoring")
+                return None
+
+        try:
+            return str(next(Bio.SeqIO.parse(sequence_fasta, "fasta")).seq)
+        except Exception:
+            return None
 
     def refine_tm_uniformity(
         self,
@@ -281,12 +317,96 @@ def is_binding(seq1: str, seq2: str, match_percentage: float = 0.75) -> bool:
     return False
 
 
+def fold_sequence(sequence: str) -> Optional[str]:
+    """Fold a sequence and return the dot-bracket notation.
+
+    Uses the bundled Fold binary (RNAstructure). Returns None if
+    the binary is not available or folding fails.
+    """
+    from pathlib import Path
+
+    file_path = Path(__file__).resolve().parent.as_posix()
+    data_table = os.path.join(file_path, "data_tables/")
+    if sys.platform in ("linux", "linux2"):
+        fold_path = os.path.join(file_path, "Fold_linux")
+    elif sys.platform == "darwin":
+        fold_path = os.path.join(file_path, "Fold_osx")
+    else:
+        return None
+
+    if not os.path.isfile(fold_path):
+        return None
+
+    os.environ["DATAPATH"] = data_table
+    fasta_input = f">target\n{sequence}\n"
+    try:
+        result = subprocess.run(
+            [fold_path, "-", "-", "--bracket", "--MFE"],
+            input=fasta_input,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        lines = result.stdout.strip().split("\n")
+        if len(lines) >= 3:
+            return lines[-1]
+    except Exception:
+        pass
+    return None
+
+
+def compute_accessibility_scores(
+    df: pd.DataFrame, target_sequence: str, window: int = 200
+) -> pd.Series:
+    """Compute target RNA accessibility for each probe's binding site.
+
+    Uses local RNA folding (200nt window) around each probe binding site
+    to determine what fraction of the target is unpaired (accessible).
+    Returns a Series of accessibility scores in [0, 1].
+    """
+    scores = []
+    for _, row in df.iterrows():
+        start = int(row["start"])
+        end = int(row["end"])
+
+        win_start = max(0, start - window // 2)
+        win_end = min(len(target_sequence), end + window // 2)
+        local_seq = target_sequence[win_start:win_end]
+
+        if len(local_seq) < 10:
+            scores.append(1.0)
+            continue
+
+        try:
+            dot_bracket = fold_sequence(local_seq)
+            if dot_bracket is None:
+                scores.append(1.0)
+                continue
+
+            probe_start_in_window = start - win_start
+            probe_end_in_window = end - win_start
+            binding_region = dot_bracket[probe_start_in_window:probe_end_in_window]
+
+            if len(binding_region) == 0:
+                scores.append(1.0)
+                continue
+
+            unpaired = binding_region.count(".")
+            accessibility = unpaired / len(binding_region)
+            scores.append(round(accessibility, 4))
+        except Exception:
+            scores.append(1.0)
+
+    return pd.Series(scores, index=df.index)
+
+
 def compute_pre_optimization_quality(df: pd.DataFrame) -> pd.Series:
     """Compute a lightweight quality score for optimization weighting.
 
     Uses sequence properties available before the full quality pipeline:
-    GC content and CpG fraction. Data-driven from n=84 probe set analysis.
-    Returns scores in [0, 1].
+    GC content, CpG fraction, and optionally accessibility.
+    Data-driven from n=84 probe set analysis. Returns scores in [0, 1].
     """
     from .basic_filtering import get_gc_content, get_cpg_fraction
 
@@ -311,8 +431,22 @@ def compute_pre_optimization_quality(df: pd.DataFrame) -> pd.Series:
     cpg_vals = df["sequence"].apply(lambda s: get_cpg_fraction(Bio.Seq.Seq(s)))
     cpg_scores = (1.0 - cpg_vals.clip(upper=0.10) / 0.10).clip(lower=0.0)
 
-    # Combine: 60% GC, 40% CpG
-    scores = (gc_scores * 0.6 + cpg_scores * 0.4).clip(lower=0.1)
+    # Accessibility score: prefer probes at unpaired (accessible) target sites
+    has_accessibility = (
+        "_accessibility" in df.columns
+        and (df["_accessibility"] < 1.0).any()
+    )
+
+    if has_accessibility:
+        acc_scores = df["_accessibility"].clip(lower=0.0, upper=1.0)
+        # 50% GC, 30% CpG, 20% accessibility
+        scores = (
+            gc_scores * 0.50 + cpg_scores * 0.30 + acc_scores * 0.20
+        ).clip(lower=0.1)
+    else:
+        # 60% GC, 40% CpG
+        scores = (gc_scores * 0.6 + cpg_scores * 0.4).clip(lower=0.1)
+
     return scores
 
 

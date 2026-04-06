@@ -13,7 +13,8 @@ import os
 
 logger = logging.getLogger("custom-logger")
 
-# Mapping of user-friendly aliases to canonical genome identifiers
+# Mapping of user-friendly aliases to canonical genome identifiers.
+# Only genomes with uploaded indices belong here.
 GENOME_ALIASES: Dict[str, str] = {
     # Human
     "hg38": "homo_sapiens/GRCh38",
@@ -23,11 +24,35 @@ GENOME_ALIASES: Dict[str, str] = {
     "mm39": "mus_musculus/GRCm39",
     "GRCm39": "mus_musculus/GRCm39",
     "mouse": "mus_musculus/GRCm39",
-    # Drosophila
-    "dm6": "drosophila_melanogaster/BDGP6",
-    "BDGP6": "drosophila_melanogaster/BDGP6",
-    "fly": "drosophila_melanogaster/BDGP6",
 }
+
+# Genomes we plan to support but have not uploaded indices for yet.
+# Maps alias -> (display name, canonical id).
+PLANNED_GENOMES: Dict[str, Tuple[str, str]] = {
+    # Zebrafish
+    "danRer11": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
+    "GRCz11": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
+    "zebrafish": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
+    # C. elegans
+    "WBcel235": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
+    "ce11": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
+    "worm": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
+    "elegans": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
+    # Rat
+    "mRatBN7.2": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
+    "rn7": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
+    "rat": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
+    # Yeast
+    "R64": ("Yeast (R64)", "saccharomyces_cerevisiae/R64"),
+    "sacCer3": ("Yeast (R64)", "saccharomyces_cerevisiae/R64"),
+    "yeast": ("Yeast (R64)", "saccharomyces_cerevisiae/R64"),
+    # Drosophila
+    "dm6": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
+    "BDGP6": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
+    "fly": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
+}
+
+WIKI_URL = "https://github.com/beichenberger/efishent/wiki/Building-Custom-Indices"
 
 # HF Hub repository
 HF_REPO_ID = "bbquercus/efishent"
@@ -38,8 +63,8 @@ DEFAULT_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".local", "efishent", 
 # Files expected per genome
 GENOME_FILES = [
     "genome.fa",
+    "genome.fa.fai",
     "annotation.gtf",
-    "annotation.parquet",
     "transcriptome.fa",
     # Bowtie2 index files
     "genome.1.bt2", "genome.2.bt2", "genome.3.bt2", "genome.4.bt2",
@@ -68,13 +93,28 @@ def resolve_genome(alias: str) -> str:
         ValueError: If the alias is not recognized.
     """
     canonical = GENOME_ALIASES.get(alias)
-    if canonical is None:
-        available = ", ".join(sorted(set(GENOME_ALIASES.values())))
+    if canonical is not None:
+        return canonical
+
+    # Check if this is a planned but not-yet-available genome
+    planned = PLANNED_GENOMES.get(alias)
+    if planned is not None:
+        display_name, _canonical_id = planned
         raise ValueError(
-            f"Unknown genome '{alias}'. Available genomes: {available}. "
-            f"Aliases: {', '.join(sorted(GENOME_ALIASES.keys()))}"
+            f"{display_name} indices are planned but not yet available. "
+            f"Build your own indices using the instructions at {WIKI_URL}"
         )
-    return canonical
+
+    available = ", ".join(sorted(set(GENOME_ALIASES.values())))
+    planned_names = ", ".join(
+        sorted(set(name for name, _ in PLANNED_GENOMES.values()))
+    )
+    raise ValueError(
+        f"Unknown genome '{alias}'. "
+        f"Available genomes: {available}. "
+        f"Planned (not yet available): {planned_names}. "
+        f"Aliases: {', '.join(sorted(GENOME_ALIASES.keys()))}"
+    )
 
 
 def get_cache_dir(cache_dir: Optional[str] = None) -> str:
@@ -162,16 +202,9 @@ def download_genome(
         Path to the genome directory containing all index files.
 
     Raises:
-        ImportError: If huggingface_hub is not installed.
         RuntimeError: If download fails.
     """
-    try:
-        from huggingface_hub import hf_hub_download, list_repo_tree
-    except ImportError:
-        raise ImportError(
-            "huggingface_hub is required for pre-built genome indices. "
-            "Install it with: pip install huggingface_hub"
-        )
+    from huggingface_hub import hf_hub_download, list_repo_tree
 
     genome_dir = get_genome_dir(genome_id, cache_dir)
 

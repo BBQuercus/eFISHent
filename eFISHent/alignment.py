@@ -199,25 +199,46 @@ class AlignProbeCandidates(luigi.Task):
         else:
             seed_length = "20"
 
-        args = [
-            "bowtie2",
-            "-f",  # FASTA input
-            "-x", self.fname_genome,
-            "-U", fname_clean,
-            "--threads", str(threads),
-            "--local",  # Local alignment (soft-clip ends)
-            "-D", "20",  # 20 seed extension attempts
-            "-R", "3",  # 3 re-seeding rounds
-            "-N", "1",  # 1 mismatch allowed in seed
-            "-L", seed_length,  # Seed length (adaptive for short probes)
-            "-i", "C,4",  # Seed interval: constant, every 4 bases
-            "--score-min", "G,1,4",  # Min score: log-based threshold
-            "-k", k_value,  # Report up to k alignments per probe
-            "-S", self.fname_sam,
-        ]
-        # Only suppress unaligned for endogenous (exogenous needs unmapped reads)
         if self.is_endogenous:
-            args.insert(-2, "--no-unal")
+            # Local alignment for endogenous: detect partial off-target hits
+            args = [
+                "bowtie2",
+                "-f",  # FASTA input
+                "-x", self.fname_genome,
+                "-U", fname_clean,
+                "--threads", str(threads),
+                "--local",  # Local alignment (soft-clip ends)
+                "-D", "20",  # 20 seed extension attempts
+                "-R", "3",  # 3 re-seeding rounds
+                "-N", "1",  # 1 mismatch allowed in seed
+                "-L", seed_length,  # Seed length (adaptive for short probes)
+                "-i", "C,4",  # Seed interval: constant, every 4 bases
+                "--score-min", "G,1,4",  # Min score: log-based threshold
+                "-k", k_value,  # Report up to k alignments per probe
+                "--no-unal",  # Suppress unaligned reads
+                "-S", self.fname_sam,
+            ]
+        else:
+            # End-to-end alignment for exogenous: only flag probes that
+            # match the non-target genome across (nearly) their full length.
+            # Local mode produces spurious partial hits that incorrectly
+            # eliminate probes from a foreign sequence.
+            args = [
+                "bowtie2",
+                "-f",  # FASTA input
+                "-x", self.fname_genome,
+                "-U", fname_clean,
+                "--threads", str(threads),
+                "--end-to-end",  # Require full-length alignment
+                "-D", "20",  # 20 seed extension attempts
+                "-R", "3",  # 3 re-seeding rounds
+                "-N", "1",  # 1 mismatch allowed in seed
+                "-L", seed_length,  # Seed length (adaptive for short probes)
+                "-i", "C,4",  # Seed interval: constant, every 4 bases
+                "--score-min", "L,-0.6,-0.6",  # Allow ~1 mismatch per 10 bases
+                "-k", k_value,  # Report up to k alignments per probe
+                "-S", self.fname_sam,
+            ]
         self.logger.debug(f"Running bowtie2 with - {' '.join(args)}")
         from .console import spinner
 

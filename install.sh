@@ -220,7 +220,7 @@ step "[2/8] Jellyfish (k-mer counter)"
 if [ -f "${BIN_DIR}/jellyfish" ]; then
     info "Already installed"
 else
-    # Try pre-compiled binary from conda-forge first (static builds)
+    # Try pre-compiled binary first
     JELLYFISH_INSTALLED=false
 
     # Fallback: compile from source
@@ -688,8 +688,7 @@ if [ "$WITH_BLAST" = false ] && ! command -v blastn >/dev/null 2>&1; then
 fi
 if ! command -v gffread >/dev/null 2>&1; then
     printf "  ${YELLOW}Note:${RESET} gffread is not installed. It is needed to build a transcriptome\n"
-    printf "  from genome + GTF. Install via: ${CYAN}conda install -c bioconda gffread${RESET}\n"
-    printf "  or compile from source: ${CYAN}https://github.com/gpertea/gffread${RESET}\n\n"
+    printf "  from genome + GTF. See: ${CYAN}https://github.com/gpertea/gffread${RESET}\n\n"
 fi
 
 printf "  To uninstall:\n"

@@ -95,6 +95,106 @@ def test_find_dangerous_probes_allows_4_mismatches():
     assert "marginal" not in dangerous
 
 
+def test_find_dangerous_probes_nonexistent_file():
+    """Non-existent BLAST output file should return empty set."""
+    task = FilterRibosomalRNA()
+    dangerous = task._find_dangerous_probes("/nonexistent/path/blast.tsv")
+    assert len(dangerous) == 0
+
+
+def test_find_dangerous_probes_gapped_alignment():
+    """Alignment with gaps should account for gapopen in effective length."""
+    task = FilterRibosomalRNA()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        # 21nt probe, 20nt alignment, 1 gap, 1 mismatch
+        # effective_len = 20 - 1 = 19, which is 90% of 21 -> passes 85% threshold
+        # mismatches = 1 <= 3 -> dangerous
+        f.write("gapped-probe\tU13369.1\t95.0\t20\t1\t1\t1\t20\t100\t119\t0.01\t30\t21\n")
+        # 21nt probe, 20nt alignment, 3 gaps -> effective_len = 17, which is 81% -> below 85%
+        f.write("safe-gapped\tU13369.1\t95.0\t20\t1\t3\t1\t20\t100\t119\t0.01\t30\t21\n")
+        f.flush()
+        dangerous = task._find_dangerous_probes(f.name)
+
+    os.unlink(f.name)
+    assert "gapped-probe" in dangerous
+    assert "safe-gapped" not in dangerous
+
+
+def test_find_dangerous_probes_multiple_hits_same_probe():
+    """Multiple hits for the same probe should all be considered."""
+    task = FilterRibosomalRNA()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        # First hit: safe (low coverage)
+        f.write("multi-hit\tU13369.1\t90.0\t10\t1\t0\t1\t10\t100\t109\t0.1\t15\t25\n")
+        # Second hit: dangerous (high coverage, low mismatches)
+        f.write("multi-hit\tU13369.1\t95.0\t23\t1\t0\t1\t23\t200\t222\t0.001\t40\t25\n")
+        f.flush()
+        dangerous = task._find_dangerous_probes(f.name)
+
+    os.unlink(f.name)
+    assert "multi-hit" in dangerous
+
+
+def test_find_dangerous_probes_boundary_85_percent():
+    """Test the exact 85% coverage boundary."""
+    task = FilterRibosomalRNA()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        # 20nt probe, 17nt alignment = exactly 85% -> should be rejected
+        f.write("boundary-pass\tU13369.1\t95.0\t17\t0\t0\t1\t17\t100\t116\t0.001\t30\t20\n")
+        # 20nt probe, 16nt alignment = 80% -> should pass
+        f.write("boundary-fail\tU13369.1\t95.0\t16\t0\t0\t1\t16\t100\t115\t0.001\t30\t20\n")
+        f.flush()
+        dangerous = task._find_dangerous_probes(f.name)
+
+    os.unlink(f.name)
+    assert "boundary-pass" in dangerous
+    assert "boundary-fail" not in dangerous
+
+
+def test_find_dangerous_probes_boundary_3_mismatches():
+    """Test the exact 3 mismatch boundary."""
+    task = FilterRibosomalRNA()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        # 3 mismatches -> should be rejected
+        f.write("three-mm\tU13369.1\t85.0\t20\t3\t0\t1\t20\t100\t119\t0.01\t25\t21\n")
+        # 4 mismatches -> should pass
+        f.write("four-mm\tU13369.1\t80.0\t20\t4\t0\t1\t20\t100\t119\t0.01\t20\t21\n")
+        f.flush()
+        dangerous = task._find_dangerous_probes(f.name)
+
+    os.unlink(f.name)
+    assert "three-mm" in dangerous
+    assert "four-mm" not in dangerous
+
+
+def test_build_blast_db_no_makeblastdb():
+    """_build_blast_db should return False when makeblastdb is not found."""
+    task = FilterRibosomalRNA()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        from unittest.mock import patch
+        with patch("shutil.which", return_value=None):
+            result = task._build_blast_db("/some/fasta.fa", os.path.join(tmpdir, "db"))
+            assert result is False
+
+
+def test_build_blast_db_subprocess_error():
+    """_build_blast_db should return False when makeblastdb fails."""
+    import subprocess
+    from unittest.mock import patch
+
+    task = FilterRibosomalRNA()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with patch("shutil.which", return_value="/usr/bin/makeblastdb"), \
+             patch("eFISHent.rdna_filter.subprocess.check_call",
+                   side_effect=subprocess.CalledProcessError(1, "makeblastdb")):
+            result = task._build_blast_db("/some/fasta.fa", os.path.join(tmpdir, "db"))
+            assert result is False
+
+
 def test_find_dangerous_probes_empty_blast():
     """Empty BLAST output should return no dangerous probes."""
     task = FilterRibosomalRNA()
@@ -268,6 +368,142 @@ def test_filter_rdna_45s_default_enabled():
 
 
 # --- Bowtie2 seed length fix ---
+
+def test_run_no_blast_installed():
+    """run() should skip filtering and write all probes when BLAST is not installed."""
+    from unittest.mock import patch, MagicMock
+
+    task = FilterRibosomalRNA()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create input probe fasta
+        probe_fasta = os.path.join(tmpdir, "input_probes.fasta")
+        records = [
+            Bio.SeqRecord.SeqRecord(
+                Bio.Seq.Seq("ATCGATCGATCGATCGATCG"),
+                id="probe-1", name="probe-1", description=""
+            ),
+            Bio.SeqRecord.SeqRecord(
+                Bio.Seq.Seq("GCTAGCTAGCTAGCTAGCTA"),
+                id="probe-2", name="probe-2", description=""
+            ),
+        ]
+        Bio.SeqIO.write(records, probe_fasta, "fasta")
+
+        output_fasta = os.path.join(tmpdir, "output.fasta")
+        mock_input = MagicMock()
+        mock_input.path = probe_fasta
+        mock_output = MagicMock()
+        mock_output.path = output_fasta
+
+        with patch.object(task, "input", return_value=mock_input), \
+             patch.object(task, "output", return_value=mock_output), \
+             patch("eFISHent.util.log_stage_start"), \
+             patch("shutil.which", return_value=None):
+            task.run()
+
+        # All probes should be written
+        output_records = list(Bio.SeqIO.parse(output_fasta, "fasta"))
+        assert len(output_records) == 2
+
+
+def test_run_no_references():
+    """run() should skip filtering when no reference FASTAs exist."""
+    from unittest.mock import patch, MagicMock
+
+    task = FilterRibosomalRNA()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        probe_fasta = os.path.join(tmpdir, "input_probes.fasta")
+        records = [
+            Bio.SeqRecord.SeqRecord(
+                Bio.Seq.Seq("ATCGATCGATCGATCGATCG"),
+                id="probe-1", name="probe-1", description=""
+            ),
+        ]
+        Bio.SeqIO.write(records, probe_fasta, "fasta")
+
+        output_fasta = os.path.join(tmpdir, "output.fasta")
+        mock_input = MagicMock()
+        mock_input.path = probe_fasta
+        mock_output = MagicMock()
+        mock_output.path = output_fasta
+
+        with patch.object(task, "input", return_value=mock_input), \
+             patch.object(task, "output", return_value=mock_output), \
+             patch("eFISHent.util.log_stage_start"), \
+             patch("shutil.which", return_value="/usr/bin/blastn"), \
+             patch("eFISHent.rdna_filter.RDNA_45S_FASTA", "/nonexistent/rdna.fa"), \
+             patch("eFISHent.rdna_filter.ALPHA_SAT_FASTA", "/nonexistent/alpha.fa"), \
+             patch("eFISHent.rdna_filter.IMAGING_RISK_FASTA", "/nonexistent/risk.fa"), \
+             patch("eFISHent.rdna_filter.ProbeConfig") as mock_pc, \
+             patch("eFISHent.config.GeneralConfig") as mock_gc:
+            mock_pc.return_value.custom_rdna_fasta = ""
+            mock_gc.return_value.threads = 1
+            task.run()
+
+        output_records = list(Bio.SeqIO.parse(output_fasta, "fasta"))
+        assert len(output_records) == 1
+
+
+@pytest.mark.skipif(not BLAST_AVAILABLE, reason="BLAST+ not installed")
+def test_run_filters_dangerous_probes():
+    """run() should remove probes that match rDNA sequences."""
+    from unittest.mock import patch, MagicMock
+
+    task = FilterRibosomalRNA()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        probe_fasta = os.path.join(tmpdir, "input_probes.fasta")
+        # Ren-28 is known to match 45S rDNA
+        records = [
+            Bio.SeqRecord.SeqRecord(
+                Bio.Seq.Seq("GTTTGCGTTGCTCGGGGTCGT"),
+                id="Ren-28", name="Ren-28", description=""
+            ),
+            Bio.SeqRecord.SeqRecord(
+                Bio.Seq.Seq("AAAAAATTTTTTCCCCCGGGG"),
+                id="safe-probe", name="safe-probe", description=""
+            ),
+        ]
+        Bio.SeqIO.write(records, probe_fasta, "fasta")
+
+        output_fasta = os.path.join(tmpdir, "output.fasta")
+        mock_input = MagicMock()
+        mock_input.path = probe_fasta
+        mock_output = MagicMock()
+        mock_output.path = output_fasta
+
+        with patch.object(task, "input", return_value=mock_input), \
+             patch.object(task, "output", return_value=mock_output), \
+             patch("eFISHent.util.log_stage_start"), \
+             patch("eFISHent.util.log_and_check_candidates"), \
+             patch("eFISHent.rdna_filter.ProbeConfig") as mock_pc, \
+             patch("eFISHent.config.GeneralConfig") as mock_gc:
+            mock_pc.return_value.custom_rdna_fasta = ""
+            mock_gc.return_value.threads = 1
+            task.run()
+
+        output_records = list(Bio.SeqIO.parse(output_fasta, "fasta"))
+        output_ids = {r.id for r in output_records}
+        assert "Ren-28" not in output_ids
+        assert "safe-probe" in output_ids
+
+
+def test_requires_returns_basic_filtering():
+    """requires() should return BasicFiltering task."""
+    task = FilterRibosomalRNA()
+    from eFISHent.basic_filtering import BasicFiltering
+    req = task.requires()
+    assert isinstance(req, BasicFiltering)
+
+
+def test_output_path():
+    """output() should return a fasta file in the output directory."""
+    from unittest.mock import patch
+    task = FilterRibosomalRNA()
+    with patch("eFISHent.util.get_output_dir", return_value="/tmp/out"), \
+         patch("eFISHent.util.get_gene_name", return_value="test_gene_abc"):
+        output = task.output()
+        assert output.path == "/tmp/out/test_gene_abc_rdna_filtered.fasta"
+
 
 def test_bowtie2_seed_length_short_probes():
     """For probes <=22nt, seed length should be 10 (not 20)."""

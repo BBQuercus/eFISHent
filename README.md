@@ -1,6 +1,5 @@
-<!-- [![Conda download statistics](https://anaconda.org/bioconda/efishent/badges/downloads.svg)]() -->
-[![GitHub code licence is MIT](https://anaconda.org/bioconda/efishent/badges/license.svg)]()
-[![Anaconda package version number](https://anaconda.org/bioconda/efishent/badges/version.svg)]()
+[![License: MIT](https://img.shields.io/github/license/BBQuercus/eFISHent)]()
+[![PyPI version](https://img.shields.io/pypi/v/efishent)](https://pypi.org/project/efishent/)
 [![Github Actions Status](https://github.com/bbquercus/eFISHent/workflows/Tests/badge.svg)]()
 [![CodeFactor](https://www.codefactor.io/repository/github/bbquercus/efishent/badge)](https://www.codefactor.io/repository/github/bbquercus/efishent)
 [![codecov](https://codecov.io/gh/BBQuercus/eFISHent/branch/main/graph/badge.svg?token=C1SRFYZ5VP)](https://codecov.io/gh/BBQuercus/eFISHent)
@@ -29,14 +28,19 @@ A command-line based tool to facilitate the creation of eFISHent single-molecule
 eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleotide probes. Some of the key features of eFISHent are:
 
 * One-command installation — no sudo, Docker, or conda required
+* Pre-built genome indices for human and mouse — skip index building entirely with `--genome hg38`
 * Automatic gene sequence download from NCBI when providing a gene and species name (or pass a FASTA file)
+* Target region selection (`--target-regions`): design probes against exons, introns, CDS, UTRs, or full transcripts
 * Parameter presets for common FISH protocols (`--preset smfish`, `merfish`, `dna-fish`, etc.)
 * Adaptive probe length based on local GC content to normalize Tm across the probe set
 * Multi-layer off-target detection: genome alignment, transcriptome BLAST, repeat masking, intergenic filtering, thermodynamic scoring, rRNA filtering, and expression weighting
+* RNA accessibility scoring to prefer structurally accessible binding sites on the target
+* G-quadruplex filtering to avoid stable secondary structures in target regions
 * Automated probe validation report with per-probe PASS/FLAG/FAIL recommendations, off-target gene names, and expression risk annotation
-* Quality scoring informed by Stellaris probe design principles (Tm uniformity, off-target weighting)
+* Quality-weighted optimization ranking probes by composite score (GC, CpG, accessibility, off-targets), not just coverage
 * Mathematical or greedy optimization to ensure highest coverage, with Tm uniformity refinement and cumulative off-target cap
 * Filtering steps to remove low-quality probes including off-targets, frequently occurring short-mers, secondary structures, etc.
+* Analyze existing probe sets (`--analyze-probeset`) with comprehensive metrics and PDF report
 
 ## Installation
 
@@ -94,15 +98,6 @@ efishent --check
 
 Shows the status of all required and optional dependencies with version info.
 
-### Using Conda
-
-Alternatively, use [conda](https://conda.io/) to manage dependencies:
-
-```bash
-conda env create bbquercus/efishent
-conda activate efishent
-pip install efishent
-```
 
 ### Development Installation
 
@@ -183,12 +178,21 @@ Download a HeLa (or your cell line) RNA-seq dataset:
 **Putting it all together** — recommended command for human smFISH:
 
 ```bash
+# Option A: Use pre-built index (no genome download needed)
+eFISHent \
+    --genome hg38 \
+    --gene-name "ACTB" \
+    --organism-name "homo sapiens" \
+    --preset smfish \
+    --threads 8
+
+# Option B: Use your own genome with all recommended filters
 # Build indices once
 eFISHent \
     --reference-genome Homo_sapiens.GRCh38.dna.primary_assembly.fa \
     --build-indices True
 
-# Design probes with all recommended filters
+# Design probes
 eFISHent \
     --reference-genome Homo_sapiens.GRCh38.dna.primary_assembly.fa \
     --reference-annotation Homo_sapiens.GRCh38.115.gtf \
@@ -216,7 +220,7 @@ For non-human organisms, follow the same pattern using your organism's Ensembl p
 eFISHent works by iteratively selecting probes passing various filtering steps as outlined below:
 
 1. A list of all candidate probes is generated from an input FASTA file containing the gene sequence. This sequence file can be passed manually or downloaded automatically from NCBI when providing a gene and species name. When `--adaptive-length` is enabled, probe lengths are biased based on local GC content to normalize Tm.
-2. The first round of filtering removes any probes not passing basic sequence-specific criteria including melting temperature (adjusted for formamide and salt concentrations), GC content, G-quadruplets, homopolymer runs (e.g., AAAAA), and optionally low-complexity regions (dinucleotide repeats, low Shannon entropy).
+2. The first round of filtering removes any probes not passing basic sequence-specific criteria including melting temperature (adjusted for formamide and salt concentrations), GC content, G-quadruplets, homopolymer runs (e.g., AAAAA), optionally low-complexity regions (dinucleotide repeats, low Shannon entropy), and optionally G-quadruplex motifs in the target (`--filter-g-quadruplex`).
 3. Probes are aligned to the reference genome using Bowtie2 (default, with OligoMiner/Tigerfish parameters for sensitive local alignment) or Bowtie (legacy). Candidates with off-targets are removed. Several optional filters can refine off-target counting:
    - **Repeat masking** (`--mask-repeats`): ignores off-target hits in repetitive/low-complexity regions identified by dustmasker
    - **Intergenic filtering** (`--intergenic-off-targets`): ignores off-target hits outside annotated genes (requires `--reference-annotation`)
@@ -225,8 +229,9 @@ eFISHent works by iteratively selecting probes passing various filtering steps a
 4. If a reference transcriptome is provided, probes are BLASTed against expressed transcripts (using TrueProbes parameters) to catch off-target binding that genome alignment alone may miss — e.g., hits to processed mRNAs or splice junctions. The minimum effective match length is configurable via `--min-blast-match-length` (default: max(18, 0.8 * min_probe_length)).
 5. The targets are divided into short k-mers and discarded if they appear above a determined threshold in the reference genome using Jellyfish.
 6. The secondary structure of each candidate is predicted using a nearest neighbor thermodynamic model and filtered if the free energy is too low (too stable), which could result in motifs hindering hybridization.
-7. This gives the set of all viable candidates which are still overlapping. The final step is to use mathematical or greedy optimization to maximize probe non-overlapping coverage across the gene sequence. A gap-filling pass then attempts to place additional probes in any remaining uncovered regions. A Tm uniformity refinement step swaps outlier probes for better alternatives.
-8. The output CSV includes per-probe quality scores, transcriptome off-target details with gene name mapping, and automated PASS/FLAG/FAIL recommendations. If `--max-probes-per-off-target` is set, probes are removed to cap how many hit the same off-target gene.
+7. If `--accessibility-scoring` is enabled, target RNA accessibility is predicted using RNA folding and probes are scored by how structurally accessible their binding sites are.
+8. This gives the set of all viable candidates which are still overlapping. The final step is to use quality-weighted optimization (considering GC, CpG, accessibility, and off-targets) to maximize probe non-overlapping coverage across the gene sequence. A gap-filling pass then attempts to place additional probes in any remaining uncovered regions. A Tm uniformity refinement step swaps outlier probes for better alternatives.
+9. The output CSV includes per-probe quality scores, transcriptome off-target details with gene name mapping, and automated PASS/FLAG/FAIL recommendations. If `--max-probes-per-off-target` is set, probes are removed to cap how many hit the same off-target gene.
 
 ```mermaid
 flowchart TD
@@ -243,7 +248,9 @@ flowchart TD
 
     G --> H["Secondary Structure<br/><i>deltaG prediction (RNAstructure)</i>"]
 
-    H --> I["Coverage Optimization<br/><i>Greedy or optimal (MILP) + gap filling + Tm refinement</i>"]
+    H --> H2["Accessibility Scoring<br/><i>RNA folding (optional)</i>"]
+
+    H2 --> I["Quality-Weighted Optimization<br/><i>Greedy or optimal (MILP) + gap filling + Tm refinement</i>"]
 
     I --> K["Validation Report<br/><i>Quality scores, off-target genes, recommendations</i>"]
 
@@ -260,6 +267,23 @@ flowchart TD
 ```bash
 eFISHent --reference-genome <reference-genome> --gene-name <gene> --organism-name <organism>
 ```
+
+### Quick Start with Pre-built Indices
+
+Skip genome download and index building entirely using pre-built indices for common genomes:
+
+```bash
+# Design probes for human — genome index is downloaded automatically
+eFISHent --genome hg38 --gene-name "ACTB" --organism-name "homo sapiens" --preset smfish
+
+# Pre-download a genome index for offline use
+eFISHent --download-genome hg38
+
+# List all available pre-built genomes
+eFISHent --list-genomes
+```
+
+Available genomes: `hg38` / `GRCh38` (human), `mm39` / `GRCm39` (mouse).
 
 ### Presets
 
@@ -282,7 +306,9 @@ Use `--preset list` to see all available presets. Explicit arguments override pr
 
 ### Index Building
 
-While there is only one main workflow, the slightly more time-intensive index creation step can be run ahead of time. Indexes are unique to each reference genome and can be created using:
+For human and mouse, you can skip this step entirely by using `--genome hg38` or `--genome mm39` (see Quick Start with Pre-built Indices above).
+
+For other organisms, the slightly more time-intensive index creation step can be run ahead of time. Indexes are unique to each reference genome and can be created using:
 
 ```bash
 eFISHent \
@@ -375,6 +401,9 @@ There are a bunch of parameters that can be set to adjust filtering steps:
 | `--filter-rrna` | Remove probes with off-target hits on rRNA genes (requires `--reference-annotation`) |
 | `--min-blast-match-length` | Minimum effective alignment length for transcriptome BLAST hits. Default: max(18, 0.8 * min_probe_length) |
 | `--max-probes-per-off-target` | Cap on probes hitting same off-target gene. Default: 0 (disabled). Recommended: 5 |
+| `--target-regions` | Which transcript regions to target: `exon` (default), `intron`, `both`, `cds-only`, `utr-only`. Use `intron` for nascent transcription / iceFISH |
+| `--accessibility-scoring` | Score target RNA accessibility using RNA folding to prefer structurally accessible binding sites |
+| `--filter-g-quadruplex` | Filter probes overlapping G-quadruplex motifs in the target sequence |
 
 ### Remaining Options
 
@@ -387,6 +416,10 @@ There are a few additional options:
 | `--threads` | Wherever multiprocessing is available, spawn that many threads. Set this to as many cores as you have available |
 | `--save-intermediates` | Save all intermediary files. Can be used to gauge which filtering steps are set too aggressively |
 | `--preset` | Apply a parameter preset (`smfish`, `merfish`, `dna-fish`, `strict`, `relaxed`, `exogenous`). Use `--preset list` to see details |
+| `--genome` | Use a pre-built genome index instead of `--reference-genome` (e.g., `hg38`, `mm39`). Index is downloaded automatically on first use |
+| `--download-genome` | Pre-download a genome index for offline use (e.g., `--download-genome hg38`) |
+| `--list-genomes` | List all available pre-built genome indices |
+| `--analyze-probeset` | Analyze an existing probe set FASTA file with comprehensive metrics and PDF report |
 
 ### Probe Set Analysis
 
