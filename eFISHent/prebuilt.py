@@ -33,6 +33,10 @@ GENOME_ALIASES: Dict[str, str] = {
     "ce11": "caenorhabditis_elegans/WBcel235",
     "worm": "caenorhabditis_elegans/WBcel235",
     "elegans": "caenorhabditis_elegans/WBcel235",
+    # Drosophila
+    "dm6": "drosophila_melanogaster/BDGP6",
+    "BDGP6": "drosophila_melanogaster/BDGP6",
+    "fly": "drosophila_melanogaster/BDGP6",
 }
 
 # Genomes we plan to support but have not uploaded indices for yet.
@@ -46,10 +50,6 @@ PLANNED_GENOMES: Dict[str, Tuple[str, str]] = {
     "mRatBN7.2": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
     "rn7": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
     "rat": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
-    # Drosophila
-    "dm6": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
-    "BDGP6": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
-    "fly": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
 }
 
 WIKI_URL = "https://github.com/beichenberger/efishent/wiki/Building-Custom-Indices"

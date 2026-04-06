@@ -28,20 +28,19 @@ class TestResolveGenome:
         assert resolve_genome("mouse") == "mus_musculus/GRCm39"
 
     def test_resolve_new_aliases(self):
-        """Yeast and C. elegans should resolve (indices uploaded)."""
+        """Yeast, C. elegans, and Drosophila should resolve (indices uploaded)."""
         assert resolve_genome("yeast") == "saccharomyces_cerevisiae/R64"
         assert resolve_genome("sacCer3") == "saccharomyces_cerevisiae/R64"
         assert resolve_genome("R64") == "saccharomyces_cerevisiae/R64"
         assert resolve_genome("worm") == "caenorhabditis_elegans/WBcel235"
         assert resolve_genome("ce11") == "caenorhabditis_elegans/WBcel235"
         assert resolve_genome("elegans") == "caenorhabditis_elegans/WBcel235"
+        assert resolve_genome("dm6") == "drosophila_melanogaster/BDGP6"
+        assert resolve_genome("fly") == "drosophila_melanogaster/BDGP6"
+        assert resolve_genome("BDGP6") == "drosophila_melanogaster/BDGP6"
 
     def test_resolve_planned_genome_raises(self):
         """Planned genomes should raise with a helpful 'not yet available' message."""
-        with pytest.raises(ValueError, match="not yet available"):
-            resolve_genome("dm6")
-        with pytest.raises(ValueError, match="not yet available"):
-            resolve_genome("fly")
         with pytest.raises(ValueError, match="Zebrafish"):
             resolve_genome("danRer11")
         with pytest.raises(ValueError, match="Rat"):
