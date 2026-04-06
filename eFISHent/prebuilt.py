@@ -24,6 +24,15 @@ GENOME_ALIASES: Dict[str, str] = {
     "mm39": "mus_musculus/GRCm39",
     "GRCm39": "mus_musculus/GRCm39",
     "mouse": "mus_musculus/GRCm39",
+    # Yeast
+    "R64": "saccharomyces_cerevisiae/R64",
+    "sacCer3": "saccharomyces_cerevisiae/R64",
+    "yeast": "saccharomyces_cerevisiae/R64",
+    # C. elegans
+    "WBcel235": "caenorhabditis_elegans/WBcel235",
+    "ce11": "caenorhabditis_elegans/WBcel235",
+    "worm": "caenorhabditis_elegans/WBcel235",
+    "elegans": "caenorhabditis_elegans/WBcel235",
 }
 
 # Genomes we plan to support but have not uploaded indices for yet.
@@ -33,19 +42,10 @@ PLANNED_GENOMES: Dict[str, Tuple[str, str]] = {
     "danRer11": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
     "GRCz11": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
     "zebrafish": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
-    # C. elegans
-    "WBcel235": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
-    "ce11": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
-    "worm": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
-    "elegans": ("C. elegans (WBcel235)", "caenorhabditis_elegans/WBcel235"),
     # Rat
     "mRatBN7.2": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
     "rn7": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
     "rat": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
-    # Yeast
-    "R64": ("Yeast (R64)", "saccharomyces_cerevisiae/R64"),
-    "sacCer3": ("Yeast (R64)", "saccharomyces_cerevisiae/R64"),
-    "yeast": ("Yeast (R64)", "saccharomyces_cerevisiae/R64"),
     # Drosophila
     "dm6": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
     "BDGP6": ("Drosophila (BDGP6)", "drosophila_melanogaster/BDGP6"),
