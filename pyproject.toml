@@ -8,7 +8,7 @@ version = "0.0.12"
 description = "RNA FISH oligos/probes design tool."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     { name = "Bastian Eichenberger", email = "bastian@eichenbergers.ch" }
 ]
