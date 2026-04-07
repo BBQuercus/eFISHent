@@ -29,6 +29,7 @@ fi
 
 EFISHENT_VERSION="latest"
 BOWTIE_VERSION="1.3.1"
+BOWTIE2_VERSION="2.5.5"
 JELLYFISH_VERSION="2.3.1"
 GLPK_VERSION="5.0"
 BLAST_VERSION="2.17.0"
@@ -164,7 +165,7 @@ mkdir -p "${BIN_DIR}" "${DEPS_DIR}" "${WRAPPER_DIR}"
 
 # ── 1. Install Bowtie ────────────────────────────────────────────────────────
 
-step "[1/8] Bowtie (sequence aligner)"
+step "[1/9] Bowtie (sequence aligner)"
 
 if [ -f "${BIN_DIR}/bowtie" ]; then
     info "Already installed"
@@ -213,9 +214,59 @@ else
     fi
 fi
 
-# ── 2. Install Jellyfish ─────────────────────────────────────────────────────
+# ── 2. Install Bowtie2 ──────────────────────────────────────────────────────
 
-step "[2/8] Jellyfish (k-mer counter)"
+step "[2/9] Bowtie2 (sequence aligner — default)"
+
+if [ -f "${BIN_DIR}/bowtie2" ]; then
+    info "Already installed"
+else
+    case "${PLATFORM}-${ARCH_NAME}" in
+        linux-x86_64)
+            BOWTIE2_URL="https://github.com/BenLangmead/bowtie2/releases/download/v${BOWTIE2_VERSION}/bowtie2-${BOWTIE2_VERSION}-linux-x86_64.zip"
+            BOWTIE2_DIR="bowtie2-${BOWTIE2_VERSION}-linux-x86_64"
+            ;;
+        linux-aarch64)
+            BOWTIE2_URL="https://github.com/BenLangmead/bowtie2/releases/download/v${BOWTIE2_VERSION}/bowtie2-${BOWTIE2_VERSION}-linux-aarch64.zip"
+            BOWTIE2_DIR="bowtie2-${BOWTIE2_VERSION}-linux-aarch64"
+            ;;
+        macos-aarch64)
+            BOWTIE2_URL="https://github.com/BenLangmead/bowtie2/releases/download/v${BOWTIE2_VERSION}/bowtie2-${BOWTIE2_VERSION}-macos-arm64.zip"
+            BOWTIE2_DIR="bowtie2-${BOWTIE2_VERSION}-macos-arm64"
+            ;;
+        macos-x86_64)
+            # No native x86_64 macOS build — ARM build works via Rosetta, or use system install
+            if command -v bowtie2 >/dev/null 2>&1; then
+                info "Using system bowtie2: $(command -v bowtie2)"
+                ln -sf "$(command -v bowtie2)" "${BIN_DIR}/bowtie2"
+                ln -sf "$(command -v bowtie2-build)" "${BIN_DIR}/bowtie2-build" 2>/dev/null || true
+                BOWTIE2_URL=""
+            else
+                err "No pre-built Bowtie2 for macOS x86_64."
+                err "Install bowtie2 via Homebrew (brew install bowtie2) and retry."
+                exit 1
+            fi
+            ;;
+    esac
+
+    if [ -n "${BOWTIE2_URL:-}" ]; then
+        download "$BOWTIE2_URL" "${DEPS_DIR}/bowtie2.zip"
+        cd "${DEPS_DIR}"
+        unzip -qo bowtie2.zip
+        cp "${BOWTIE2_DIR}"/bowtie2* "${BIN_DIR}/"
+        rm -rf bowtie2.zip "${BOWTIE2_DIR}"
+        # Remove macOS quarantine
+        if [ "$PLATFORM" = "macos" ]; then
+            xattr -dr com.apple.quarantine "${BIN_DIR}/bowtie2"* 2>/dev/null || true
+        fi
+        cd - >/dev/null
+        info "Installed bowtie2 ${BOWTIE2_VERSION}"
+    fi
+fi
+
+# ── 3. Install Jellyfish ─────────────────────────────────────────────────────
+
+step "[3/9] Jellyfish (k-mer counter)"
 
 if [ -f "${BIN_DIR}/jellyfish" ]; then
     info "Already installed"
@@ -260,7 +311,7 @@ fi
 
 # ── 3. Install GLPK ──────────────────────────────────────────────────────────
 
-step "[3/8] GLPK (linear programming solver)"
+step "[4/9] GLPK (linear programming solver)"
 
 if [ -f "${BIN_DIR}/glpsol" ]; then
     info "Already installed"
@@ -300,7 +351,7 @@ fi
 
 # ── 4. Install Entrez Direct ─────────────────────────────────────────────────
 
-step "[4/8] Entrez Direct (NCBI tools — optional)"
+step "[5/9] Entrez Direct (NCBI tools — optional)"
 
 if [ -f "${EDIRECT_DIR}/esearch" ]; then
     info "Already installed"
@@ -339,7 +390,7 @@ fi
 
 # ── 5. Install BLAST+ (optional) ────────────────────────────────────────────
 
-step "[5/8] BLAST+ (off-target filtering — optional)"
+step "[6/9] BLAST+ (off-target filtering — optional)"
 
 if [ -f "${BIN_DIR}/blastn" ] && [ -f "${BIN_DIR}/dustmasker" ] && [ -f "${BIN_DIR}/makeblastdb" ]; then
     info "Already installed"
@@ -380,7 +431,7 @@ fi
 
 # ── 6. Install gffread (optional, for transcriptome building) ──────────────
 
-step "[6/8] gffread (build transcriptome from genome + GTF — optional)"
+step "[7/9] gffread (build transcriptome from genome + GTF — optional)"
 
 if [ -f "${BIN_DIR}/gffread" ]; then
     info "Already installed"
@@ -436,7 +487,7 @@ fi
 
 # ── 7. Install Fold (RNAstructure) ─────────────────────────────────────────
 
-step "[7/8] Fold / RNAstructure (secondary structure prediction)"
+step "[8/9] Fold / RNAstructure (secondary structure prediction)"
 
 # Fold is a bundled binary that must live inside the Python package directory.
 # We download the RNAstructure package and extract just the Fold binary.
@@ -484,7 +535,7 @@ fi
 # ── 7. Install eFISHent Python package ────────────────────────────────────────
 
 if [ "$DEPS_ONLY" = false ]; then
-    step "[8/8] eFISHent (Python package)"
+    step "[9/9] eFISHent (Python package)"
 
     # Install uv if not present
     if ! command -v uv >/dev/null 2>&1; then
@@ -536,7 +587,7 @@ if [ "$DEPS_ONLY" = false ]; then
         fi
     fi
 else
-    step "[8/8] Skipping Python package (--deps-only)"
+    step "[9/9] Skipping Python package (--deps-only)"
 fi
 
 # ── Create wrapper script ────────────────────────────────────────────────────
@@ -636,7 +687,7 @@ export ${LIB_PATH_VAR}="${DEPS_DIR}/lib:$(eval echo "\${${LIB_PATH_VAR}}")"
 
 CHECKS_PASSED=true
 
-for tool in bowtie jellyfish; do
+for tool in bowtie bowtie2 jellyfish; do
     if command -v "$tool" >/dev/null 2>&1; then
         info "$tool: $(command -v "$tool")"
     else
