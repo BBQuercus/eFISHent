@@ -8,7 +8,6 @@ import pytest
 
 from eFISHent.prebuilt import (
     GENOME_ALIASES,
-    PLANNED_GENOMES,
     get_cache_dir,
     get_genome_dir,
     get_reference_paths,
@@ -28,7 +27,7 @@ class TestResolveGenome:
         assert resolve_genome("mouse") == "mus_musculus/GRCm39"
 
     def test_resolve_new_aliases(self):
-        """Yeast, C. elegans, and Drosophila should resolve (indices uploaded)."""
+        """Yeast, C. elegans, Drosophila, Zebrafish, and Rat should resolve."""
         assert resolve_genome("yeast") == "saccharomyces_cerevisiae/R64"
         assert resolve_genome("sacCer3") == "saccharomyces_cerevisiae/R64"
         assert resolve_genome("R64") == "saccharomyces_cerevisiae/R64"
@@ -38,13 +37,12 @@ class TestResolveGenome:
         assert resolve_genome("dm6") == "drosophila_melanogaster/BDGP6"
         assert resolve_genome("fly") == "drosophila_melanogaster/BDGP6"
         assert resolve_genome("BDGP6") == "drosophila_melanogaster/BDGP6"
-
-    def test_resolve_planned_genome_raises(self):
-        """Planned genomes should raise with a helpful 'not yet available' message."""
-        with pytest.raises(ValueError, match="Zebrafish"):
-            resolve_genome("danRer11")
-        with pytest.raises(ValueError, match="Rat"):
-            resolve_genome("rn7")
+        assert resolve_genome("zebrafish") == "danio_rerio/GRCz11"
+        assert resolve_genome("danRer11") == "danio_rerio/GRCz11"
+        assert resolve_genome("GRCz11") == "danio_rerio/GRCz11"
+        assert resolve_genome("rat") == "rattus_norvegicus/GRCr8"
+        assert resolve_genome("rn7") == "rattus_norvegicus/GRCr8"
+        assert resolve_genome("GRCr8") == "rattus_norvegicus/GRCr8"
 
     def test_resolve_unknown_alias(self):
         with pytest.raises(ValueError, match="Unknown genome"):
@@ -132,7 +130,7 @@ class TestGetReferencePaths:
 class TestListAvailableGenomes:
     def test_returns_list(self):
         genomes = list_available_genomes()
-        assert len(genomes) >= 2  # human, mouse
+        assert len(genomes) >= 7  # human, mouse, yeast, elegans, fly, zebrafish, rat
 
     def test_each_entry_has_required_fields(self):
         genomes = list_available_genomes()
@@ -334,15 +332,6 @@ class TestResolveGenomeErrorMessage:
         assert "homo_sapiens/GRCh38" in msg
         assert "mus_musculus/GRCm39" in msg
         assert "Aliases:" in msg
-
-    def test_planned_genome_error_is_helpful(self):
-        """Planned genome error should name the organism and link to wiki."""
-        with pytest.raises(ValueError) as exc_info:
-            resolve_genome("zebrafish")
-        msg = str(exc_info.value)
-        assert "Zebrafish" in msg
-        assert "not yet available" in msg
-        assert "wiki" in msg.lower() or "instructions" in msg.lower()
 
     def test_error_lists_aliases(self):
         """Error message should list available aliases."""

@@ -37,20 +37,19 @@ GENOME_ALIASES: Dict[str, str] = {
     "dm6": "drosophila_melanogaster/BDGP6",
     "BDGP6": "drosophila_melanogaster/BDGP6",
     "fly": "drosophila_melanogaster/BDGP6",
+    # Zebrafish
+    "danRer11": "danio_rerio/GRCz11",
+    "GRCz11": "danio_rerio/GRCz11",
+    "zebrafish": "danio_rerio/GRCz11",
+    # Rat
+    "GRCr8": "rattus_norvegicus/GRCr8",
+    "rn7": "rattus_norvegicus/GRCr8",
+    "rat": "rattus_norvegicus/GRCr8",
 }
 
 # Genomes we plan to support but have not uploaded indices for yet.
 # Maps alias -> (display name, canonical id).
-PLANNED_GENOMES: Dict[str, Tuple[str, str]] = {
-    # Zebrafish
-    "danRer11": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
-    "GRCz11": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
-    "zebrafish": ("Zebrafish (GRCz11)", "danio_rerio/GRCz11"),
-    # Rat
-    "mRatBN7.2": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
-    "rn7": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
-    "rat": ("Rat (mRatBN7.2)", "rattus_norvegicus/mRatBN7.2"),
-}
+PLANNED_GENOMES: Dict[str, Tuple[str, str]] = {}
 
 WIKI_URL = "https://github.com/beichenberger/efishent/wiki/Building-Custom-Indices"
 
