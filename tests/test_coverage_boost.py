@@ -13,14 +13,12 @@ from eFISHent.console import (
     _build_verification_summary,
     _get_drop_pct,
     _get_stage_color,
-    get_funnel_data,
     is_silent,
     print_error_panel,
     print_header,
     print_stage,
     print_candidate_count,
     print_warning,
-    record_funnel_stage,
     reset_funnel_data,
     set_silent_mode,
 )
@@ -130,7 +128,7 @@ class TestBuildCoverageMap:
 
     def test_coverage_map_no_probes(self):
         df = pd.DataFrame({"start": pd.Series([], dtype=int), "end": pd.Series([], dtype=int)})
-        result = _build_coverage_map(df, 100, 0.0)
+        _build_coverage_map(df, 100, 0.0)
         # Coverage map may still render with 0% coverage
         # Just verify it doesn't crash
 

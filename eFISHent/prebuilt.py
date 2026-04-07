@@ -240,7 +240,7 @@ def download_genome(
         filename = os.path.basename(filepath)
         console.print(f"    Downloading {filename}...", end="")
         try:
-            downloaded = hf_hub_download(
+            hf_hub_download(
                 repo_id=HF_REPO_ID,
                 filename=filepath,
                 local_dir=get_cache_dir(cache_dir),
@@ -248,7 +248,7 @@ def download_genome(
             )
             console.print(" [green]done[/green]")
         except Exception as e:
-            console.print(f" [red]failed[/red]")
+            console.print(" [red]failed[/red]")
             raise RuntimeError(f"Failed to download {filepath}: {e}")
 
     logger.info(f"Genome {genome_id} downloaded to {genome_dir}")

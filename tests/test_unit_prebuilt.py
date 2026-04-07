@@ -197,7 +197,6 @@ class TestVerifyChecksums:
 
     def test_missing_file_in_checksums(self):
         """A file listed in metadata but not on disk should appear in failed."""
-        import hashlib
         with tempfile.TemporaryDirectory() as tmpdir:
             genome_dir = os.path.join(tmpdir, "test/genome")
             os.makedirs(genome_dir)
@@ -262,7 +261,6 @@ class TestIsGenomeCachedEdgeCases:
 class TestDownloadGenome:
     def test_download_already_cached_skips(self):
         """download_genome should return early when already cached."""
-        from unittest.mock import patch
         from eFISHent.prebuilt import download_genome
 
         with tempfile.TemporaryDirectory() as tmpdir:

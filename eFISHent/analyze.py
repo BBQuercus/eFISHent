@@ -1,6 +1,6 @@
 """Analyze a probe set and produce a detailed report with plots and metrics."""
 
-from typing import Dict, List, Optional, Union
+from typing import List, Union
 import logging
 import multiprocessing
 import os

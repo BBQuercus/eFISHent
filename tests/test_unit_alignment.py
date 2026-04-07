@@ -1,7 +1,7 @@
 import os
 import shutil
 import tempfile
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest

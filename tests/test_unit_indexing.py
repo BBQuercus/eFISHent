@@ -1,5 +1,5 @@
 import os
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 import luigi
 import pandas as pd

@@ -338,7 +338,7 @@ class TestLogStageStart:
     def test_known_stage_with_progress(self):
         """A known stage with order>0 should call print_stage."""
         import logging
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         from eFISHent.util import log_stage_start
 
         logger = logging.getLogger("test-log-stage")

@@ -3,7 +3,7 @@
 Select the right strand and select intronic/exonic regions.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 import logging
 import os
 import subprocess

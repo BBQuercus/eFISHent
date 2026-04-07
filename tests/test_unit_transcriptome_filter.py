@@ -7,7 +7,6 @@ import luigi
 import Bio.Seq
 import Bio.SeqIO
 import Bio.SeqRecord
-import pytest
 
 from eFISHent.transcriptome_filter import TranscriptomeFiltering, BuildTranscriptomeBlastDB
 
