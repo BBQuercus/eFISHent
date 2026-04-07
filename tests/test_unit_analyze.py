@@ -137,8 +137,8 @@ class TestComputeBindingMatrix:
             _make_seq("GCTAGCTAGCTAGCTAGCTA", "p2"),
         ]
         matrix = task._compute_binding_matrix()
-        assert matrix[0, 0] == 0.0
-        assert matrix[1, 1] == 0.0
+        assert matrix[0, 0] == pytest.approx(0.0)
+        assert matrix[1, 1] == pytest.approx(0.0)
 
     def test_symmetric(self, task):
         task.sequences = [
@@ -159,7 +159,7 @@ class TestComputeBindingMatrix:
         task.sequences = [_make_seq("ATCGATCGATCGATCGATCG", "p1")]
         matrix = task._compute_binding_matrix()
         assert matrix.shape == (1, 1)
-        assert matrix[0, 0] == 0.0
+        assert matrix[0, 0] == pytest.approx(0.0)
 
     def test_values_in_range(self, task):
         task.sequences = [

@@ -677,7 +677,7 @@ def test_accessibility_all_unpaired(mock_fold):
     # Return all dots for the folded window
     mock_fold.return_value = "." * 200
     scores = compute_accessibility_scores(df, target_seq)
-    assert scores.iloc[0] == 1.0
+    assert scores.iloc[0] == pytest.approx(1.0)
 
 
 @patch("eFISHent.optimization.fold_sequence")
@@ -696,7 +696,7 @@ def test_accessibility_all_paired(mock_fold):
     # Return all parens for the folded window
     mock_fold.return_value = "(" * 100 + ")" * 100
     scores = compute_accessibility_scores(df, target_seq)
-    assert scores.iloc[0] == 0.0
+    assert scores.iloc[0] == pytest.approx(0.0)
 
 
 @patch("eFISHent.optimization.fold_sequence")
@@ -734,7 +734,7 @@ def test_accessibility_short_sequence_fallback(mock_fold):
     )
     # fold_sequence should not even be called for short sequences
     scores = compute_accessibility_scores(df, target_seq)
-    assert scores.iloc[0] == 1.0
+    assert scores.iloc[0] == pytest.approx(1.0)
     mock_fold.assert_not_called()
 
 
@@ -752,7 +752,7 @@ def test_accessibility_folding_failure(mock_fold):
         }
     )
     scores = compute_accessibility_scores(df, target_seq)
-    assert scores.iloc[0] == 1.0
+    assert scores.iloc[0] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

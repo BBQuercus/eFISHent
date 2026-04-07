@@ -311,7 +311,7 @@ class TestBowtie2CommandConstruction:
             f.write(">probe1\nATGCATGCATGCATGCATGCA\n")
             task.fname_fasta = f.name
 
-        task.fname_sam = tempfile.mktemp(suffix=".sam")
+        task.fname_sam = tempfile.NamedTemporaryFile(suffix=".sam", delete=False).name
 
         captured = {}
         with patch("eFISHent.alignment.subprocess.check_call") as mock_cc, \
@@ -396,7 +396,7 @@ class TestBowtieCommandConstruction:
             f.write(">probe1\nATGCATGCATGCATGCATGCA\n")
             task.fname_fasta = f.name
 
-        task.fname_sam = tempfile.mktemp(suffix=".sam")
+        task.fname_sam = tempfile.NamedTemporaryFile(suffix=".sam", delete=False).name
 
         with patch("eFISHent.alignment.subprocess.check_call") as mock_cc:
             mock_cc.return_value = 0

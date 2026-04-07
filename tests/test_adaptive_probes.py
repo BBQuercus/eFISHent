@@ -40,16 +40,16 @@ def low_gc_sequence():
 
 class TestComputeGC:
     def test_all_gc(self):
-        assert _compute_gc("GCGCGCGC") == 1.0
+        assert _compute_gc("GCGCGCGC") == pytest.approx(1.0)
 
     def test_no_gc(self):
-        assert _compute_gc("ATATATAT") == 0.0
+        assert _compute_gc("ATATATAT") == pytest.approx(0.0)
 
     def test_half_gc(self):
         assert _compute_gc("ATGC") == pytest.approx(0.5)
 
     def test_empty_sequence(self):
-        assert _compute_gc("") == 0.0
+        assert _compute_gc("") == pytest.approx(0.0)
 
     def test_case_insensitive(self):
         assert _compute_gc("atgc") == pytest.approx(0.5)

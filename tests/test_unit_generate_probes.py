@@ -96,16 +96,16 @@ class TestComputeGC:
     """Tests for the _compute_gc helper."""
 
     def test_pure_at(self):
-        assert _compute_gc("AATTAATT") == 0.0
+        assert _compute_gc("AATTAATT") == pytest.approx(0.0)
 
     def test_pure_gc(self):
-        assert _compute_gc("GGCCGGCC") == 1.0
+        assert _compute_gc("GGCCGGCC") == pytest.approx(1.0)
 
     def test_mixed(self):
         assert _compute_gc("ATGC") == 0.5
 
     def test_empty_string(self):
-        assert _compute_gc("") == 0.0
+        assert _compute_gc("") == pytest.approx(0.0)
 
     def test_case_insensitive(self):
         assert _compute_gc("atgc") == _compute_gc("ATGC")

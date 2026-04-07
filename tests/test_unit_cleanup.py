@@ -397,14 +397,14 @@ def test_low_complexity_diverse():
     """A diverse sequence should have low complexity score."""
     seq = Bio.Seq.Seq("ATGCATGCATGCATGCATGCATGC")
     score = CleanUpOutput._compute_low_complexity_score(seq)
-    assert score == 0.0
+    assert score == pytest.approx(0.0)
 
 
 def test_low_complexity_short_sequence():
     """Sequences shorter than the window should return 0.0."""
     seq = Bio.Seq.Seq("ATGC")
     score = CleanUpOutput._compute_low_complexity_score(seq)
-    assert score == 0.0
+    assert score == pytest.approx(0.0)
 
 
 def test_low_complexity_returns_fraction():
@@ -765,7 +765,7 @@ def test_compute_summary_basic(mock_outdir, mock_gene, task_cleanup):
             assert summary["initial_count"] == 1000
             assert summary["gene_length"] == 5000
             assert summary["length_range"] == (20, 24)
-            assert summary["tm_median"] == 50.0
+            assert summary["tm_median"] == pytest.approx(50.0)
 
 
 @patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")

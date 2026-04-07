@@ -173,10 +173,10 @@ class TestGetDropPct:
         assert _get_drop_pct(50, 0) == 0
 
     def test_no_change(self):
-        assert _get_drop_pct(100, 100) == 0.0
+        assert _get_drop_pct(100, 100) == pytest.approx(0.0)
 
     def test_full_drop(self):
-        assert _get_drop_pct(0, 100) == 100.0
+        assert _get_drop_pct(0, 100) == pytest.approx(100.0)
 
     def test_normal_drop(self):
         assert _get_drop_pct(80, 100) == pytest.approx(20.0)

@@ -249,12 +249,12 @@ class TestComputeLowComplexity:
     def test_diverse_sequence_low_score(self):
         seq = Bio.Seq.Seq("ATCGATCGATCGATCGATCG")
         score = CleanUpOutput._compute_low_complexity_score(seq)
-        assert score == 0.0
+        assert score == pytest.approx(0.0)
 
     def test_short_sequence(self):
         seq = Bio.Seq.Seq("ATCG")
         score = CleanUpOutput._compute_low_complexity_score(seq)
-        assert score == 0.0
+        assert score == pytest.approx(0.0)
 
     def test_dinucleotide_repeat(self):
         seq = Bio.Seq.Seq("ATATATATATATATATATATAT")

@@ -179,7 +179,8 @@ Use `--preset` to apply optimized parameters for common FISH protocols:
 
 Use `--preset list` to see details. Explicit arguments override preset values.
 
-## Workflow
+<details>
+<summary><b>Workflow</b></summary>
 
 ```mermaid
 flowchart TD
@@ -207,9 +208,6 @@ flowchart TD
     style A fill:#e1f5fe
     style J fill:#e8f5e9
 ```
-
-<details>
-<summary><b>Detailed pipeline description</b></summary>
 
 1. Candidate probes are generated from the input sequence using a sliding window. When `--adaptive-length` is enabled, probe lengths are adjusted based on local GC content to normalize Tm.
 2. Basic filtering removes probes failing sequence criteria: melting temperature, GC content, homopolymer runs, optionally low-complexity regions, and optionally G-quadruplex motifs (`--filter-g-quadruplex`).

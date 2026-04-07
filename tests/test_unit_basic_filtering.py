@@ -275,7 +275,7 @@ def test_compute_duplex_dg_gc_rich_more_stable():
 def test_compute_duplex_dg_error_returns_zero():
     """Error cases should return 0.0."""
     dg = compute_duplex_dg(Bio.Seq.Seq(""), 330, 10)
-    assert dg == 0.0
+    assert dg == pytest.approx(0.0)
 
 
 # Parameter suggestion tests

@@ -246,7 +246,7 @@ def test_ren28_rejected_by_45s_screen():
 
 
 @pytest.mark.skipif(not BLAST_AVAILABLE, reason="BLAST+ not installed")
-def test_tRNA_probe_rejected_by_imaging_risk_screen():
+def test_trna_probe_rejected_by_imaging_risk_screen():
     """A probe matching the bundled tRNA panel must be rejected."""
     task = FilterRibosomalRNA()
 
