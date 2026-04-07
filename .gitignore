@@ -168,6 +168,36 @@ cython_debug/
 test_output/
 *_analysis.pdf
 
+# Genome reference builds
+refs/
+refs_*/
+
+# Local test / analysis data
+renilla_test/
+renilla_test_e2e/
+benchmark/
+probe_analysis/
+TrueProbes-1/
+*.csv
+
+# Local planning / notes
+PLAN.md
+EXPERIMENTAL_PLAN.md
+RDNA_OFFTARGET_FIX.md
+RENILLA_PROTOCOL.md
+
+# Claude Code
+.claude/
+
+# Local analysis scripts
+scripts/analyze_unspecific.py
+scripts/compare_probe_sets.py
+scripts/comprehensive_comparison.py
+scripts/extended_comparison.py
+scripts/rank_unspecific.py
+scripts/build_mouse_refs.sh
+scripts/prepare_mouse_hf_upload.sh
+
 # Other
 .vscode/
 *.png
