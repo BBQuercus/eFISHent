@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import unittest.mock
 
 import pytest
 
@@ -63,6 +64,22 @@ class TestCacheManagement:
             result = get_cache_dir(cache)
             assert os.path.isdir(result)
             assert result == cache
+
+    def test_get_cache_dir_from_env_var(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_dir = os.path.join(tmpdir, "env_cache")
+            with unittest.mock.patch.dict(os.environ, {"EFISHENT_INDEX_DIR": env_dir}):
+                result = get_cache_dir()
+                assert result == env_dir
+                assert os.path.isdir(result)
+
+    def test_cli_arg_overrides_env_var(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cli_dir = os.path.join(tmpdir, "cli_cache")
+            env_dir = os.path.join(tmpdir, "env_cache")
+            with unittest.mock.patch.dict(os.environ, {"EFISHENT_INDEX_DIR": env_dir}):
+                result = get_cache_dir(cli_dir)
+                assert result == cli_dir
 
     def test_get_genome_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:

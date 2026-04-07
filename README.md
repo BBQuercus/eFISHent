@@ -28,7 +28,7 @@ A command-line based tool to facilitate the creation of eFISHent single-molecule
 eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleotide probes. Some of the key features of eFISHent are:
 
 * One-command installation — no sudo, Docker, or conda required
-* Pre-built genome indices for human and mouse — skip index building entirely with `--genome hg38`
+* Pre-built genome indices for 7 organisms — skip index building entirely with `--genome hg38`
 * Automatic gene sequence download from NCBI when providing a gene and species name (or pass a FASTA file)
 * Target region selection (`--target-regions`): design probes against exons, introns, CDS, UTRs, or full transcripts
 * Parameter presets for common FISH protocols (`--preset smfish`, `merfish`, `dna-fish`, etc.)
@@ -44,7 +44,7 @@ eFISHent is a tool to facilitate the creation of eFISHent RNA smFISH oligonucleo
 
 ## Installation
 
-eFISHent is tested on macOS and Linux with Python 3.9+. Works on shared HPC/cluster servers via SSH — no sudo, Docker, or conda needed. For Windows users, we recommend [WSL](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview).
+eFISHent is tested on macOS and Linux with Python 3.10+. Works on shared HPC/cluster servers via SSH — no sudo, Docker, or conda needed. For Windows users, we recommend [WSL](https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-11-with-gui-support#1-overview).
 
 ### Quick Install (Recommended)
 
@@ -283,7 +283,19 @@ eFISHent --download-genome hg38
 eFISHent --list-genomes
 ```
 
-Available genomes: `hg38` / `GRCh38` (human), `mm39` / `GRCm39` (mouse).
+Available genomes:
+
+| Organism | Aliases |
+|---|---|
+| Human | `hg38`, `GRCh38`, `human` |
+| Mouse | `mm39`, `GRCm39`, `mouse` |
+| Zebrafish | `danRer11`, `GRCz11`, `zebrafish` |
+| Rat | `rn7`, `GRCr8`, `rat` |
+| Drosophila | `dm6`, `BDGP6`, `fly` |
+| C. elegans | `ce11`, `WBcel235`, `worm`, `elegans` |
+| Yeast | `sacCer3`, `R64`, `yeast` |
+
+Indices are cached in `~/.local/efishent/indices/` by default. Override with `--index-cache-dir /path/to/dir` or the `EFISHENT_INDEX_DIR` environment variable.
 
 ### Presets
 
@@ -306,7 +318,7 @@ Use `--preset list` to see all available presets. Explicit arguments override pr
 
 ### Index Building
 
-For human and mouse, you can skip this step entirely by using `--genome hg38` or `--genome mm39` (see Quick Start with Pre-built Indices above).
+For organisms with pre-built indices, you can skip this step entirely by using `--genome hg38` or `--genome mm39` (see Quick Start with Pre-built Indices above).
 
 For other organisms, the slightly more time-intensive index creation step can be run ahead of time. Indexes are unique to each reference genome and can be created using:
 
@@ -416,9 +428,10 @@ There are a few additional options:
 | `--threads` | Wherever multiprocessing is available, spawn that many threads. Set this to as many cores as you have available |
 | `--save-intermediates` | Save all intermediary files. Can be used to gauge which filtering steps are set too aggressively |
 | `--preset` | Apply a parameter preset (`smfish`, `merfish`, `dna-fish`, `strict`, `relaxed`, `exogenous`). Use `--preset list` to see details |
-| `--genome` | Use a pre-built genome index instead of `--reference-genome` (e.g., `hg38`, `mm39`). Index is downloaded automatically on first use |
+| `--genome` | Use a pre-built genome index instead of `--reference-genome` (e.g., `hg38`, `mm39`, `zebrafish`). Index is downloaded automatically on first use |
 | `--download-genome` | Pre-download a genome index for offline use (e.g., `--download-genome hg38`) |
 | `--list-genomes` | List all available pre-built genome indices |
+| `--index-cache-dir` | Override default cache directory for genome indices (`~/.local/efishent/indices/`). Can also be set via `EFISHENT_INDEX_DIR` env var |
 | `--analyze-probeset` | Analyze an existing probe set FASTA file with comprehensive metrics and PDF report |
 
 ### Probe Set Analysis

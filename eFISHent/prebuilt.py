@@ -118,7 +118,7 @@ def resolve_genome(alias: str) -> str:
 
 def get_cache_dir(cache_dir: Optional[str] = None) -> str:
     """Get the genome cache directory, creating it if needed."""
-    cache = cache_dir or DEFAULT_CACHE_DIR
+    cache = cache_dir or os.environ.get("EFISHENT_INDEX_DIR") or DEFAULT_CACHE_DIR
     os.makedirs(cache, exist_ok=True)
     return cache
 
