@@ -31,12 +31,22 @@ def build_transcript_gene_map(gtf_path: str) -> Dict[str, str]:
 
     mapping: Dict[str, str] = {}
 
-    # Try parquet first (prepared by indexing.py)
-    parquet_path = gtf_path
-    if not gtf_path.endswith(".parquet"):
-        parquet_path = os.path.splitext(gtf_path)[0] + ".parquet"
+    # Try parquet first (prepared by indexing.py / PrepareAnnotationFile)
+    # PrepareAnnotationFile outputs "{gtf_path}.parq", so check both extensions
+    parquet_candidates = []
+    if gtf_path.endswith((".parquet", ".parq")):
+        parquet_candidates.append(gtf_path)
+    else:
+        parquet_candidates.append(gtf_path + ".parq")  # PrepareAnnotationFile output
+        parquet_candidates.append(os.path.splitext(gtf_path)[0] + ".parquet")
 
-    if os.path.isfile(parquet_path):
+    parquet_path = None
+    for candidate in parquet_candidates:
+        if os.path.isfile(candidate):
+            parquet_path = candidate
+            break
+
+    if parquet_path is not None:
         mapping = _parse_parquet_gtf(parquet_path)
     elif os.path.isfile(gtf_path):
         mapping = _parse_raw_gtf(gtf_path)

@@ -216,15 +216,8 @@ class CleanUpOutput(luigi.Task):
         # Build gene name mapping
         mapping: Dict[str, str] = {}
         if annotation:
-            # Try parquet version first
-            parquet_path = os.path.join(
-                util.get_output_dir(),
-                os.path.splitext(os.path.basename(annotation))[0] + ".parquet",
-            )
-            if os.path.isfile(parquet_path):
-                mapping = build_transcript_gene_map(parquet_path)
-            else:
-                mapping = build_transcript_gene_map(annotation)
+            # build_transcript_gene_map handles parquet discovery internally
+            mapping = build_transcript_gene_map(annotation)
 
         target_gene = util.get_gene_name(hashed=False)
         results = aggregate_off_target_genes(df_filtered, mapping, target_gene)
@@ -344,14 +337,7 @@ class CleanUpOutput(luigi.Task):
                 if len(cols) >= 2:
                     # First col = gene_id, second col = expression value
                     # Build gene_id -> gene_name mapping from GTF
-                    parquet_path = os.path.join(
-                        util.get_output_dir(),
-                        os.path.splitext(os.path.basename(annotation))[0] + ".parquet",
-                    )
-                    if os.path.isfile(parquet_path):
-                        mapping = build_transcript_gene_map(parquet_path)
-                    else:
-                        mapping = build_transcript_gene_map(annotation)
+                    mapping = build_transcript_gene_map(annotation)
 
                     # Map gene_ids to expression values, using gene_name as key
                     for _, row in df_expr.iterrows():

@@ -649,27 +649,36 @@ def check_all_dependencies() -> Dict[str, dict]:
                 "needed_for": info["needed_for"],
             }
 
-    # Check bundled Fold binary
-    fold_path = Path(__file__).resolve().parent
-    if sys.platform.startswith("linux"):
-        fold_bin = fold_path / "Fold_linux"
-    elif sys.platform == "darwin":
-        fold_bin = fold_path / "Fold_osx"
-    else:
-        fold_bin = None
-
-    if fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK):
+    # Check for Fold binary: prefer system install, fall back to bundled
+    system_fold = shutil.which("Fold")
+    if system_fold:
         results["Fold"] = {
             "found": True,
-            "version": "bundled",
-            "path": str(fold_bin),
+            "version": "system",
+            "path": system_fold,
             "needed_for": "secondary structure prediction",
         }
     else:
-        results["Fold"] = {
-            "found": False,
-            "needed_for": "secondary structure prediction",
-        }
+        fold_path = Path(__file__).resolve().parent
+        if sys.platform.startswith("linux"):
+            fold_bin = fold_path / "Fold_linux"
+        elif sys.platform == "darwin":
+            fold_bin = fold_path / "Fold_osx"
+        else:
+            fold_bin = None
+
+        if fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK):
+            results["Fold"] = {
+                "found": True,
+                "version": "bundled",
+                "path": str(fold_bin),
+                "needed_for": "secondary structure prediction",
+            }
+        else:
+            results["Fold"] = {
+                "found": False,
+                "needed_for": "secondary structure prediction",
+            }
 
     return results
 
@@ -698,16 +707,17 @@ def check_required_dependencies(args: argparse.Namespace) -> List[str]:
 
     # Fold is required for the full pipeline (not for index building)
     if not args.build_indices:
-        fold_path = Path(__file__).resolve().parent
-        if sys.platform.startswith("linux"):
-            fold_bin = fold_path / "Fold_linux"
-        elif sys.platform == "darwin":
-            fold_bin = fold_path / "Fold_osx"
-        else:
-            fold_bin = None
+        if not shutil.which("Fold"):
+            fold_path = Path(__file__).resolve().parent
+            if sys.platform.startswith("linux"):
+                fold_bin = fold_path / "Fold_linux"
+            elif sys.platform == "darwin":
+                fold_bin = fold_path / "Fold_osx"
+            else:
+                fold_bin = None
 
-        if not (fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK)):
-            return ["Fold (bundled binary missing or not executable)"]
+            if not (fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK)):
+                return ["Fold (not found in PATH and bundled binary missing)"]
 
     # glpsol only needed for optimal optimization
     if getattr(args, "optimization_method", "greedy") == "optimal":

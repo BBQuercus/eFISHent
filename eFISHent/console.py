@@ -6,7 +6,7 @@ import logging
 import time
 
 import pandas as pd
-from rich.console import Console, Group
+from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 from rich.panel import Panel
@@ -255,7 +255,6 @@ def print_completion(
     if _silent_mode:
         return
 
-    renderables = []
 
     from rich.rule import Rule
 
