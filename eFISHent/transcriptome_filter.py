@@ -7,9 +7,12 @@ catches off-target binding to expressed transcripts that alignment-only methods 
 """
 
 import logging
+import math
 import os
 import re
 import subprocess
+import tempfile
+from concurrent.futures import ProcessPoolExecutor
 
 import Bio.SeqIO
 import luigi
@@ -19,6 +22,11 @@ from . import util
 from .alignment import AlignProbeCandidates
 from .config import GeneralConfig
 from .config import ProbeConfig
+
+
+def _run_blast_chunk(args):
+    """Run a single BLAST process (top-level function for pickling)."""
+    subprocess.check_call(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 
 class BuildTranscriptomeBlastDB(luigi.Task):
@@ -75,6 +83,29 @@ class TranscriptomeFiltering(luigi.Task):
             ),
         }
 
+    @staticmethod
+    def _blast_args(task, query, db, perc_identity, threads, out):
+        """Build BLAST command-line arguments."""
+        return [
+            "blastn",
+            "-task", task,
+            "-query", query,
+            "-db", db,
+            "-evalue", "100",
+            "-word_size", "7",
+            "-gapopen", "5",
+            "-gapextend", "2",
+            "-reward", "1",
+            "-penalty", "-3",
+            "-dust", "no",
+            "-max_target_seqs", "50",
+            "-perc_identity", str(perc_identity),
+            "-num_threads", str(threads),
+            "-outfmt", "6 qseqid sseqid pident length mismatch gapopen "
+                       "qstart qend sstart send evalue bitscore",
+            "-out", out,
+        ]
+
     def run(self):
         util.log_stage_start(self.logger, "TranscriptomeFiltering")
         probe_fasta = self.input()["probes"]["fasta"].path
@@ -90,36 +121,70 @@ class TranscriptomeFiltering(luigi.Task):
         # Use blastn-short for probe-length queries (<30bp) — optimized seed
         # strategy and scoring for short sequences
         blast_task = "blastn-short" if max_probe_len <= 30 else "blastn"
+        threads = GeneralConfig().threads
 
-        # BLAST parameters derived from TrueProbes
-        # -max_target_seqs 50: we only need enough off-target transcripts to
-        # count unique hits and detect cross-hybridization. 50 is sufficient
-        # since max_transcriptome_off_targets is typically 0-3.
-        args = [
-            "blastn",
-            "-task", blast_task,
-            "-query", probe_fasta,
-            "-db", txome_db,
-            "-evalue", "100",
-            "-word_size", "7",
-            "-gapopen", "5",
-            "-gapextend", "2",
-            "-reward", "1",
-            "-penalty", "-3",
-            "-dust", "no",
-            "-max_target_seqs", "50",
-            "-perc_identity", str(perc_identity),
-            "-num_threads", str(GeneralConfig().threads),
-            "-outfmt", "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore",
-            "-out", blast_out,
-        ]
-        self.logger.debug(f"Running BLAST with - {' '.join(args)}")
         from .console import spinner
 
-        with spinner("BLASTing probes against transcriptome..."):
-            subprocess.check_call(
-                args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        # Parallel BLAST: split probes into chunks and run independent BLAST
+        # processes. This scales better than BLAST's own -num_threads because
+        # each process gets its own I/O and memory pipeline.
+        n_chunks = max(1, min(threads, math.ceil(len(sequences) / 500)))
+
+        if n_chunks <= 1:
+            # Small probe set — single BLAST call
+            args = self._blast_args(
+                blast_task, probe_fasta, txome_db, perc_identity, threads, blast_out,
             )
+            self.logger.debug(f"Running BLAST with - {' '.join(args)}")
+            with spinner("BLASTing probes against transcriptome..."):
+                subprocess.check_call(
+                    args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+                )
+        else:
+            # Split probes into chunks and BLAST in parallel
+            self.logger.debug(
+                f"Splitting {len(sequences)} probes into {n_chunks} chunks "
+                f"for parallel BLAST"
+            )
+            chunk_size = math.ceil(len(sequences) / n_chunks)
+            tmpdir = tempfile.mkdtemp(prefix="efishent_blast_")
+            chunk_files = []
+            chunk_outs = []
+
+            try:
+                for i in range(n_chunks):
+                    chunk = sequences[i * chunk_size : (i + 1) * chunk_size]
+                    if not chunk:
+                        continue
+                    chunk_fa = os.path.join(tmpdir, f"chunk_{i}.fasta")
+                    chunk_out = os.path.join(tmpdir, f"chunk_{i}.tsv")
+                    Bio.SeqIO.write(chunk, chunk_fa, "fasta")
+                    chunk_files.append(chunk_fa)
+                    chunk_outs.append(chunk_out)
+
+                # Each chunk gets 1 thread — parallelism comes from processes
+                all_args = [
+                    self._blast_args(
+                        blast_task, cf, txome_db, perc_identity, 1, co,
+                    )
+                    for cf, co in zip(chunk_files, chunk_outs)
+                ]
+
+                with spinner(
+                    f"BLASTing probes against transcriptome ({n_chunks} parallel)..."
+                ):
+                    with ProcessPoolExecutor(max_workers=n_chunks) as pool:
+                        list(pool.map(_run_blast_chunk, all_args))
+
+                # Concatenate results
+                with open(blast_out, "w") as fout:
+                    for co in chunk_outs:
+                        if os.path.isfile(co) and os.path.getsize(co) > 0:
+                            with open(co) as fin:
+                                fout.write(fin.read())
+            finally:
+                import shutil
+                shutil.rmtree(tmpdir, ignore_errors=True)
 
         # Parse BLAST output
         columns = [
