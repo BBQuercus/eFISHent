@@ -203,11 +203,14 @@ class TestLogAndCheckCandidates:
         log_and_check_candidates(logger, "BasicFiltering", count=10)
         log_and_check_candidates(logger, "BasicFiltering", count=100)
 
-    def test_count_with_previous(self, logger, capsys):
-        """Previous count should be included in output."""
+    def test_count_with_previous(self, logger):
+        """Previous count should be included in live display state."""
+        from eFISHent.console import _steps
+        _steps.clear()
+        # Add a running step so print_candidate_count has something to update
+        _steps.append({"name": "Test", "status": "running", "result": "", "elapsed": "", "start_time": 0})
         log_and_check_candidates(logger, "BasicFiltering", count=50, count_prev=100)
-        captured = capsys.readouterr().out
-        assert "50" in captured
+        assert "50" in _steps[0]["result"]
 
     def test_zero_candidates_silent_mode(self, logger):
         """Zero candidates in silent mode should still raise ValueError."""

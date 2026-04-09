@@ -132,9 +132,12 @@ class DownloadEntrezGeneSequence(luigi.Task):
         if n_records == 1:
             self.logger.info(f"Downloaded 1 transcript: {headers[0][1:]}")
         else:
-            self.logger.info(f"Downloaded {n_records} transcript isoforms from NCBI:")
-            for header in headers:
-                self.logger.info(f"  {header[1:]}")
+            self.logger.info(f"Downloaded {n_records} transcript isoforms from NCBI")
+            max_show = 3
+            for header in headers[:max_show]:
+                self.logger.debug(f"  {header[1:]}")
+            if n_records > max_show:
+                self.logger.debug(f"  ...and {n_records - max_show} more")
 
         with self.output().open("w") as outfile:
             outfile.write(fasta)

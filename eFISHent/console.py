@@ -2,19 +2,14 @@
 
 from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple
+import logging
+import time
 
 import pandas as pd
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
 from rich.text import Text
-from rich.logging import RichHandler
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 from rich.table import Table
 from rich.theme import Theme
 
@@ -36,11 +31,15 @@ THEME = Theme(
 console = Console(theme=THEME)
 
 # Module-level state for progress tracking
-_pipeline_progress: Optional[Progress] = None
-_pipeline_task_id: Optional[int] = None
 _silent_mode: bool = False
 _current_stage: int = 0
 _total_stages: int = 8
+
+# Live display state
+_live: Optional[Live] = None
+_steps: List[Dict] = []  # Each: {name, status, result, elapsed, start_time}
+_step_status: str = ""  # Transient status line for current step
+_pipeline_mode: str = "pipeline"
 
 # Filtering funnel data: list of (stage_name, candidate_count) tuples
 _funnel_data: List[Tuple[str, int]] = []
@@ -72,15 +71,140 @@ def is_silent() -> bool:
     return _silent_mode
 
 
-def get_rich_handler() -> RichHandler:
-    """Get a configured Rich logging handler."""
-    return RichHandler(
-        console=console,
-        show_time=True,
-        show_path=False,
-        rich_tracebacks=True,
-        markup=True,
-    )
+def _format_elapsed(seconds: float) -> str:
+    """Format elapsed seconds into a compact string."""
+    if seconds < 1:
+        return "<1s"
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    return f"{minutes}m {secs:02d}s"
+
+
+# Braille spinner frames
+_SPINNER_FRAMES = "\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f"
+
+
+class _PipelineDisplay:
+    """Dynamic renderable that rebuilds on every Rich render cycle.
+
+    This ensures elapsed times tick and the spinner animates without
+    needing explicit refresh calls.
+    """
+
+    def __init__(self) -> None:
+        self._frame: int = 0
+
+    def __rich_console__(self, console: Console, options: object):  # type: ignore[override]
+        self._frame += 1
+        spinner_char = _SPINNER_FRAMES[self._frame % len(_SPINNER_FRAMES)]
+
+        table = Table(
+            show_header=False,
+            box=None,
+            padding=(0, 1),
+            show_edge=False,
+            expand=False,
+        )
+        table.add_column("Icon", width=2, no_wrap=True)
+        table.add_column("Step", min_width=38, no_wrap=True)
+        table.add_column("Result", min_width=28, no_wrap=True)
+        table.add_column("Time", justify="right", min_width=6, no_wrap=True)
+
+        for step in _steps:
+            status = step["status"]
+            name = step["name"]
+            result = step.get("result", "")
+
+            if status == "done":
+                icon = "[green]\u2714[/green]"
+                elapsed = step.get("elapsed", "")
+                name_style = "dim"
+                result_style = "dim"
+            elif status == "running":
+                icon = f"[cyan]{spinner_char}[/cyan]"
+                # Compute elapsed live
+                elapsed = _format_elapsed(time.time() - step["start_time"])
+                name_style = "bold"
+                result_style = "cyan"
+            else:
+                icon = " "
+                elapsed = ""
+                name_style = "dim"
+                result_style = "dim"
+
+            table.add_row(
+                icon,
+                f"[{name_style}]{name}[/{name_style}]",
+                f"[{result_style}]{result}[/{result_style}]" if result else "",
+                f"[dim]{elapsed}[/dim]" if elapsed else "",
+            )
+
+            # Show transient status under the running step
+            if status == "running" and _step_status:
+                table.add_row(
+                    "",
+                    f"  [dim]\u2192 {_step_status}[/dim]",
+                    "",
+                    "",
+                )
+
+        # Total elapsed at the bottom
+        if _steps:
+            first_start = _steps[0].get("start_time")
+            if first_start is not None:
+                total = _format_elapsed(time.time() - first_start)
+                table.add_row("", "", "", "")
+                table.add_row(
+                    "",
+                    f"[dim]{total} elapsed[/dim]",
+                    "",
+                    "",
+                )
+
+        yield table
+
+
+# Singleton display instance — reused across pipeline runs
+_pipeline_display = _PipelineDisplay()
+
+
+def _refresh_live() -> None:
+    """Force a refresh of the live display if active."""
+    if _live is not None:
+        _live.refresh()
+
+
+class LiveLogHandler(logging.Handler):
+    """Logging handler that routes messages to the live step display."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        global _step_status
+        if _live is not None and not _silent_mode:
+            # Show the message as transient status under current step
+            msg = record.getMessage()
+            # Strip leading whitespace for indented messages (like transcript list)
+            msg = msg.strip()
+            if msg:
+                _step_status = msg
+                _refresh_live()
+        elif not _silent_mode:
+            # Outside live display, print directly
+            console.print(f"  [dim]{record.getMessage()}[/dim]")
+
+
+def get_live_log_handler() -> LiveLogHandler:
+    """Get a logging handler that routes to the live display."""
+    return LiveLogHandler()
+
+
+def get_rich_handler() -> logging.Handler:
+    """Get a configured logging handler.
+
+    Returns a LiveLogHandler that integrates with the live step display.
+    """
+    return LiveLogHandler()
 
 
 def print_header(version: str) -> None:
@@ -116,9 +240,6 @@ def print_completion(
     """
     if _silent_mode:
         return
-
-    from rich.console import Group
-    from rich.text import Text
 
     renderables = []
 
@@ -325,8 +446,6 @@ def _build_coverage_map(
     Returns a Rich Text renderable with a horizontal bar where filled blocks
     represent covered regions and light blocks represent gaps.
     """
-    from rich.text import Text
-
     if gene_length <= 0:
         return None
 
@@ -384,8 +503,6 @@ def _build_coverage_map(
 
 def _build_verification_summary(verification: Dict) -> Text:
     """Build a Rich Text summary of BLAST verification results."""
-    from rich.text import Text
-
     total = verification["total"]
     clean = verification["clean"]
     flagged = verification.get("flagged", {})
@@ -430,58 +547,57 @@ def print_filtering_funnel() -> None:
 
 
 def print_stage(order: int, total: int, description: str) -> None:
-    """Print a pipeline stage indicator with clear header."""
-    global _current_stage, _total_stages
+    """Print a pipeline stage indicator — updates the live step display."""
+    global _current_stage, _total_stages, _step_status
     if _silent_mode:
         return
 
     _current_stage = order
     _total_stages = total
 
+    # Finish the previous running step
+    for step in _steps:
+        if step["status"] == "running":
+            step["status"] = "done"
+            step["elapsed"] = _format_elapsed(time.time() - step["start_time"])
+
     # Include candidate count from previous stage if available
     count_str = ""
     if _funnel_data:
         last_count = _funnel_data[-1][1]
-        count_str = f" [dim]({last_count:,} probes)[/dim]"
+        count_str = f"({last_count:,} probes)"
 
-    # Print a clear stage header
-    console.print()
-    console.print(
-        f"[stage]Step {order}/{total}:[/stage] [current]{description}[/current]{count_str}"
-    )
-
-    # Update progress bar if active
-    if _pipeline_progress is not None and _pipeline_task_id is not None:
-        progress_desc = f"Step {order}/{total}: {description}"
-        if _funnel_data:
-            progress_desc += f" ({_funnel_data[-1][1]:,} probes)"
-        _pipeline_progress.update(
-            _pipeline_task_id,
-            completed=order - 1,
-            description=progress_desc,
-        )
+    # Add new step
+    _steps.append({
+        "name": f"Step {order}/{total}: {description}",
+        "status": "running",
+        "result": count_str,
+        "elapsed": "",
+        "start_time": time.time(),
+    })
+    _step_status = ""
+    _refresh_live()
 
 
 def print_candidate_count(_name: str, count: int, count_prev: int = 0) -> None:
-    """Print candidate count with optional comparison."""
+    """Print candidate count — updates the current step's result in the live display."""
+    global _step_status
     if _silent_mode:
         return
-    if count_prev:
-        filtered = count_prev - count
-        console.print(
-            f"  [done]\u2714[/done] [count]{count}[/count] candidates "
-            f"[dim](filtered {filtered} from {count_prev})[/dim]"
-        )
-    else:
-        console.print(f"  [done]\u2714[/done] [count]{count}[/count] candidates generated")
 
-    # Update progress bar to show this stage is done
-    if _pipeline_progress is not None and _pipeline_task_id is not None:
-        _pipeline_progress.update(
-            _pipeline_task_id,
-            completed=_current_stage,
-            description=f"Step {_current_stage}/{_total_stages} \u2714 {count:,} probes remaining",
-        )
+    # Update the current running step's result
+    for step in reversed(_steps):
+        if step["status"] == "running":
+            if count_prev:
+                filtered = count_prev - count
+                drop_pct = (filtered / count_prev * 100) if count_prev else 0
+                step["result"] = f"{count:,} remaining  (\u2212{drop_pct:.1f}%)"
+            else:
+                step["result"] = f"{count:,} probes"
+            break
+
+    _step_status = ""
+    _refresh_live()
 
 
 def print_parameter_warnings(warnings: List[str]) -> None:
@@ -511,11 +627,20 @@ def print_warning(message: str) -> None:
     """Print a styled warning message."""
     if _silent_mode:
         return
-    console.print(f"[warning]Warning:[/warning] {message}")
+    # If live display is active, show as transient status
+    if _live is not None:
+        global _step_status
+        _step_status = f"\u26a0 {message}"
+        _refresh_live()
+    else:
+        console.print(f"[warning]Warning:[/warning] {message}")
 
 
 def print_error_panel(title: str, message: str, hint: Optional[str] = None) -> None:
     """Display an error in a formatted panel."""
+    # Stop live display before showing error so it doesn't interfere
+    if _live is not None:
+        _live.stop()
     content = f"[error]{message}[/error]"
     if hint:
         content += f"\n\n[dim]Hint: {hint}[/dim]"
@@ -618,70 +743,68 @@ def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
 
 @contextmanager
 def pipeline_progress(total_stages: int = 8, mode: str = "pipeline"):
-    """Context manager for pipeline progress tracking.
+    """Context manager for pipeline progress tracking using a live step display.
 
     Args:
         total_stages: Number of stages to track
         mode: "pipeline" for normal probe design, "analyze" for probe set analysis
     """
-    global _pipeline_progress, _pipeline_task_id, _current_stage, _total_stages
+    global _live, _steps, _step_status, _current_stage, _total_stages, _pipeline_mode
 
     _current_stage = 0
     _total_stages = total_stages
+    _steps = []
+    _step_status = ""
+    _pipeline_mode = mode
 
     if _silent_mode:
         yield
         return
 
-    console.print()
-    if mode == "analyze":
-        console.print("[dim]Analysis progress:[/dim]")
-    else:
-        console.print("[dim]Pipeline progress:[/dim]")
-
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=30),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
+    live = Live(
+        _pipeline_display,
         console=console,
+        refresh_per_second=8,
         transient=False,
     )
 
-    with progress:
-        _pipeline_progress = progress
-        _pipeline_task_id = progress.add_task("Initializing...", total=total_stages)
+    with live:
+        _live = live
         yield
-        # Mark complete
-        progress.update(
-            _pipeline_task_id,
-            completed=total_stages,
-            description="[done]All steps completed![/done]",
-        )
+        # Finish the last running step
+        for step in _steps:
+            if step["status"] == "running":
+                step["status"] = "done"
+                step["elapsed"] = _format_elapsed(time.time() - step["start_time"])
+        _refresh_live()
 
-    _pipeline_progress = None
-    _pipeline_task_id = None
+    _live = None
 
 
 def print_analysis_stage(step: int, total: int, description: str) -> None:
-    """Print an analysis stage indicator."""
-    global _current_stage, _total_stages
+    """Print an analysis stage indicator — uses the live step display."""
+    global _current_stage, _total_stages, _step_status
     if _silent_mode:
         return
 
     _current_stage = step
     _total_stages = total
 
-    console.print(f"  [dim]\u2022[/dim] {description}")
+    # Finish the previous running step
+    for s in _steps:
+        if s["status"] == "running":
+            s["status"] = "done"
+            s["elapsed"] = _format_elapsed(time.time() - s["start_time"])
 
-    # Update progress bar if active
-    if _pipeline_progress is not None and _pipeline_task_id is not None:
-        _pipeline_progress.update(
-            _pipeline_task_id,
-            completed=step,
-            description=f"Analyzing {description.lower()}...",
-        )
+    _steps.append({
+        "name": description,
+        "status": "running",
+        "result": "",
+        "elapsed": "",
+        "start_time": time.time(),
+    })
+    _step_status = ""
+    _refresh_live()
 
 
 def print_dependency_check(results: Dict[str, dict]) -> None:
@@ -743,22 +866,24 @@ def print_missing_deps_error(missing: List[str]) -> None:
 
 @contextmanager
 def spinner(description: str):
-    """Context manager for spinner during subprocess operations."""
+    """Context manager for spinner during subprocess operations.
+
+    Updates the live display's transient status line.
+    """
+    global _step_status
     if _silent_mode:
         yield
         return
 
-    # If we're inside pipeline_progress, update the description to show subprocess
-    if _pipeline_progress is not None and _pipeline_task_id is not None:
-        _pipeline_progress.update(_pipeline_task_id, description=f"[dim]{description}[/dim]")
+    if _live is not None:
+        # Show as transient status under current step
+        _step_status = description
+        _refresh_live()
         yield
-        # Restore to show step progress
-        _pipeline_progress.update(
-            _pipeline_task_id,
-            description=f"Running step {_current_stage}/{_total_stages}...",
-        )
+        _step_status = ""
+        _refresh_live()
     else:
-        # Standalone spinner - print inline status
+        # Standalone — print inline
         console.print(f"  [dim]\u23f3 {description}[/dim]", end="")
         yield
         console.print(" [done]\u2714[/done]")

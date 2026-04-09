@@ -78,25 +78,33 @@ class TestConsolePrintFunctions:
         print_header("1.0.0")
         assert capsys.readouterr().out == ""
 
-    def test_print_stage(self, capsys):
+    def test_print_stage(self):
+        from eFISHent.console import _steps
+        _steps.clear()
         print_stage(1, 8, "Preparing sequence")
-        captured = capsys.readouterr()
-        assert "Preparing sequence" in captured.out
+        assert any("Preparing sequence" in s["name"] for s in _steps)
 
-    def test_print_stage_silent(self, capsys):
+    def test_print_stage_silent(self):
+        from eFISHent.console import _steps
+        _steps.clear()
         set_silent_mode(True)
         print_stage(1, 8, "Preparing sequence")
-        assert capsys.readouterr().out == ""
+        assert len(_steps) == 0
 
-    def test_print_candidate_count(self, capsys):
+    def test_print_candidate_count(self):
+        from eFISHent.console import _steps
+        _steps.clear()
+        # Add a running step first
+        _steps.append({"name": "Test", "status": "running", "result": "", "elapsed": "", "start_time": 0})
         print_candidate_count("BasicFiltering", 500, 1000)
-        captured = capsys.readouterr()
-        assert "500" in captured.out
+        assert "500" in _steps[0]["result"]
 
-    def test_print_candidate_count_silent(self, capsys):
+    def test_print_candidate_count_silent(self):
+        from eFISHent.console import _steps
+        _steps.clear()
         set_silent_mode(True)
         print_candidate_count("BasicFiltering", 500, 1000)
-        assert capsys.readouterr().out == ""
+        assert len(_steps) == 0
 
     def test_print_warning(self, capsys):
         print_warning("Something is off")
