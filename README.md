@@ -81,10 +81,10 @@ Or simply: `rm -rf ~/.local/efishent`
 The fastest way to design probes — genome indices are downloaded automatically:
 
 ```bash
-efishent --genome hg38 --gene-name "MALAT1" --organism-name "homo sapiens" --preset smfish
+efishent --genome hg38 --gene-name "TP53" --organism-name "homo sapiens" --preset smfish
 ```
 
-That's it. This downloads the pre-built human genome index on first use and designs smFISH probes for MALAT1, a longer transcript that typically yields many more candidate probes than ACTB.
+That's it. This downloads the pre-built human genome index on first use and designs smFISH probes for TP53.
 
 ### Available Genomes
 
@@ -111,8 +111,8 @@ Three ways to provide the target sequence:
 
 | Method | Example |
 |---|---|
-| Gene name + organism | `--gene-name "MALAT1" --organism-name "homo sapiens"` |
-| Ensembl ID | `--ensembl-id ENSG00000128272 --organism-name "homo sapiens"` |
+| Gene name + organism | `--gene-name "TP53" --organism-name "homo sapiens"` |
+| Ensembl ID | `--ensembl-id ENSG00000141510 --organism-name "homo sapiens"` |
 | FASTA file | `--sequence-file ./my_gene.fasta` |
 
 ### Using Your Own Genome
@@ -378,7 +378,7 @@ efishent \
 **smFISH with pre-built index (simplest):**
 
 ```bash
-efishent --genome hg38 --gene-name "MALAT1" --organism-name "homo sapiens" --preset smfish --threads 8
+efishent --genome hg38 --gene-name "TP53" --organism-name "homo sapiens" --preset smfish --threads 8
 ```
 
 **smFISH with full off-target filtering:**
