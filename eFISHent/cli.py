@@ -760,13 +760,35 @@ def _parse_args() -> argparse.Namespace:
     except Exception as e:
         print(e)
 
-    # Handle --check/--update before full validation (doesn't need other args)
+    # Handle utility flags before full validation (they don't need other args)
     if "--check" in sys.argv:
         args = argparse.Namespace(check=True)
         return args
 
     if "--update" in sys.argv:
         args = argparse.Namespace(update=True)
+        return args
+
+    if "--list-genomes" in sys.argv:
+        args = argparse.Namespace(list_genomes=True)
+        return args
+
+    if "--download-genome" in sys.argv:
+        idx = sys.argv.index("--download-genome")
+        if idx + 1 < len(sys.argv):
+            genome_name = sys.argv[idx + 1]
+        else:
+            parser.error("--download-genome requires a genome name")
+        cache_dir = None
+        if "--index-cache-dir" in sys.argv:
+            cidx = sys.argv.index("--index-cache-dir")
+            if cidx + 1 < len(sys.argv):
+                cache_dir = sys.argv[cidx + 1]
+        args = argparse.Namespace(
+            download_genome=genome_name,
+            index_cache_dir=cache_dir,
+            force_download="--force-download" in sys.argv,
+        )
         return args
 
     # Handle --preset list before full parsing
@@ -776,6 +798,15 @@ def _parse_args() -> argparse.Namespace:
             from .presets import format_preset_list
             print(format_preset_list())
             sys.exit(0)
+
+    # When --genome, --list-genomes, or --download-genome is used, -g is not required
+    # (--genome sets it automatically later in main())
+    genome_flags = {"--genome", "--list-genomes", "--download-genome"}
+    if genome_flags & set(sys.argv):
+        for action in parser._actions:
+            if "--reference-genome" in getattr(action, "option_strings", []):
+                action.required = False
+                break
 
     args = parser.parse_args()
 
@@ -1040,6 +1071,11 @@ def main():
         args.reference_genome = paths["reference_genome"]
         args.reference_annotation = paths["reference_annotation"]
         args.reference_transcriptome = paths["reference_transcriptome"]
+
+    # Validate that reference_genome is set (either via -g or --genome)
+    if not getattr(args, "reference_genome", None):
+        print("eFISHent: error: the following arguments are required: -g/--reference-genome (or use --genome)")
+        sys.exit(2)
 
     logger = set_logging_level(args.silent, args.debug)
 

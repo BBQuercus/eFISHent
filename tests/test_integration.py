@@ -9,6 +9,13 @@ import time
 import pandas as pd
 import pytest
 
+# Auto-discover deps installed by install.sh (same logic as eFISHent CLI)
+_deps_bin = os.path.join(os.path.expanduser("~"), ".local", "efishent", "deps", "bin")
+_deps_edirect = os.path.join(os.path.expanduser("~"), ".local", "efishent", "deps", "edirect")
+for _p in (_deps_bin, _deps_edirect):
+    if os.path.isdir(_p) and _p not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"{_p}:{os.environ.get('PATH', '')}"
+
 # Check for required external dependencies
 BOWTIE_AVAILABLE = shutil.which("bowtie") is not None
 BOWTIE_BUILD_AVAILABLE = shutil.which("bowtie-build") is not None
@@ -23,39 +30,30 @@ GLPK_AVAILABLE = shutil.which("glpsol") is not None
 def _esearch_works():
     """Check if esearch actually works (not just installed).
 
-    Tests the full pipeline (esearch | elink | efetch) with a known-good query
-    to verify it can actually retrieve FASTA data.
+    Tests the same esearch | efetch pipeline that eFISHent uses internally
+    (queries nuccore directly, no elink step) with a known-good query.
     """
     if not ESEARCH_AVAILABLE:
         return False
     try:
-        # Test full pipeline with a simple, reliable query
         search = subprocess.run(
-            ["esearch", "-db", "gene", "-query", "human insulin"],
+            ["esearch", "-db", "nuccore", "-query",
+             "(AAD4[Gene Name]) AND Saccharomyces cerevisiae[Organism] AND refseq[filter]"],
             capture_output=True,
-            timeout=15,
-        )
-        link = subprocess.run(
-            ["elink", "-db", "gene", "-target", "nuccore", "-name", "gene_nuccore_refseqrna"],
-            input=search.stdout,
-            capture_output=True,
-            timeout=15,
+            timeout=30,
         )
         fetch = subprocess.run(
             ["efetch", "-format", "fasta"],
-            input=link.stdout,
+            input=search.stdout,
             capture_output=True,
-            timeout=15,
+            timeout=30,
         )
         fasta = fetch.stdout.decode()
 
         # Valid result must contain FASTA header and no error patterns
         if ">" not in fasta:
             return False
-        fasta_nospace = fasta.replace(" ", "")
         if "Error" in fasta or "Failed" in fasta:
-            return False
-        if "Error" in fasta_nospace or "Failed" in fasta_nospace:
             return False
         return True
     except Exception:
@@ -318,6 +316,100 @@ def test_low_complexity_filters_active():
     csv_files = sorted(glob.glob("./renilla_*.csv"))
     assert len(csv_files) >= 1
     [os.remove(f) for f in glob.glob("./renilla_*") if os.path.isfile(f)]  # type: ignore
+
+
+@pytest.mark.skipif(not ALL_TOOLS_AVAILABLE, reason="bowtie2/bowtie2-build/jellyfish not installed")
+def test_genome_flag_e2e():
+    """End-to-end: --genome yeast downloads from HF and produces probe output."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as cache_dir:
+        args = [
+            "efishent",
+            "--genome", "yeast",
+            "--index-cache-dir", cache_dir,
+            "--sequence-file", "./tests/data/renilla.fasta",
+            "--is-endogenous", "False",
+            "--min-length", "20",
+            "--max-length", "24",
+            "--min-tm", "45",
+            "--max-tm", "55",
+            "--sequence-similarity", "95",
+            "--allow-no-transcriptome", "True",
+            "--debug",
+        ]
+        result = subprocess.run(args, check=True)
+        assert result.returncode == 0
+
+        # Verify probe output files exist
+        csv_files = sorted(glob.glob("./renilla_*.csv"))
+        assert len(csv_files) >= 1, "Expected at least one CSV output file with probes"
+
+        # Verify the CSV contains actual probes
+        df = pd.read_csv(csv_files[0])
+        assert len(df) > 0, "Expected probes in the output CSV"
+        assert "sequence" in df.columns
+        assert "length" in df.columns
+
+        # Clean up output files
+        for f in glob.glob("./renilla_*"):
+            if os.path.isfile(f):
+                os.remove(f)
+
+
+@pytest.mark.skipif(not ALL_TOOLS_AVAILABLE, reason="bowtie2/bowtie2-build/jellyfish not installed")
+@pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
+def test_genome_flag_with_gene_name_e2e():
+    """End-to-end: --genome + --gene-name downloads from HF + NCBI and produces probes.
+
+    Mirrors the README command pattern (efishent --genome X --gene-name Y
+    --organism-name Z) using yeast instead of hg38 for speed.
+    """
+    import tempfile
+
+    # Clean up any leftover files from previous runs
+    for f in glob.glob("./Saccharomyces_cerevisiae_URA3_*"):
+        if os.path.isfile(f):
+            os.remove(f)
+
+    with tempfile.TemporaryDirectory() as cache_dir:
+        args = [
+            "efishent",
+            "--genome", "yeast",
+            "--index-cache-dir", cache_dir,
+            "--gene-name", "URA3",
+            "--organism-name", "Saccharomyces cerevisiae",
+            "--min-length", "40",
+            "--max-length", "50",
+            "--min-tm", "57",
+            "--max-tm", "67",
+            "--formamide-concentration", "20",
+            "--debug",
+        ]
+        result = subprocess.run(args, check=True)
+        assert result.returncode == 0
+
+        # Verify probe output files exist (final output is {name}.csv, not
+        # intermediates like {name}_counts.csv)
+        all_files = sorted(glob.glob("./Saccharomyces_cerevisiae_URA3_*"))
+        assert len(all_files) >= 1, "Expected output files"
+
+        # Find the final probe CSV (has columns: sequence, length, GC, TM, etc.)
+        csv_files = sorted(glob.glob("./Saccharomyces_cerevisiae_URA3_*.csv"))
+        probe_csv = None
+        for f in csv_files:
+            df = pd.read_csv(f)
+            if "sequence" in df.columns:
+                probe_csv = f
+                break
+        assert probe_csv is not None, f"No probe CSV found among: {csv_files}"
+        assert len(df) > 0, "Expected probes in the output CSV"
+        assert "length" in df.columns
+
+        # Clean up output files
+        for f in all_files:
+            if os.path.isfile(f):
+                os.remove(f)
 
 
 def test_error():

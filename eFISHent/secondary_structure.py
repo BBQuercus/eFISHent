@@ -44,13 +44,22 @@ def get_free_energy(sequence: Bio.SeqRecord.SeqRecord) -> float:
     # Use stdin/stdout to avoid temp file creation overhead
     fasta_input = f">{sequence.id}\n{str(sequence.seq)}\n"
     args_fold = [fold_path, "-", "-", "--bracket", "--MFE"]
-    result = subprocess.run(
-        args_fold,
-        input=fasta_input,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            args_fold,
+            input=fasta_input,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        logger = logging.getLogger("custom-logger")
+        logger.warning(
+            f"Fold failed for {sequence.id} (exit code {e.returncode}): "
+            f"{e.stderr.strip() or 'no error message'}. "
+            "Assuming no secondary structure (deltaG = 0)."
+        )
+        return 0.0
     sec = result.stdout
 
     # Format with secondary structure:

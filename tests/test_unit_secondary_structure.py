@@ -29,6 +29,35 @@ def test_get_free_energy(seq, deltag):
     assert get_free_energy(sequence) == deltag
 
 
+def test_get_free_energy_fold_failure_returns_zero():
+    """When Fold binary exits with non-zero status, return 0.0 instead of crashing."""
+    sequence = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCGATCG"), id="test")
+
+    with patch("eFISHent.secondary_structure.subprocess.run") as mock_run:
+        import subprocess
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1, cmd=["Fold", "-", "-"], stderr="some error"
+        )
+        energy = get_free_energy(sequence)
+    assert energy == 0.0
+
+
+def test_get_free_energy_fold_failure_logs_warning():
+    """When Fold binary fails, a warning should be logged."""
+    sequence = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCGATCG"), id="test_seq")
+
+    with patch("eFISHent.secondary_structure.subprocess.run") as mock_run:
+        import subprocess
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1, cmd=["Fold", "-", "-"], stderr="segfault"
+        )
+        import logging
+        with patch.object(logging.getLogger("custom-logger"), "warning") as mock_warn:
+            get_free_energy(sequence)
+            mock_warn.assert_called_once()
+            assert "test_seq" in mock_warn.call_args[0][0]
+
+
 def test_get_free_energy_unsupported_platform():
     """Test that unsupported platforms raise NotImplementedError.
 

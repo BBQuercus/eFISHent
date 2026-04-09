@@ -2,11 +2,14 @@
 
 import argparse
 import os
+import sys
 import tempfile
+from unittest.mock import patch
 
 import pytest
 
 from eFISHent.cli import (
+    _parse_args,
     existing_count_table,
     existing_fasta_file,
     existing_gtf_file,
@@ -329,3 +332,59 @@ class TestValidateArgs:
         default_args.gene_name = ""
         default_args.organism_name = ""
         validate_args(default_args, mock_parser)  # Should not raise
+
+
+class TestGenomeFlagBypassesRequiredGenome:
+    """Tests that --genome, --list-genomes, --download-genome bypass the -g requirement."""
+
+    def test_genome_flag_makes_reference_genome_optional(self):
+        """--genome should allow parsing without -g/--reference-genome."""
+        test_argv = [
+            "efishent",
+            "--genome", "hg38",
+            "--gene-name", "ACTB",
+            "--organism-name", "homo sapiens",
+            "--sequence-file", "./tests/data/renilla.fasta",
+        ]
+        with patch.object(sys, "argv", test_argv):
+            args = _parse_args()
+        # reference_genome should be None/default (not set), genome should be "hg38"
+        assert args.genome == "hg38"
+        assert not getattr(args, "reference_genome", None)
+
+    def test_list_genomes_flag_makes_reference_genome_optional(self):
+        """--list-genomes should allow parsing without -g/--reference-genome.
+
+        Note: _parse_args also runs validate_args which requires a sequence input,
+        but --list-genomes exits early in main() before that matters. We just need
+        to verify it doesn't fail with 'reference-genome is required'.
+        """
+        test_argv = [
+            "efishent", "--list-genomes",
+            "--sequence-file", "./tests/data/renilla.fasta",
+        ]
+        with patch.object(sys, "argv", test_argv):
+            args = _parse_args()
+        assert args.list_genomes is True
+
+    def test_download_genome_flag_makes_reference_genome_optional(self):
+        """--download-genome should allow parsing without -g/--reference-genome."""
+        test_argv = [
+            "efishent", "--download-genome", "hg38",
+            "--sequence-file", "./tests/data/renilla.fasta",
+        ]
+        with patch.object(sys, "argv", test_argv):
+            args = _parse_args()
+        assert args.download_genome == "hg38"
+
+    def test_no_genome_flag_still_requires_reference_genome(self):
+        """Without --genome flags, -g/--reference-genome is still required."""
+        test_argv = [
+            "efishent",
+            "--gene-name", "ACTB",
+            "--organism-name", "homo sapiens",
+            "--sequence-file", "./tests/data/renilla.fasta",
+        ]
+        with patch.object(sys, "argv", test_argv):
+            with pytest.raises(SystemExit):
+                _parse_args()

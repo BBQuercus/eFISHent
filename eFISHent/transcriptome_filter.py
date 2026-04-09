@@ -155,6 +155,11 @@ class TranscriptomeFiltering(luigi.Task):
         else:
             gene_pattern_clean = None
 
+        # Include the raw --gene-name CLI value (e.g., "URA3") which may differ
+        # from the file-based gene_name_raw (e.g., "saccharomyces_cerevisiae_ura3")
+        from .config import SequenceConfig
+        cli_gene_name = (SequenceConfig().gene_name or "").strip().lower()
+
         # Build transcript-to-gene mapping from GTF if available
         self_transcript_ids = set()
         gtf_path = GeneralConfig().reference_annotation
@@ -163,8 +168,11 @@ class TranscriptomeFiltering(luigi.Task):
                 from .gene_annotation import build_transcript_gene_map
                 tx_map = build_transcript_gene_map(gtf_path)
                 # Find all transcript IDs that belong to the target gene
-                # Try both raw and cleaned gene names
-                for search_name in {gene_name_raw, gene_name_clean}:
+                # Try raw name, cleaned name, and the CLI --gene-name value
+                search_names = {gene_name_raw, gene_name_clean}
+                if cli_gene_name:
+                    search_names.add(cli_gene_name)
+                for search_name in search_names:
                     for tid, gname in tx_map.items():
                         if gname.lower() == search_name:
                             self_transcript_ids.add(tid.lower())
@@ -176,6 +184,13 @@ class TranscriptomeFiltering(luigi.Task):
             except Exception as e:
                 self.logger.debug(f"GTF mapping failed, using name-based exclusion: {e}")
 
+        # Build regex for CLI gene name (e.g., "URA3" -> matches "YEL021W_URA3_mRNA")
+        if cli_gene_name:
+            cli_gene_esc = re.escape(cli_gene_name)
+            cli_gene_pattern = rf"(?:^|[|_\-.\s]){cli_gene_esc}(?:$|[|_\-.\s])"
+        else:
+            cli_gene_pattern = None
+
         def is_self_hit(sseqid):
             """Check if a subject sequence ID is a self-hit."""
             sid_lower = sseqid.lower()
@@ -184,6 +199,9 @@ class TranscriptomeFiltering(luigi.Task):
                 return True
             # Check cleaned gene name pattern
             if gene_pattern_clean and re.search(gene_pattern_clean, sid_lower):
+                return True
+            # Check CLI --gene-name in ID
+            if cli_gene_pattern and re.search(cli_gene_pattern, sid_lower):
                 return True
             # Check GTF mapping (Ensembl-style)
             if sid_lower in self_transcript_ids:

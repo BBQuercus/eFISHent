@@ -221,7 +221,7 @@ def download_genome(
     try:
         files = [
             item.rfilename
-            for item in list_repo_tree(HF_REPO_ID, path_in_repo=genome_id)
+            for item in list_repo_tree(HF_REPO_ID, path_in_repo=genome_id, repo_type="dataset")
             if hasattr(item, "rfilename")
         ]
     except Exception as e:
@@ -243,6 +243,7 @@ def download_genome(
             hf_hub_download(
                 repo_id=HF_REPO_ID,
                 filename=filepath,
+                repo_type="dataset",
                 local_dir=get_cache_dir(cache_dir),
                 local_dir_use_symlinks=False,
             )
