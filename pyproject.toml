@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eFISHent"
-version = "0.0.14"
+version = "0.0.15"
 description = "RNA FISH oligos/probes design tool."
 readme = "README.md"
 license = "MIT"
@@ -29,7 +29,6 @@ classifiers = [
 ]
 dependencies = [
     "biopython",
-    "gtfparse",
     "huggingface_hub",
     "luigi",
     "matplotlib",
