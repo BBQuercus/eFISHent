@@ -708,6 +708,7 @@ def check_required_dependencies(args: argparse.Namespace) -> List[str]:
 
     # Fold is required for the full pipeline (not for index building)
     if not args.build_indices:
+        from .secondary_structure import _is_rnastructure_fold
         system_fold = shutil.which("Fold")
         if not (system_fold and _is_rnastructure_fold(system_fold)):
             fold_path = Path(__file__).resolve().parent
