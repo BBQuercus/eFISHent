@@ -900,7 +900,9 @@ def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
 
     logging.basicConfig(handlers=handlers, force=True)  # type: ignore
     logging.getLogger("luigi").setLevel(luigi_level)
-    logging.getLogger("luigi-interface").setLevel(luigi_level)
+    # Keep luigi-interface at CRITICAL to suppress the execution summary
+    # (eFISHent already shows its own completion panel).
+    logging.getLogger("luigi-interface").setLevel(logging.CRITICAL)
     luigi.interface.core.log_level = luigi_level  # type: ignore
 
     logger = logging.getLogger("custom-logger")
