@@ -59,6 +59,8 @@ HF_REPO_ID = "bbquercus/efishent"
 # Default cache directory
 DEFAULT_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".local", "efishent", "indices")
 
+METADATA_FILENAME = "metadata.json"
+
 # Files expected per genome
 GENOME_FILES = [
     "genome.fa",
@@ -75,7 +77,7 @@ GENOME_FILES = [
     "transcriptome.fa.ndb", "transcriptome.fa.not", "transcriptome.fa.ntf",
     "transcriptome.fa.nto", "transcriptome.fa.njs",
     # Metadata
-    "metadata.json",
+    METADATA_FILENAME,
 ]
 
 
@@ -131,7 +133,7 @@ def get_genome_dir(genome_id: str, cache_dir: Optional[str] = None) -> str:
 def is_genome_cached(genome_id: str, cache_dir: Optional[str] = None) -> bool:
     """Check if a genome's indices are already cached and valid."""
     genome_dir = get_genome_dir(genome_id, cache_dir)
-    metadata_path = os.path.join(genome_dir, "metadata.json")
+    metadata_path = os.path.join(genome_dir, METADATA_FILENAME)
 
     if not os.path.isfile(metadata_path):
         return False
@@ -157,16 +159,16 @@ def verify_checksums(
         Tuple of (all_valid, list_of_failed_files).
     """
     genome_dir = get_genome_dir(genome_id, cache_dir)
-    metadata_path = os.path.join(genome_dir, "metadata.json")
+    metadata_path = os.path.join(genome_dir, METADATA_FILENAME)
 
     if not os.path.isfile(metadata_path):
-        return False, ["metadata.json missing"]
+        return False, [f"{METADATA_FILENAME} missing"]
 
     try:
         with open(metadata_path) as f:
             metadata = json.load(f)
     except (json.JSONDecodeError, KeyError):
-        return False, ["metadata.json corrupt"]
+        return False, [f"{METADATA_FILENAME} corrupt"]
 
     failed = []
     for filename, expected_hash in metadata.get("files", {}).items():
@@ -244,6 +246,7 @@ def download_genome(
                 repo_id=HF_REPO_ID,
                 filename=filepath,
                 repo_type="dataset",
+                revision="main",
                 local_dir=get_cache_dir(cache_dir),
                 local_dir_use_symlinks=False,
             )

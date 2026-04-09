@@ -79,7 +79,8 @@ def test_prettify_table(task_cleanup):
             assert col in output.columns
         assert len(output) == len(sequences)
         assert output.loc[0, "name"] == "test-1"
-        assert output.loc[len(sequences) - 1, "name"] == f"test-{len(sequences)}"
+        last_idx = len(sequences) - 1
+        assert output.loc[last_idx, "name"] == f"test-{len(sequences)}"
         assert output.loc[0, "GC"] == 50
         assert output.loc[3, "GC"] == pytest.approx(66.67)
     finally:

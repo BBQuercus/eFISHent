@@ -38,6 +38,20 @@ from .optimization import OptimizeProbeCoverage
 from .secondary_structure import get_free_energy
 
 
+def _classify_expression_risk(gene: str, gene_expression: Dict[str, float]) -> Optional[str]:
+    """Classify expression risk for a single off-target gene."""
+    if gene not in gene_expression:
+        return None
+    expr = gene_expression[gene]
+    if expr > 50:
+        return f"{gene}:HIGH({expr:.0f})"
+    if expr > 10:
+        return f"{gene}:moderate({expr:.0f})"
+    if expr > 1:
+        return f"{gene}:low({expr:.0f})"
+    return None  # <1 TPM = negligible
+
+
 class CleanUpOutput(luigi.Task):
     """Clean up the output files and remove the intermediaries that are not needed."""
 
@@ -356,18 +370,11 @@ class CleanUpOutput(luigi.Task):
                 continue
 
             risks = []
-            # Parse "GENE(count)" format
             for match in re.finditer(r"([^,\s]+)\(\d+\)", genes_str):
                 gene = match.group(1)
-                if gene in gene_expression:
-                    expr = gene_expression[gene]
-                    if expr > 50:
-                        risks.append(f"{gene}:HIGH({expr:.0f})")
-                    elif expr > 10:
-                        risks.append(f"{gene}:moderate({expr:.0f})")
-                    elif expr > 1:
-                        risks.append(f"{gene}:low({expr:.0f})")
-                    # <1 TPM = negligible, skip
+                risk = _classify_expression_risk(gene, gene_expression)
+                if risk:
+                    risks.append(risk)
 
             if risks:
                 df.at[idx, "expression_risk"] = "; ".join(risks)
@@ -833,7 +840,7 @@ class CleanUpOutput(luigi.Task):
                 break
 
             # Remove the lowest-quality probe among those hitting the most over-represented gene
-            worst_gene = max(over_cap, key=lambda g: len(over_cap[g]))
+            worst_gene = max(over_cap, key=lambda g, oc=over_cap: len(oc[g]))
             probe_indices = over_cap[worst_gene]
             # Find the probe with lowest quality among these
             worst_idx = df.loc[probe_indices, "quality"].idxmin()

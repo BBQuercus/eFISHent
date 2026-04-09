@@ -575,7 +575,7 @@ def _ensure_deps_on_path() -> None:
             os.environ[lib_var] = f"{deps_lib}:{os.environ.get(lib_var, '')}"
 
 
-def _get_tool_version(name: str, args: list, pattern: str = r"[0-9]+\.[0-9]+\.?[0-9]*") -> str:
+def _get_tool_version(_name: str, args: list, pattern: str = r"[0-9]+\.[0-9]+\.?[0-9]*") -> str:
     """Try to get a tool's version string."""
     import re
 
@@ -927,9 +927,12 @@ def check_for_updates() -> None:
 
             # Query PyPI
             import urllib.request
+            import urllib.parse
             url = "https://pypi.org/pypi/efishent/json"
+            if urllib.parse.urlparse(url).scheme != "https":
+                return
             req = urllib.request.Request(url, headers={"Accept": "application/json"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
                 data = json.loads(resp.read().decode())
             latest = data.get("info", {}).get("version", "")
 

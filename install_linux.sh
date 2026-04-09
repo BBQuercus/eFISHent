@@ -145,18 +145,25 @@ export LD_LIBRARY_PATH="${INSTALL_DIR}/lib:\${LD_LIBRARY_PATH}"
 EOF
 
 # Activate and verify installation
+# shellcheck source=/dev/null
 source "${INSTALL_DIR}/activate.sh"
 
 echo ""
 echo "=================================================="
 echo "Installation complete! Installed versions:"
 echo ""
-echo "  bowtie:      $(bowtie --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
-echo "  bowtie2:     $(bowtie2 --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
-echo "  jellyfish:   $(jellyfish --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
-echo "  blastn:      $(blastn -version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
-echo "  glpsol:      $(glpsol --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+')"
-echo "  edirect:     $(esearch -version 2>&1 | head -1)"
+bowtie_ver="$(bowtie --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+bowtie2_ver="$(bowtie2 --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+jellyfish_ver="$(jellyfish --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+blastn_ver="$(blastn -version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+glpsol_ver="$(glpsol --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+')"
+edirect_ver="$(esearch -version 2>&1 | head -1)"
+echo "  bowtie:      $bowtie_ver"
+echo "  bowtie2:     $bowtie2_ver"
+echo "  jellyfish:   $jellyfish_ver"
+echo "  blastn:      $blastn_ver"
+echo "  glpsol:      $glpsol_ver"
+echo "  edirect:     $edirect_ver"
 if [ -f "${BIN_DIR}/Fold" ]; then
     echo "  Fold:        installed"
 else

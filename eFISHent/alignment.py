@@ -103,7 +103,7 @@ class AlignProbeCandidates(luigi.Task):
             )
         sep = "\t" if extension in (".tsv", ".txt") else ","
         df = pd.read_csv(self.fname_count, sep=sep, index_col=0).reset_index().dropna()
-        if not len(df.columns) >= 2:
+        if len(df.columns) < 2:
             raise ValueError(
                 "The count table must contain at least 2 columns."
                 f"Only found - {df.columns}"
@@ -279,7 +279,6 @@ class AlignProbeCandidates(luigi.Task):
         """Convert string based pysam output to a DataFrame."""
         # Parse tab and newline delimited pysam output
         data = [row.split("\t")[:10] for row in sam.split("\n")]
-        # end = 14 if is_endogenous else 12
         columns = constants.SAMFILE_COLUMNS[:10]
 
         # If empty [['']]

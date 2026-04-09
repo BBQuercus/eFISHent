@@ -194,23 +194,15 @@ class TranscriptomeFiltering(luigi.Task):
         def is_self_hit(sseqid):
             """Check if a subject sequence ID is a self-hit."""
             sid_lower = sseqid.lower()
-            # Check gene name in ID (gffread-style)
-            if re.search(gene_pattern, sid_lower):
-                return True
-            # Check cleaned gene name pattern
-            if gene_pattern_clean and re.search(gene_pattern_clean, sid_lower):
-                return True
-            # Check CLI --gene-name in ID
-            if cli_gene_pattern and re.search(cli_gene_pattern, sid_lower):
-                return True
-            # Check GTF mapping (Ensembl-style)
-            if sid_lower in self_transcript_ids:
-                return True
-            # Check without version suffix
             base = sid_lower.split(".")[0]
-            if base in self_transcript_ids:
-                return True
-            return False
+
+            # Check gene name patterns (gffread-style, cleaned, CLI)
+            patterns = [p for p in (gene_pattern, gene_pattern_clean, cli_gene_pattern) if p]
+            return (
+                any(re.search(p, sid_lower) for p in patterns)
+                or sid_lower in self_transcript_ids
+                or base in self_transcript_ids
+            )
 
         off_target_counts = {}
         for probe_id, group in df_hits.groupby("qseqid"):

@@ -117,7 +117,7 @@ echo "=== All yeast indices built ==="
 echo "Total size: $(du -sh . | cut -f1)"
 echo ""
 echo "Files:"
-ls -lh *.fa *.gtf *.bt2 *.jf transcriptome.fa.* 2>/dev/null
+ls -lh ./*.fa ./*.gtf ./*.bt2 ./*.jf ./transcriptome.fa.* 2>/dev/null
 echo ""
 echo "Next steps:"
 echo "  1. Run: bash scripts/prepare_yeast_hf_upload.sh $(pwd) /tmp/efishent-hf"

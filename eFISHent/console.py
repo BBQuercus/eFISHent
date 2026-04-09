@@ -462,7 +462,7 @@ def print_stage(order: int, total: int, description: str) -> None:
         )
 
 
-def print_candidate_count(name: str, count: int, count_prev: int = 0) -> None:
+def print_candidate_count(_name: str, count: int, count_prev: int = 0) -> None:
     """Print candidate count with optional comparison."""
     if _silent_mode:
         return

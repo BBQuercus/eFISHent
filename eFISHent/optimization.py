@@ -220,46 +220,18 @@ class OptimizeProbeCoverage(luigi.Task):
                 continue
 
             # This probe is an outlier — look for better alternatives
-            probe_start = int(name.split("-")[-1])
             probe_row = self.df[self.df["name"] == name]
             if probe_row.empty:
                 continue
+
+            probe_start = int(name.split("-")[-1])
             probe_end = int(probe_row.iloc[0]["end"])
 
-            best_alt = None
-            best_alt_deviation = deviation
-
-            for alt in unassigned:
-                alt_start = int(alt.id.split("-")[-1])
-                alt_end = alt_start + len(alt)
-
-                # Alternative must be at a nearby position (overlapping region)
-                if alt_end < probe_start or alt_start > probe_end:
-                    continue
-
-                # Check it doesn't overlap with other assigned probes
-                overlaps = False
-                for j, other_name in enumerate(new_assigned):
-                    if j == i:
-                        continue
-                    other_row = self.df[self.df["name"] == other_name]
-                    if not other_row.empty:
-                        other_start = int(other_row.iloc[0]["start"])
-                        other_end = int(other_row.iloc[0]["end"])
-                        if is_overlapping(
-                            (alt_start, alt_end), (other_start, other_end)
-                        ):
-                            overlaps = True
-                            break
-
-                if overlaps:
-                    continue
-
-                alt_tm = get_melting_temp(alt.seq, na, formamide)
-                alt_deviation = abs(alt_tm - median_tm)
-                if alt_deviation < best_alt_deviation:
-                    best_alt = alt
-                    best_alt_deviation = alt_deviation
+            best_alt, best_alt_deviation = _find_best_tm_alternative(
+                unassigned, new_assigned, i, self.df,
+                probe_start, probe_end, deviation,
+                median_tm, na, formamide, get_melting_temp,
+            )
 
             if best_alt and best_alt_deviation < deviation - 1.0:
                 new_assigned[i] = best_alt.id
@@ -272,6 +244,55 @@ class OptimizeProbeCoverage(luigi.Task):
             )
 
         return new_assigned
+
+
+def _overlaps_other_assigned(
+    alt_start: int,
+    alt_end: int,
+    new_assigned: List[str],
+    skip_idx: int,
+    df: pd.DataFrame,
+) -> bool:
+    """Check if an alternative probe overlaps any other assigned probe."""
+    for j, other_name in enumerate(new_assigned):
+        if j == skip_idx:
+            continue
+        other_row = df[df["name"] == other_name]
+        if not other_row.empty:
+            other_start = int(other_row.iloc[0]["start"])
+            other_end = int(other_row.iloc[0]["end"])
+            if is_overlapping((alt_start, alt_end), (other_start, other_end)):
+                return True
+    return False
+
+
+def _find_best_tm_alternative(
+    unassigned, new_assigned, skip_idx, df,
+    probe_start, probe_end, current_deviation,
+    median_tm, na, formamide, get_melting_temp_fn,
+):
+    """Find the best alternative probe with lower Tm deviation."""
+    best_alt = None
+    best_alt_deviation = current_deviation
+
+    for alt in unassigned:
+        alt_start = int(alt.id.split("-")[-1])
+        alt_end = alt_start + len(alt)
+
+        # Alternative must be at a nearby position (overlapping region)
+        if alt_end < probe_start or alt_start > probe_end:
+            continue
+
+        if _overlaps_other_assigned(alt_start, alt_end, new_assigned, skip_idx, df):
+            continue
+
+        alt_tm = get_melting_temp_fn(alt.seq, na, formamide)
+        alt_deviation = abs(alt_tm - median_tm)
+        if alt_deviation < best_alt_deviation:
+            best_alt = alt
+            best_alt_deviation = alt_deviation
+
+    return best_alt, best_alt_deviation
 
 
 def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
@@ -409,8 +430,6 @@ def compute_pre_optimization_quality(df: pd.DataFrame) -> pd.Series:
     Data-driven from n=84 probe set analysis. Returns scores in [0, 1].
     """
     from .basic_filtering import get_gc_content, get_cpg_fraction
-
-    scores = pd.Series(1.0, index=df.index)
 
     # GC score: optimal 45-52%, steep penalty above 55%
     gc_vals = df["sequence"].apply(lambda s: get_gc_content(Bio.Seq.Seq(s)))

@@ -53,7 +53,7 @@ fi
 info()  { printf "%s %s\n" "${GREEN}✓${RESET}" "$1"; }
 warn()  { printf "%s %s\n" "${YELLOW}!${RESET}" "$1"; }
 err()   { printf "%s %s\n" "${RED}✗${RESET}" "$1" >&2; }
-step()  { printf "\n%s\n" "${BOLD}$1${RESET}"; }
+step()  { printf "\n%s%s%s\n" "${BOLD}" "$1" "${RESET}"; }
 
 need_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -188,8 +188,9 @@ else
         linux-aarch64)
             # No pre-built aarch64 bowtie — check if it's already on PATH
             if command -v bowtie >/dev/null 2>&1; then
-                info "Using system bowtie: $(command -v bowtie)"
-                ln -sf "$(command -v bowtie)" "${BIN_DIR}/bowtie"
+                bowtie_path="$(command -v bowtie)"
+                info "Using system bowtie: $bowtie_path"
+                ln -sf "$bowtie_path" "${BIN_DIR}/bowtie"
                 BOWTIE_URL=""
             else
                 err "No pre-built Bowtie for Linux aarch64."
@@ -237,9 +238,11 @@ else
         macos-x86_64)
             # No native x86_64 macOS build — ARM build works via Rosetta, or use system install
             if command -v bowtie2 >/dev/null 2>&1; then
-                info "Using system bowtie2: $(command -v bowtie2)"
-                ln -sf "$(command -v bowtie2)" "${BIN_DIR}/bowtie2"
-                ln -sf "$(command -v bowtie2-build)" "${BIN_DIR}/bowtie2-build" 2>/dev/null || true
+                bt2_path="$(command -v bowtie2)"
+                info "Using system bowtie2: $bt2_path"
+                ln -sf "$bt2_path" "${BIN_DIR}/bowtie2"
+                bt2_build_path="$(command -v bowtie2-build)" || true
+                ln -sf "$bt2_build_path" "${BIN_DIR}/bowtie2-build" 2>/dev/null || true
                 BOWTIE2_URL=""
             else
                 err "No pre-built Bowtie2 for macOS x86_64."
@@ -316,8 +319,9 @@ step "[4/9] GLPK (linear programming solver)"
 if [ -f "${BIN_DIR}/glpsol" ]; then
     info "Already installed"
 elif command -v glpsol >/dev/null 2>&1; then
-    info "Using system glpsol: $(command -v glpsol)"
-    ln -sf "$(command -v glpsol)" "${BIN_DIR}/glpsol"
+    glpsol_path="$(command -v glpsol)"
+    info "Using system glpsol: $glpsol_path"
+    ln -sf "$glpsol_path" "${BIN_DIR}/glpsol"
 else
     if [ "$HAS_COMPILER" = true ] && [ "$HAS_MAKE" = true ]; then
         printf "  Compiling from source (this may take a minute)...\n"
@@ -356,7 +360,8 @@ step "[5/9] Entrez Direct (NCBI tools — optional)"
 if [ -f "${EDIRECT_DIR}/esearch" ]; then
     info "Already installed"
 elif command -v esearch >/dev/null 2>&1; then
-    info "Using system esearch: $(command -v esearch)"
+    esearch_path="$(command -v esearch)"
+    info "Using system esearch: $esearch_path"
 else
     # Backup existing ~/edirect if present
     EDIRECT_BACKUP=""
@@ -689,7 +694,8 @@ CHECKS_PASSED=true
 
 for tool in bowtie bowtie2 jellyfish; do
     if command -v "$tool" >/dev/null 2>&1; then
-        info "$tool: $(command -v "$tool")"
+        tool_path="$(command -v "$tool")"
+        info "$tool: $tool_path"
     else
         err "$tool: not found"
         CHECKS_PASSED=false
@@ -699,7 +705,8 @@ done
 # Optional tools
 for tool in glpsol esearch blastn dustmasker gffread; do
     if command -v "$tool" >/dev/null 2>&1; then
-        info "$tool: $(command -v "$tool")"
+        tool_path="$(command -v "$tool")"
+        info "$tool: $tool_path"
     else
         warn "$tool: not found (optional)"
     fi
@@ -715,27 +722,32 @@ if [ "$DEPS_ONLY" = false ]; then
     fi
 fi
 
+if [ "$CHECKS_PASSED" = false ]; then
+    err "Some required tools are missing. Check the errors above."
+    exit 1
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 printf "\n%s\n\n" "${BOLD}${GREEN}Installation complete!${RESET}"
 
 if [ "$RC_UPDATED" = true ]; then
-    printf "  Your PATH has been updated in ${CYAN}${RC_FILE}${RESET}.\n"
-    printf "  To use efishent in ${BOLD}this${RESET} terminal, run:\n\n"
-    printf "    ${CYAN}source ${RC_FILE}${RESET}\n\n"
+    printf "  Your PATH has been updated in %s.\n" "${CYAN}${RC_FILE}${RESET}"
+    printf "  To use efishent in %sthis%s terminal, run:\n\n" "${BOLD}" "${RESET}"
+    printf "    %ssource %s%s\n\n" "${CYAN}" "${RC_FILE}" "${RESET}"
     printf "  New terminal windows will work automatically.\n\n"
 fi
 
 printf "  Get started:\n"
-printf "    ${CYAN}efishent --check${RESET}       Verify all dependencies\n"
-printf "    ${CYAN}efishent --help${RESET}        Show usage\n"
-printf "    ${CYAN}efishent --preset list${RESET}  Show parameter presets\n"
+printf "    %sefishent --check%s       Verify all dependencies\n" "${CYAN}" "${RESET}"
+printf "    %sefishent --help%s        Show usage\n" "${CYAN}" "${RESET}"
+printf "    %sefishent --preset list%s  Show parameter presets\n" "${CYAN}" "${RESET}"
 printf "\n"
 
 # Print optional dependency notes
 if [ "$WITH_BLAST" = false ] && ! command -v blastn >/dev/null 2>&1; then
-    printf "  ${YELLOW}Note:${RESET} BLAST+ not installed. Re-run with ${CYAN}--with-blast${RESET} if you need\n"
-    printf "  transcriptome off-target filtering (${CYAN}--reference-transcriptome${RESET}).\n\n"
+    printf "  %sNote:%s BLAST+ not installed. Re-run with %s--with-blast%s if you need\n" "${YELLOW}" "${RESET}" "${CYAN}" "${RESET}"
+    printf "  transcriptome off-target filtering (%s--reference-transcriptome%s).\n\n" "${CYAN}" "${RESET}"
 fi
 if ! command -v gffread >/dev/null 2>&1; then
     printf "  ${YELLOW}Note:${RESET} gffread is not installed. It is needed to build a transcriptome\n"
