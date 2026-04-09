@@ -181,12 +181,7 @@ class KMerFiltering(luigi.Task):
     logger = logging.getLogger("custom-logger")
 
     def requires(self):
-        if GeneralConfig().reference_transcriptome:
-            from .transcriptome_filter import TranscriptomeFiltering
-            probe_task = TranscriptomeFiltering()
-        else:
-            probe_task = AlignProbeCandidates()
-        return {"jellyfish": BuildJellyfishIndex(), "probes": probe_task}
+        return {"jellyfish": BuildJellyfishIndex(), "probes": AlignProbeCandidates()}
 
     def output(self):
         return luigi.LocalTarget(

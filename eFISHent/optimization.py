@@ -29,6 +29,9 @@ class OptimizeProbeCoverage(luigi.Task):
     logger = logging.getLogger("custom-logger")
 
     def requires(self):
+        if GeneralConfig().reference_transcriptome:
+            from .transcriptome_filter import TranscriptomeFiltering
+            return TranscriptomeFiltering()
         return SecondaryStructureFiltering()
 
     def output(self):
@@ -100,7 +103,9 @@ class OptimizeProbeCoverage(luigi.Task):
 
     def run(self):
         util.log_stage_start(self.logger, "OptimizeProbeCoverage")
-        sequences = list(Bio.SeqIO.parse(self.input().path, "fasta"))
+        inp = self.input()
+        fasta_path = inp["fasta"].path if isinstance(inp, dict) else inp.path
+        sequences = list(Bio.SeqIO.parse(fasta_path, "fasta"))
         self.df = util.create_data_table(sequences)
         self.df["end"] += ProbeConfig().spacing
 

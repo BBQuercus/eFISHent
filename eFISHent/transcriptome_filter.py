@@ -19,7 +19,6 @@ import luigi
 import pandas as pd
 
 from . import util
-from .alignment import AlignProbeCandidates
 from .config import GeneralConfig
 from .config import ProbeConfig
 
@@ -62,8 +61,9 @@ class TranscriptomeFiltering(luigi.Task):
     logger = logging.getLogger("custom-logger")
 
     def requires(self):
+        from .secondary_structure import SecondaryStructureFiltering
         return {
-            "probes": AlignProbeCandidates(),
+            "probes": SecondaryStructureFiltering(),
             "blastdb": BuildTranscriptomeBlastDB(),
         }
 
@@ -108,7 +108,9 @@ class TranscriptomeFiltering(luigi.Task):
 
     def run(self):
         util.log_stage_start(self.logger, "TranscriptomeFiltering")
-        probe_fasta = self.input()["probes"]["fasta"].path
+        probes_input = self.input()["probes"]
+        # SecondaryStructureFiltering returns a single LocalTarget
+        probe_fasta = probes_input.path if hasattr(probes_input, "path") else probes_input["fasta"].path
         sequences = list(Bio.SeqIO.parse(probe_fasta, "fasta"))
 
         txome_db = os.path.abspath(GeneralConfig().reference_transcriptome)
