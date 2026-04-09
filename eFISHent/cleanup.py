@@ -268,16 +268,17 @@ class CleanUpOutput(luigi.Task):
                 100.0 * 15 / cfg.max_length,
             )
 
+            blast_task = "blastn-short" if cfg.max_length <= 30 else "blastn"
             args = [
-                "blastn", "-task", "blastn",
+                "blastn", "-task", blast_task,
                 "-query", tmp_fasta,
                 "-db", txome_db,
-                "-evalue", "1000",
+                "-evalue", "100",
                 "-word_size", "7",
                 "-gapopen", "5", "-gapextend", "2",
                 "-reward", "1", "-penalty", "-3",
                 "-dust", "no",
-                "-num_alignments", "1000",
+                "-max_target_seqs", "50",
                 "-perc_identity", str(perc_identity),
                 "-num_threads", str(GeneralConfig().threads),
                 "-outfmt", "6 qseqid sseqid pident length mismatch gapopen "

@@ -87,20 +87,27 @@ class TranscriptomeFiltering(luigi.Task):
         max_probe_len = config.max_length
         perc_identity = max(config.blast_identity_threshold, 100.0 * 15 / max_probe_len)
 
+        # Use blastn-short for probe-length queries (<30bp) — optimized seed
+        # strategy and scoring for short sequences
+        blast_task = "blastn-short" if max_probe_len <= 30 else "blastn"
+
         # BLAST parameters derived from TrueProbes
+        # -max_target_seqs 50: we only need enough off-target transcripts to
+        # count unique hits and detect cross-hybridization. 50 is sufficient
+        # since max_transcriptome_off_targets is typically 0-3.
         args = [
             "blastn",
-            "-task", "blastn",
+            "-task", blast_task,
             "-query", probe_fasta,
             "-db", txome_db,
-            "-evalue", "1000",
+            "-evalue", "100",
             "-word_size", "7",
             "-gapopen", "5",
             "-gapextend", "2",
             "-reward", "1",
             "-penalty", "-3",
             "-dust", "no",
-            "-num_alignments", "1000",
+            "-max_target_seqs", "50",
             "-perc_identity", str(perc_identity),
             "-num_threads", str(GeneralConfig().threads),
             "-outfmt", "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore",
