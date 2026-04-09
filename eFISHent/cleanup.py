@@ -718,7 +718,20 @@ class CleanUpOutput(luigi.Task):
                 # For exogenous probes, 0 self-hits expected (not in genome)
                 # For endogenous probes, 1 self-hit expected (target locus)
                 is_endogenous = SequenceConfig().is_endogenous
-                max_expected = ProbeConfig().max_off_targets + (1 if is_endogenous else 0)
+                max_off = ProbeConfig().max_off_targets
+                max_expected = max_off + (1 if is_endogenous else 0)
+
+                # When transcriptome BLAST handles off-target detection and
+                # max_off_targets is at default (0), skip genomic count check
+                # (same logic as alignment filter — pseudogenes inflate counts)
+                has_transcriptome = bool(GeneralConfig().reference_transcriptome)
+                if has_transcriptome and max_off == 0 and is_endogenous:
+                    return {
+                        "total": len(probes),
+                        "clean": len(probes),
+                        "flagged": {},
+                        "max_expected": max_expected,
+                    }
 
                 clean = sum(
                     1 for p in probes

@@ -895,6 +895,63 @@ def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
     return logger
 
 
+def check_for_updates() -> None:
+    """Check PyPI for a newer version and notify the user.
+
+    Non-blocking: runs in a background thread so it doesn't slow startup.
+    Caches the result for 24 hours to avoid repeated network requests.
+    """
+    import json
+    import threading
+
+    cache_dir = Path.home() / ".local" / "efishent"
+    cache_file = cache_dir / "update_check.json"
+
+    def _check():
+        try:
+            # Check cache first (skip if checked within last 24 hours)
+            if cache_file.exists():
+                with open(cache_file) as f:
+                    cache = json.load(f)
+                last_check = cache.get("timestamp", 0)
+                if time.time() - last_check < 86400:  # 24 hours
+                    latest = cache.get("latest_version", "")
+                    if latest and latest != __version__:
+                        from packaging.version import Version
+                        if Version(latest) > Version(__version__):
+                            print(
+                                f"\n  Update available: v{__version__} -> v{latest}"
+                                f"  (run 'efishent --update' to upgrade)\n"
+                            )
+                    return
+
+            # Query PyPI
+            import urllib.request
+            url = "https://pypi.org/pypi/efishent/json"
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+            latest = data.get("info", {}).get("version", "")
+
+            # Cache result
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            with open(cache_file, "w") as f:
+                json.dump({"timestamp": time.time(), "latest_version": latest}, f)
+
+            if latest and latest != __version__:
+                from packaging.version import Version
+                if Version(latest) > Version(__version__):
+                    print(
+                        f"\n  Update available: v{__version__} -> v{latest}"
+                        f"  (run 'efishent --update' to upgrade)\n"
+                    )
+        except Exception:
+            pass  # Never fail the pipeline for an update check
+
+    thread = threading.Thread(target=_check, daemon=True)
+    thread.start()
+
+
 def self_update() -> None:
     """Update eFISHent and its dependencies to the latest version."""
     python = sys.executable
@@ -1082,6 +1139,7 @@ def main():
     # Print header banner
     if not args.silent:
         print_header(__version__)
+        check_for_updates()
     else:
         logger.info(f"{UniCode.fishing} eFISHent v{__version__} starting...")
 

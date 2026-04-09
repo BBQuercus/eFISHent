@@ -333,10 +333,18 @@ class ProbeConfig(luigi.Config):
     reject_cross_hybridization = luigi.BoolParameter(
         description=(
             "Hard-reject probes with strong cross-hybridization to off-target "
-            "transcripts (>=16nt contiguous match at >=95%% identity, no gaps). "
+            "transcripts (contiguous match at >=95%% identity, no gaps). "
             "Without this, such probes are only flagged as warnings."
         ),
         default=True,
+    )
+    cross_hyb_min_length = luigi.IntParameter(
+        description=(
+            "Minimum contiguous match length (nt) for cross-hybridization rejection. "
+            "Default 0 = auto-calculate as 85%% of each probe's length. "
+            "Set explicitly to override (e.g., 14 for permissive, 18 for strict)."
+        ),
+        default=0,
     )
     filter_g_quadruplex = luigi.BoolParameter(
         description=(

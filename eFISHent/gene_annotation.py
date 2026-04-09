@@ -198,6 +198,27 @@ def aggregate_off_target_genes(
     target_clean = re.sub(
         r"[_\-]?(cds|mrna|transcript|seq|odd|even).*$", "", target_lower
     )
+
+    # Build set of target gene name variants for self-hit detection.
+    # target_gene may be "homo_sapiens_actb" (file-based) while the GTF
+    # gene name is just "ACTB", so also include the CLI --gene-name value
+    # and any suffix of the target after underscores (organism prefix).
+    target_names = {target_lower, target_clean}
+    # Add the bare gene name (last component after organism prefix)
+    # e.g., "homo_sapiens_actb" -> "actb"
+    parts = target_lower.split("_")
+    if len(parts) > 1:
+        target_names.add(parts[-1])
+    # Add CLI gene name if available
+    try:
+        from .config import SequenceConfig
+        cli_name = (SequenceConfig().gene_name or "").strip().lower()
+        if cli_name:
+            target_names.add(cli_name)
+    except Exception:
+        pass
+    target_names.discard("")
+
     results: Dict[str, Dict] = {}
 
     for probe_id, group in blast_hits.groupby("qseqid"):
@@ -209,13 +230,13 @@ def aggregate_off_target_genes(
         for _, hit in group.iterrows():
             gene = map_transcript_to_gene(str(hit["sseqid"]), mapping)
 
-            # Skip self-hits (match against both raw and cleaned gene name)
+            # Skip self-hits (match against all target gene name variants)
             gene_lower = gene.lower()
-            if gene_lower == target_lower or gene_lower == target_clean:
+            if gene_lower in target_names:
                 continue
-            # Also skip if the sseqid contains the target gene name
+            # Also skip if the sseqid contains any target gene name variant
             sseqid_lower = str(hit["sseqid"]).lower()
-            if target_lower in sseqid_lower or target_clean in sseqid_lower:
+            if any(name in sseqid_lower for name in target_names):
                 continue
 
             gene_counts[gene] = gene_counts.get(gene, 0) + 1

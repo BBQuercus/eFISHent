@@ -55,6 +55,11 @@ class AlignProbeCandidates(luigi.Task):
             self.filter_rrna
             and self.has_annotation
         )
+        self.has_pseudogene_filter = bool(
+            self.has_annotation
+            and self.is_endogenous
+        )
+        self.has_transcriptome = bool(GeneralConfig().reference_transcriptome)
 
     def requires(self):
         if self.aligner == "bowtie2":
@@ -67,7 +72,7 @@ class AlignProbeCandidates(luigi.Task):
         else:
             probe_task = BasicFiltering()
         tasks = {"probes": probe_task, "bowtie": index_task}
-        if self.has_expression_filter or self.has_intergenic_filter or self.has_rrna_filter:
+        if self.has_expression_filter or self.has_intergenic_filter or self.has_rrna_filter or self.has_pseudogene_filter:
             from .indexing import PrepareAnnotationFile
             tasks["annotation"] = PrepareAnnotationFile()
         return tasks
@@ -249,6 +254,27 @@ class AlignProbeCandidates(luigi.Task):
         os.remove(fname_clean)
 
     @staticmethod
+    def _cigar_match_fraction(cigar: str) -> float:
+        """Calculate fraction of query bases that are matched (M/=/X) in a CIGAR string.
+
+        For bowtie2 local alignment, soft-clipped bases (S) indicate unaligned
+        portions. Returns matched_bases / total_bases.
+        """
+        import re as _re
+        ops = _re.findall(r"(\d+)([MIDNSHP=X])", cigar)
+        if not ops:
+            return 0.0
+        total = 0
+        matched = 0
+        for length_str, op in ops:
+            length = int(length_str)
+            if op in ("M", "=", "X", "I", "S"):
+                total += length
+            if op in ("M", "=", "X"):
+                matched += length
+        return matched / total if total > 0 else 0.0
+
+    @staticmethod
     def parse_raw_pysam(sam: str) -> pd.DataFrame:
         """Convert string based pysam output to a DataFrame."""
         # Parse tab and newline delimited pysam output
@@ -288,6 +314,23 @@ class AlignProbeCandidates(luigi.Task):
 
         df = self.parse_raw_pysam(filtered_sam)
 
+        # For bowtie2 local mode, filter out partial alignments that are too
+        # short to be real off-targets. The sensitive local parameters (-L 10)
+        # report matches of 10-11nt on 20+nt probes — these won't stably
+        # hybridize. Keep only alignments where >=80% of the probe is matched.
+        if self.aligner == "bowtie2" and self.is_endogenous and not df.empty:
+            pre_filter = len(df)
+            min_match_frac = 0.80
+            df = df[df["cigar"].apply(
+                lambda c: self._cigar_match_fraction(c) >= min_match_frac
+            )]
+            n_removed = pre_filter - len(df)
+            if n_removed > 0:
+                self.logger.debug(
+                    f"Filtered {n_removed} partial alignments "
+                    f"(<80% match by CIGAR) from {pre_filter} total"
+                )
+
         # Warn when all exogenous probes pass unmapped — indicates alignment
         # parameters may be too strict to find off-targets
         if not self.is_endogenous and self.aligner == "bowtie2" and hasattr(self, "fname_fasta"):
@@ -311,17 +354,37 @@ class AlignProbeCandidates(luigi.Task):
         if self.has_intergenic_filter:
             df = self.filter_intergenic_off_targets(df)
 
+        # Remove hits overlapping pseudogene loci before counting
+        # (pseudogenes produce little/no RNA — not real off-targets for RNA-FISH)
+        if self.has_pseudogene_filter:
+            df = self.filter_pseudogene_off_targets(df)
+
         # Snapshot before count-based filtering (for thermodynamic rescue)
         df_pre_count = df.copy()
 
         # Filter to remove off-target rates
         if self.is_endogenous:
-            group_sizes = df.groupby("qname").size()
-            df = df[
-                df["qname"].isin(
-                    group_sizes[group_sizes <= self.max_off_targets + 1].index
+            if self.has_transcriptome and self.max_off_targets == 0:
+                # When a transcriptome is available and max_off_targets is
+                # at the default (0), skip the genome count-based filter.
+                # The downstream BLAST checks for expressed off-targets
+                # directly, which is more accurate for RNA-FISH than raw
+                # genome hit counts. Genome hits to pseudogenes and other
+                # non-expressed regions inflate the count without reflecting
+                # real off-target binding risk (e.g. ACTB has 100+ genomic
+                # hits due to pseudogenes but only a handful of expressed
+                # off-targets).
+                self.logger.debug(
+                    "Skipping genome count-based off-target filter "
+                    "(transcriptome BLAST will handle off-target detection)"
                 )
-            ]
+            else:
+                group_sizes = df.groupby("qname").size()
+                df = df[
+                    df["qname"].isin(
+                        group_sizes[group_sizes <= self.max_off_targets + 1].index
+                    )
+                ]
         return df, df_pre_count
 
     def get_most_expressed_genes(self, percentage: float) -> pd.Series:
@@ -515,6 +578,92 @@ class AlignProbeCandidates(luigi.Task):
         removed = total_before - len(df_sam)
         self.logger.debug(
             f"Removed {removed} alignments in intergenic regions"
+        )
+        return df_sam
+
+    def filter_pseudogene_off_targets(self, df_sam: pd.DataFrame) -> pd.DataFrame:
+        """Remove off-target hits overlapping annotated pseudogene loci.
+
+        Pseudogenes (especially processed pseudogenes from retrotransposition)
+        produce little to no RNA, so alignment hits to these regions are not
+        meaningful off-targets for RNA-FISH probes. Removing them prevents
+        pseudogene-rich genes (e.g. ACTB, GAPDH) from losing all probes.
+        """
+        self.fname_gtf = self.input()["annotation"].path
+        gtf_full = pd.read_parquet(self.fname_gtf)
+
+        # Find the biotype column (Ensembl: gene_biotype, GENCODE: gene_type)
+        biotype_col = None
+        for col in ["gene_biotype", "gene_type"]:
+            if col in gtf_full.columns:
+                biotype_col = col
+                break
+
+        if biotype_col is None:
+            self.logger.debug(
+                "No gene_biotype/gene_type column in GTF — skipping pseudogene filter"
+            )
+            return df_sam
+
+        pseudogene_types = {
+            "processed_pseudogene", "unprocessed_pseudogene", "pseudogene",
+            "transcribed_processed_pseudogene", "transcribed_unprocessed_pseudogene",
+            "translated_processed_pseudogene", "polymorphic_pseudogene",
+            "IG_pseudogene", "TR_pseudogene",
+            "rRNA_pseudogene", "unitary_pseudogene",
+            "IG_C_pseudogene", "IG_J_pseudogene", "IG_V_pseudogene",
+            "TR_J_pseudogene", "TR_V_pseudogene",
+        }
+
+        pseudogenes = gtf_full[
+            (gtf_full[biotype_col].isin(pseudogene_types))
+            & (gtf_full["feature"] == "gene")
+        ][["seqname", "start", "end"]].drop_duplicates()
+
+        if pseudogenes.empty:
+            self.logger.debug("No pseudogene regions found in GTF annotation")
+            return df_sam
+
+        self.logger.debug(
+            f"Found {len(pseudogenes)} pseudogene regions in GTF"
+        )
+
+        # Build sorted interval lookup per chromosome
+        pseudo_by_chrom = {}
+        for _, gene in pseudogenes.iterrows():
+            chrom = str(gene["seqname"])
+            if chrom not in pseudo_by_chrom:
+                pseudo_by_chrom[chrom] = ([], [])
+            pseudo_by_chrom[chrom][0].append(int(gene["start"]))
+            pseudo_by_chrom[chrom][1].append(int(gene["end"]))
+
+        # Sort intervals for bisect-based lookup
+        for chrom in pseudo_by_chrom:
+            starts, ends = pseudo_by_chrom[chrom]
+            paired = sorted(zip(starts, ends))
+            pseudo_by_chrom[chrom] = (
+                [s for s, _ in paired],
+                [e for _, e in paired],
+            )
+
+        def _hits_pseudogene(row):
+            chrom = row["rname"]
+            if chrom not in pseudo_by_chrom:
+                return False
+            pos = int(row["pos"])
+            starts, ends = pseudo_by_chrom[chrom]
+            idx = bisect.bisect_right(starts, pos) - 1
+            for i in range(max(0, idx), min(len(starts), idx + 2)):
+                if starts[i] <= pos <= ends[i]:
+                    return True
+            return False
+
+        total_before = len(df_sam)
+        is_pseudo = df_sam.apply(_hits_pseudogene, axis=1)
+        df_sam = df_sam[~is_pseudo]
+        removed = total_before - len(df_sam)
+        self.logger.debug(
+            f"Removed {removed} alignments overlapping pseudogene loci"
         )
         return df_sam
 

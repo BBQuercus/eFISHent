@@ -224,27 +224,39 @@ class TranscriptomeFiltering(luigi.Task):
             if off_target_counts.get(seq.id, 0) <= max_off
         ]
 
-        # Cross-hybridization check: probes with >=16nt contiguous match at
+        # Cross-hybridization check: probes with long contiguous match at
         # >=95% identity to off-target transcripts. These near-perfect matches
         # to abundant or spatially concentrated RNAs create noisy images.
-        cross_hyb_threshold = 16
-        df_cross_hyb = df_blast[
-            (df_blast["effective_len"] >= cross_hyb_threshold)
-            & (df_blast["pident"] >= 95.0)
+        # Threshold: match must cover >=85% of the probe length (per-probe).
+        # For a 20nt probe: >=17nt. For a 24nt probe: >=20nt.
+        cross_hyb_min_frac = 0.85
+        cross_hyb_override = config.cross_hyb_min_length
+        # Build probe length lookup from sequences
+        probe_lengths = {seq.id: len(seq.seq) for seq in sequences}
+        df_cross_hyb_base = df_blast[
+            (df_blast["pident"] >= 95.0)
             & (df_blast["gapopen"] == 0)  # contiguous = no gaps
         ]
         cross_hyb_probes = set()
-        if not df_cross_hyb.empty:
-            for probe_id, group in df_cross_hyb.groupby("qseqid"):
-                off_targets = group[~group["sseqid"].apply(is_self_hit)]
-                if len(off_targets["sseqid"].unique()) > 0:
+        if not df_cross_hyb_base.empty:
+            for probe_id, group in df_cross_hyb_base.groupby("qseqid"):
+                probe_len = probe_lengths.get(probe_id, config.min_length)
+                if cross_hyb_override > 0:
+                    threshold = cross_hyb_override
+                else:
+                    threshold = max(15, int(cross_hyb_min_frac * probe_len))
+                hits = group[group["effective_len"] >= threshold]
+                if hits.empty:
+                    continue
+                off_targets = hits[~hits["sseqid"].apply(is_self_hit)]
+                if not off_targets.empty and off_targets["sseqid"].nunique() > 0:
                     cross_hyb_probes.add(probe_id)
 
         if cross_hyb_probes:
             if config.reject_cross_hybridization:
                 self.logger.debug(
                     f"Rejecting {len(cross_hyb_probes)} probes with strong "
-                    f"cross-hybridization (>=16nt contiguous at >=95% identity)"
+                    f"cross-hybridization (>=85% of probe length contiguous at >=95% identity)"
                 )
                 candidates = [
                     seq for seq in candidates if seq.id not in cross_hyb_probes
@@ -252,7 +264,7 @@ class TranscriptomeFiltering(luigi.Task):
             else:
                 self.logger.debug(
                     f"Cross-hybridization warning: {len(cross_hyb_probes)} probes have "
-                    f">=16nt contiguous match at >=95% identity to off-target transcripts"
+                    f">=85% contiguous match at >=95% identity to off-target transcripts"
                 )
 
         # Save hits table

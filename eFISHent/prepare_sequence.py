@@ -164,13 +164,35 @@ class PrepareSequence(luigi.Task):
         """Select a single sequence as template.
 
         When multiple records are present (e.g. transcript isoforms),
-        selects the longest sequence to maximize probe coverage.
+        filters to only keep those matching the target gene name
+        (NCBI sometimes returns related genes), then selects the longest.
         """
+        import re
+
         if not sequences:
             raise ValueError(
                 "No records found in fasta file. "
                 "Please ensure at least one sequence is present."
             )
+
+        # Filter by target gene name to exclude unrelated genes
+        # (e.g. NCBI returns POTEF when searching for ACTB)
+        gene_name = SequenceConfig().gene_name
+        if gene_name and len(sequences) > 1:
+            pattern = re.compile(
+                rf'\b{re.escape(gene_name)}\b', re.IGNORECASE
+            )
+            matching = [
+                s for s in sequences
+                if pattern.search(s.description)
+            ]
+            if matching and len(matching) < len(sequences):
+                self.logger.info(
+                    f"Filtered {len(sequences) - len(matching)} sequences "
+                    f"not matching gene name '{gene_name}'."
+                )
+                sequences = matching
+
         if len(sequences) > 1:
             longest = max(sequences, key=lambda s: len(s.seq))
             self.logger.info(
@@ -217,8 +239,15 @@ class PrepareSequence(luigi.Task):
         sorted by start position. Returns None if no exons found.
         """
         try:
-            import gtfparse
-            df = gtfparse.read_gtf(annotation_path)
+            from .indexing import PrepareAnnotationFile
+            import pandas as pd
+            parq_path = annotation_path + ".parq"
+            if os.path.isfile(parq_path):
+                df = pd.read_parquet(parq_path)
+            else:
+                task = PrepareAnnotationFile()
+                task.prepare_gtf_file(annotation_path, parq_path)
+                df = pd.read_parquet(parq_path)
         except Exception as e:
             self.logger.debug(f"Could not parse GTF for region selection: {e}")
             return None

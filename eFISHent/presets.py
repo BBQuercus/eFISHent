@@ -4,10 +4,10 @@ from typing import Dict
 
 PRESETS: Dict[str, Dict] = {
     "smfish": {
-        "description": "Standard smFISH (18-22nt probes, adaptive length, 10% formamide)",
+        "description": "Standard smFISH (20-24nt probes, adaptive length, 10% formamide)",
         "params": {
-            "min_length": 18,
-            "max_length": 22,
+            "min_length": 20,
+            "max_length": 24,
             "min_tm": 40.0,
             "max_tm": 60.0,
             "formamide_concentration": 10.0,

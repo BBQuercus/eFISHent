@@ -303,13 +303,14 @@ def test_probe_hit_below_identity_passes(monkeypatch):
 
 
 def test_cross_hybridization_probe_removed(monkeypatch):
-    """A >=16nt, >=95% identity off-target transcript hit should veto the probe."""
+    """A >=85% of probe length, >=95% identity off-target hit should veto the probe."""
     records = _make_records(
         ("cross-hyb", "ATGCGTACGTAGCTAGCTAGC"),
         ("safe-probe", "TTTTGGGGAAAACCCCTTTTG"),
     )
+    # 18nt match on 21nt probe = 86% > 85% threshold -> rejected
     blast = (
-        "cross-hyb\tother_gene\t95.0\t16\t0\t0\t1\t16\t100\t115\t1e-5\t40\n"
+        "cross-hyb\tother_gene\t95.0\t18\t0\t0\t1\t18\t100\t117\t1e-5\t40\n"
         "safe-probe\ttargetgene_transcript\t100.0\t21\t0\t0\t1\t21\t1\t21\t0.0\t50\n"
     )
     with tempfile.TemporaryDirectory() as tmpdir:

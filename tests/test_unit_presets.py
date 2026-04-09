@@ -37,7 +37,7 @@ class TestPresets:
 
     def test_get_preset(self):
         preset = get_preset("smfish")
-        assert preset["params"]["min_length"] == 18
+        assert preset["params"]["min_length"] == 20
 
     def test_get_preset_unknown(self):
         with pytest.raises(KeyError):
@@ -59,8 +59,8 @@ class TestPresets:
 
     def test_smfish_preset_values(self):
         p = get_preset("smfish")["params"]
-        assert p["min_length"] == 18
-        assert p["max_length"] == 22
+        assert p["min_length"] == 20
+        assert p["max_length"] == 24
         assert p["formamide_concentration"] == pytest.approx(10.0)
         assert p["adaptive_length"] is True
 

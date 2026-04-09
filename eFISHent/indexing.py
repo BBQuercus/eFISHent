@@ -5,7 +5,6 @@ import os
 import subprocess
 import warnings
 
-import gtfparse
 import luigi
 import pandas as pd
 
@@ -87,15 +86,44 @@ class PrepareAnnotationFile(luigi.Task):
     def output(self):
         return luigi.LocalTarget(GeneralConfig().reference_annotation + ".parq")
 
+    @staticmethod
+    def _parse_gtf_attributes(attr_str: str) -> dict:
+        """Parse GTF attribute string into a dict."""
+        attrs = {}
+        for item in attr_str.strip().split(";"):
+            item = item.strip()
+            if not item:
+                continue
+            parts = item.split(" ", 1)
+            if len(parts) == 2:
+                attrs[parts[0]] = parts[1].strip('"')
+        return attrs
+
     def prepare_gtf_file(self, fname_input: str, fname_output: str) -> None:
         """Save GTF file as parquet."""
-        warnings.filterwarnings("ignore")
-        df = gtfparse.read_gtf(fname_input)
-        # Newer gtfparse versions using polars
-        if not isinstance(df, pd.DataFrame):
-            df = df.to_pandas()
-        warnings.filterwarnings("default")
-        self.logger.debug("Read gtf file with gtfparse")
+        # Parse GTF directly to avoid gtfparse/polars version incompatibilities
+        rows = []
+        with open(fname_input) as f:
+            for line in f:
+                if line.startswith("#"):
+                    continue
+                parts = line.rstrip("\n").split("\t", 8)
+                if len(parts) < 9:
+                    continue
+                row = {
+                    "seqname": parts[0],
+                    "source": parts[1],
+                    "feature": parts[2],
+                    "start": int(parts[3]),
+                    "end": int(parts[4]),
+                    "score": parts[5],
+                    "strand": parts[6],
+                    "frame": parts[7],
+                }
+                row.update(self._parse_gtf_attributes(parts[8]))
+                rows.append(row)
+        df = pd.DataFrame(rows)
+        self.logger.debug("Read gtf file with custom parser")
         df.to_parquet(fname_output)
 
     def run(self):

@@ -215,7 +215,6 @@ def test_downloaded_endogenous_optimal():
 
 @pytest.mark.skipif(not ALL_TOOLS_AVAILABLE, reason="bowtie/bowtie-build/jellyfish not installed")
 @pytest.mark.skipif(not ESEARCH_WORKS, reason="NCBI E-utilities (esearch) not working")
-@pytest.mark.skip(reason="gtfparse uses deprecated polars API (toggle_string_cache)")
 def test_counttable_full_output():
     """Ensembl downloaded sequence with count table and max off target FPKM."""
     args = [
@@ -280,6 +279,7 @@ def test_backward_compat_bowtie1():
         "45",
         "--max-tm",
         "55",
+        "--allow-no-transcriptome", "True",
         "--debug",
     ]
     subprocess.run(args, check=True)
@@ -441,3 +441,94 @@ def test_error():
     # Too short/long length?
     # p = subprocess.Popen(args, stderr=subprocess.PIPE)
     # stdout, stderr = p.communicate()
+
+
+# ---------------------------------------------------------------------------
+# End-to-end tests for human genes using --genome hg38
+# These are slow (~5-8 min each) and require the hg38 genome indices to be
+# cached at ~/.local/efishent/indices/homo_sapiens/GRCh38/.
+# Run with: pytest tests/test_integration.py -k "e2e_hg38" -v
+# ---------------------------------------------------------------------------
+
+def _hg38_cached():
+    """Check if the hg38 pre-built genome indices are cached."""
+    from eFISHent.prebuilt import is_genome_cached
+    return is_genome_cached("homo_sapiens/GRCh38")
+
+
+HG38_AVAILABLE = _hg38_cached()
+
+_hg38_skip = pytest.mark.skipif(
+    not HG38_AVAILABLE or not ALL_TOOLS_AVAILABLE or not ESEARCH_WORKS or not BLAST_AVAILABLE,
+    reason="requires cached hg38 genome + bowtie2/jellyfish/esearch/blastn",
+)
+
+
+def _run_hg38_gene(gene_name, min_probes):
+    """Helper: run eFISHent for a human gene and verify output."""
+    # Clean up any leftover files
+    prefix = f"homo_sapiens_{gene_name}_"
+    for f in glob.glob(f"./{prefix}*"):
+        if os.path.isfile(f):
+            os.remove(f)
+
+    args = [
+        "efishent",
+        "--genome", "hg38",
+        "--gene-name", gene_name,
+        "--organism-name", "homo sapiens",
+        "--preset", "smfish",
+    ]
+    result = subprocess.run(args, check=True, timeout=600)
+    assert result.returncode == 0
+
+    # Find probe output CSV (has "sequence" column)
+    csv_files = sorted(glob.glob(f"./{prefix}*.csv"))
+    probe_csv = None
+    for f in csv_files:
+        df = pd.read_csv(f)
+        if "sequence" in df.columns:
+            probe_csv = f
+            break
+    assert probe_csv is not None, f"No probe CSV found among: {csv_files}"
+    assert len(df) >= min_probes, (
+        f"Expected >= {min_probes} probes for {gene_name}, got {len(df)}"
+    )
+    assert "length" in df.columns
+    assert "TM" in df.columns
+
+    # Verify FASTA output exists and matches CSV
+    fasta_files = sorted(glob.glob(f"./{prefix}*.fasta"))
+    assert len(fasta_files) >= 1, "Expected FASTA output file"
+
+    # Clean up
+    for f in glob.glob(f"./{prefix}*"):
+        if os.path.isfile(f):
+            os.remove(f)
+
+    return df
+
+
+@_hg38_skip
+def test_e2e_hg38_actb():
+    """ACTB: pseudogene-rich housekeeping gene — tests pseudogene-aware filtering."""
+    df = _run_hg38_gene("ACTB", min_probes=3)
+    # ACTB is challenging (many pseudogenes); verify probes are reasonable
+    assert all(df["length"] >= 20)
+    assert all(df["length"] <= 24)
+
+
+@_hg38_skip
+def test_e2e_hg38_eif2b1():
+    """EIF2B1: standard gene — tests baseline smFISH pipeline."""
+    df = _run_hg38_gene("EIF2B1", min_probes=10)
+    assert all(df["length"] >= 20)
+    assert all(df["length"] <= 24)
+
+
+@_hg38_skip
+def test_e2e_hg38_tp53():
+    """TP53: tumor suppressor with many isoforms — tests transcript selection."""
+    df = _run_hg38_gene("TP53", min_probes=10)
+    assert all(df["length"] >= 20)
+    assert all(df["length"] <= 24)

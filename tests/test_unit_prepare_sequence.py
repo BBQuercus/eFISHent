@@ -368,7 +368,8 @@ class TestExtractExonBoundaries:
     def test_parse_error_returns_none(self):
         """If GTF parsing fails, should return None."""
         task = PrepareSequence()
-        with patch("gtfparse.read_gtf", side_effect=Exception("parse error")):
+        # Neither parquet nor raw file exists → returns None
+        with patch("os.path.isfile", return_value=False):
             result = task._extract_exon_boundaries("TP53", "/fake/annotation.gtf")
             assert result is None
 
@@ -383,7 +384,8 @@ class TestExtractExonBoundaries:
             "end": [200],
             "transcript_id": ["ENST00001"],
         })
-        with patch("gtfparse.read_gtf", return_value=df):
+        with patch("os.path.isfile", return_value=True), \
+             patch("pandas.read_parquet", return_value=df):
             result = task._extract_exon_boundaries("TP53", "/fake/annotation.gtf")
             assert result is None
 
@@ -398,7 +400,8 @@ class TestExtractExonBoundaries:
             "end": [1100, 2200, 2200],
             "transcript_id": ["ENST001", "ENST001", "ENST001"],
         })
-        with patch("gtfparse.read_gtf", return_value=df):
+        with patch("os.path.isfile", return_value=True), \
+             patch("pandas.read_parquet", return_value=df):
             result = task._extract_exon_boundaries("TP53", "/fake/annotation.gtf")
             assert result is not None
             assert len(result) == 2
@@ -416,7 +419,8 @@ class TestExtractExonBoundaries:
             "end": [600],
             "transcript_id": ["ENST001"],
         })
-        with patch("gtfparse.read_gtf", return_value=df):
+        with patch("os.path.isfile", return_value=True), \
+             patch("pandas.read_parquet", return_value=df):
             result = task._extract_exon_boundaries("TP53", "/fake/annotation.gtf")
             assert result is not None
             assert len(result) == 1
