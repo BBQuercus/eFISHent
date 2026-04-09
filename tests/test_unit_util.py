@@ -369,7 +369,7 @@ class TestLogStageStart:
                 mock_info.assert_called_once_with("[1/9] Preparing gene sequence...")
 
     def test_index_stage_no_order(self):
-        """A stage with order=0 should just log desc."""
+        """A stage with order=0 should show as unnumbered step."""
         import logging
         from unittest.mock import patch
 
@@ -380,13 +380,11 @@ class TestLogStageStart:
              patch("eFISHent.console.print_stage") as mock_print, \
              patch("eFISHent.console.is_silent", return_value=False):
             mock_rc.return_value.analyze_probeset = ""
-            with patch.object(logger, "info") as mock_info:
-                log_stage_start(logger, "BuildBowtieIndex")
-                mock_print.assert_not_called()
-                mock_info.assert_called_once_with("Building bowtie index...")
+            log_stage_start(logger, "BuildBowtieIndex")
+            mock_print.assert_called_once_with(0, 0, "Building bowtie index")
 
     def test_unknown_stage_uses_name(self):
-        """An unknown stage name should be used as-is."""
+        """An unknown stage name should show as unnumbered step."""
         import logging
         from unittest.mock import patch
 
@@ -394,12 +392,11 @@ class TestLogStageStart:
 
         logger = logging.getLogger("test-log-stage-unknown")
         with patch("eFISHent.config.RunConfig") as mock_rc, \
-             patch("eFISHent.console.print_stage"), \
+             patch("eFISHent.console.print_stage") as mock_print, \
              patch("eFISHent.console.is_silent", return_value=False):
             mock_rc.return_value.analyze_probeset = ""
-            with patch.object(logger, "info") as mock_info:
-                log_stage_start(logger, "SomeNewStage")
-                mock_info.assert_called_once_with("SomeNewStage...")
+            log_stage_start(logger, "SomeNewStage")
+            mock_print.assert_called_once_with(0, 0, "SomeNewStage")
 
     def test_analyze_mode_returns_early(self):
         """In analyze mode, log_stage_start should return immediately."""

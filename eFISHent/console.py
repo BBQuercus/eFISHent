@@ -105,13 +105,15 @@ class _PipelineDisplay:
             box=None,
             padding=(0, 1),
             show_edge=False,
-            expand=False,
+            expand=True,
         )
         table.add_column("Icon", width=2, no_wrap=True)
-        table.add_column("Step", min_width=38, no_wrap=True)
-        table.add_column("Result", min_width=28, no_wrap=True)
-        table.add_column("Time", justify="right", min_width=6, no_wrap=True)
+        table.add_column("Step", no_wrap=True)
+        table.add_column("Spacer", ratio=1)  # Absorbs remaining width
+        table.add_column("Result", no_wrap=True, justify="right")
+        table.add_column("Time", justify="right", width=8, no_wrap=True)
 
+        has_running = False
         for step in _steps:
             status = step["status"]
             name = step["name"]
@@ -123,6 +125,7 @@ class _PipelineDisplay:
                 name_style = "dim"
                 result_style = "dim"
             elif status == "running":
+                has_running = True
                 icon = f"[cyan]{spinner_char}[/cyan]"
                 # Compute elapsed live
                 elapsed = _format_elapsed(time.time() - step["start_time"])
@@ -137,6 +140,7 @@ class _PipelineDisplay:
             table.add_row(
                 icon,
                 f"[{name_style}]{name}[/{name_style}]",
+                "",
                 f"[{result_style}]{result}[/{result_style}]" if result else "",
                 f"[dim]{elapsed}[/dim]" if elapsed else "",
             )
@@ -145,21 +149,33 @@ class _PipelineDisplay:
             if status == "running" and _step_status:
                 table.add_row(
                     "",
-                    f"  [dim]\u2192 {_step_status}[/dim]",
+                    f"  [cyan]{spinner_char}[/cyan] [dim]{_step_status}[/dim]",
+                    "",
                     "",
                     "",
                 )
+
+        # Show status line when no step is running (e.g. dependency tasks)
+        if not has_running and _step_status:
+            table.add_row(
+                f"[cyan]{spinner_char}[/cyan]",
+                f"[dim]{_step_status}[/dim]",
+                "",
+                "",
+                "",
+            )
 
         # Total elapsed at the bottom
         if _steps:
             first_start = _steps[0].get("start_time")
             if first_start is not None:
                 total = _format_elapsed(time.time() - first_start)
-                table.add_row("", "", "", "")
+                table.add_row("", "", "", "", "")
                 table.add_row(
                     "",
-                    f"[dim]{total} elapsed[/dim]",
                     "",
+                    "",
+                    f"[dim]{total} elapsed[/dim]",
                     "",
                 )
 
@@ -211,13 +227,11 @@ def print_header(version: str) -> None:
     """Print the application header banner."""
     if _silent_mode:
         return
-    console.print(
-        Panel(
-            f"[bold cyan]eFISHent v{version}[/bold cyan]",
-            subtitle="RNA FISH probe designer",
-            border_style="blue",
-        )
-    )
+    from rich.rule import Rule
+
+    console.print()
+    console.print(f"  [bold cyan]eFISHent v{version}[/bold cyan]  [dim]RNA FISH probe designer[/dim]")
+    console.print(Rule(style="blue"))
 
 
 def print_completion(
@@ -243,12 +257,17 @@ def print_completion(
 
     renderables = []
 
+    from rich.rule import Rule
+
+    console.print()
+    console.print(Rule("[success]Design Complete[/success]", style="green"))
+
     # 1. Filtering funnel
     funnel_table = _build_funnel_table()
     if funnel_table is not None:
-        renderables.append(Text(""))
-        renderables.append(Text(" Filtering Funnel", style="bold"))
-        renderables.append(funnel_table)
+        console.print()
+        console.print("  [bold]Filtering Funnel[/bold]")
+        console.print(funnel_table)
 
     # 2. Coverage map
     if probe_df is not None and summary and len(probe_df) > 0:
@@ -256,18 +275,18 @@ def print_completion(
         coverage_pct = summary.get("coverage_pct", 0.0)
         coverage_map = _build_coverage_map(probe_df, gene_length, coverage_pct)
         if coverage_map is not None:
-            renderables.append(Text(""))
-            renderables.append(coverage_map)
+            console.print()
+            console.print(coverage_map)
 
     # 3. Probe table
     if probe_df is not None and len(probe_df) > 0:
         probe_table = _build_probe_table(probe_df, show_title=False)
-        renderables.append(Text(""))
-        renderables.append(probe_table)
+        console.print()
+        console.print(probe_table)
 
     # 4. Summary stats
     if summary:
-        renderables.append(Text(""))
+        console.print()
         stats_table = Table(
             show_header=False, box=None, padding=(0, 1), show_edge=False
         )
@@ -330,32 +349,24 @@ def print_completion(
             else:
                 stats_table.add_row("Off-targets:", "[green]none detected[/green]")
 
-        renderables.append(stats_table)
+        console.print(stats_table)
 
     # 5. BLAST verification
     if verification:
-        renderables.append(Text(""))
-        renderables.append(_build_verification_summary(verification))
+        console.print()
+        console.print(_build_verification_summary(verification))
 
     # 6. Output files
     if output_files:
-        renderables.append(Text(""))
-        file_lines = [" [bold]Output:[/bold]"]
+        console.print()
+        console.print("  [bold]Output[/bold]")
         for path in output_files:
-            file_lines.append(f"   [dim]\u2192[/dim] {path}")
-        renderables.append(Text.from_markup("\n".join(file_lines)))
+            console.print(f"    [dim]\u2192[/dim] {path}")
 
-    # 7. Duration
-    renderables.append(Text(""))
-    renderables.append(Text.from_markup(f" [dim]Completed in {duration}[/dim]"))
-
-    console.print(
-        Panel(
-            Group(*renderables),
-            title="[success]eFISHent \u2014 Design Complete[/success]",
-            border_style="green",
-        )
-    )
+    # 7. Duration + closing rule
+    console.print()
+    console.print(f"  [dim]Completed in {duration}[/dim]")
+    console.print(Rule(style="green"))
 
 
 # Short labels for funnel display
@@ -546,6 +557,26 @@ def print_filtering_funnel() -> None:
     console.print(table)
 
 
+def add_cached_step(order: int, total: int, description: str) -> None:
+    """Add a step that was already completed (cached by Luigi)."""
+    if _silent_mode:
+        return
+
+    if order > 0:
+        step_name = f"Step {order}/{total}: {description}"
+    else:
+        step_name = description
+
+    _steps.append({
+        "name": step_name,
+        "status": "done",
+        "result": "[dim]cached[/dim]",
+        "elapsed": "",
+        "start_time": 0,
+    })
+    _refresh_live()
+
+
 def print_stage(order: int, total: int, description: str) -> None:
     """Print a pipeline stage indicator — updates the live step display."""
     global _current_stage, _total_stages, _step_status
@@ -568,8 +599,13 @@ def print_stage(order: int, total: int, description: str) -> None:
         count_str = f"({last_count:,} probes)"
 
     # Add new step
+    if order > 0:
+        step_name = f"Step {order}/{total}: {description}"
+    else:
+        step_name = description
+
     _steps.append({
-        "name": f"Step {order}/{total}: {description}",
+        "name": step_name,
         "status": "running",
         "result": count_str,
         "elapsed": "",

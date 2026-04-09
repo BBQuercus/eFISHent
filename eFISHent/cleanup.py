@@ -969,6 +969,7 @@ class CleanUpOutput(luigi.Task):
         Bio.SeqIO.write(sequences, self.output()["fasta"].path, format="fasta")
 
         # Run BLAST verification and remove flagged probes
+        self.logger.info("Verifying probes against genome (BLAST)")
         self._verification = self._run_blast_verification(
             self.output()["fasta"].path
         )

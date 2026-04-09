@@ -1061,9 +1061,57 @@ def format_duration(seconds: float) -> str:
         return f"{hours}h {minutes}m"
 
 
+def _prefill_cached_steps(add_cached_step_fn) -> None:
+    """Check which pipeline steps are already cached and add them to the display."""
+    from .util import _get_pipeline_stages
+
+    # Map stage names to Luigi task classes
+    from .prepare_sequence import PrepareSequence
+    from .generate_probes import GenerateAllProbes
+    from .basic_filtering import BasicFiltering
+    from .rdna_filter import FilterRibosomalRNA
+    from .alignment import AlignProbeCandidates
+    from .transcriptome_filter import TranscriptomeFiltering
+    from .kmers import KMerFiltering
+    from .secondary_structure import SecondaryStructureFiltering
+    from .optimization import OptimizeProbeCoverage
+    from .cleanup import CleanUpOutput
+
+    task_classes = {
+        "PrepareSequence": PrepareSequence,
+        "GenerateAllProbes": GenerateAllProbes,
+        "BasicFiltering": BasicFiltering,
+        "FilterRibosomalRNA": FilterRibosomalRNA,
+        "AlignProbeCandidates": AlignProbeCandidates,
+        "TranscriptomeFiltering": TranscriptomeFiltering,
+        "KMerFiltering": KMerFiltering,
+        "SecondaryStructureFiltering": SecondaryStructureFiltering,
+        "OptimizeProbeCoverage": OptimizeProbeCoverage,
+        "CleanUpOutput": CleanUpOutput,
+    }
+
+    # Get config-aware stage definitions and sort by step number
+    stages = _get_pipeline_stages()
+    numbered_steps = sorted(
+        [(v["order"], v["total"], v["desc"], task_classes.get(k))
+         for k, v in stages.items() if v["order"] > 0],
+        key=lambda x: x[0],
+    )
+
+    for order, total, desc, task_cls in numbered_steps:
+        try:
+            if task_cls().complete():
+                add_cached_step_fn(order, total, desc)
+            else:
+                break  # Stop at first incomplete step
+        except Exception:
+            break
+
+
 def main():
     """Run eFISHent tasks."""
     from .console import (
+        add_cached_step,
         pipeline_progress,
         print_completion,
         print_dependency_check,
@@ -1200,7 +1248,9 @@ def main():
                 with pipeline_progress(total_stages=2, mode="pipeline"):
                     luigi.build(tasks, local_scheduler=True)
             else:
-                with pipeline_progress(total_stages=9):
+                from .util import _get_pipeline_total
+                with pipeline_progress(total_stages=_get_pipeline_total()):
+                    _prefill_cached_steps(add_cached_step)
                     luigi.build(tasks, local_scheduler=True)
         else:
             luigi.build(tasks, local_scheduler=True)

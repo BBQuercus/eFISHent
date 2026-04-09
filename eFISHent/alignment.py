@@ -795,6 +795,9 @@ class AlignProbeCandidates(luigi.Task):
         self.fname_fasta = self.input()["probes"].path
         self.fname_sam = os.path.splitext(self.fname_fasta)[0] + ".sam"
         self.fname_genome = util.get_genome_name()
+        self.logger.info(
+            f"Aligning with {self.aligner} against {os.path.basename(self.fname_genome)}"
+        )
 
         # Alignment
         if self.aligner == "bowtie2":

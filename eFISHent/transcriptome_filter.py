@@ -114,6 +114,7 @@ class TranscriptomeFiltering(luigi.Task):
         sequences = list(Bio.SeqIO.parse(probe_fasta, "fasta"))
 
         txome_db = os.path.abspath(GeneralConfig().reference_transcriptome)
+        self.logger.info(f"BLAST against {os.path.basename(txome_db)}")
         blast_out = os.path.splitext(probe_fasta)[0] + "_blast.tsv"
 
         config = ProbeConfig()

@@ -17,33 +17,54 @@ from .constants import FASTA_EXT
 
 
 # Pipeline stage definitions for progress tracking
-PIPELINE_STAGES = {
-    "PrepareSequence": {"order": 1, "total": 9, "desc": "Preparing gene sequence"},
-    "GenerateAllProbes": {
-        "order": 2,
-        "total": 9,
-        "desc": "Generating candidate probes",
-    },
-    "BasicFiltering": {"order": 3, "total": 9, "desc": "Filtering by TM/GC content"},
-    "FilterRibosomalRNA": {"order": 4, "total": 9, "desc": "Screening rDNA/satellite off-targets"},
-    "AlignProbeCandidates": {
-        "order": 5,
-        "total": 9,
-        "desc": "Aligning probes to genome",
-    },
-    "TranscriptomeFiltering": {"order": 0, "total": 0, "desc": "Filtering by transcriptome off-targets"},
-    "KMerFiltering": {"order": 6, "total": 9, "desc": "Filtering by k-mer frequency"},
-    "SecondaryStructureFiltering": {
-        "order": 7,
-        "total": 9,
-        "desc": "Filtering by secondary structure",
-    },
-    "OptimizeProbeCoverage": {
-        "order": 8,
-        "total": 9,
-        "desc": "Optimizing probe coverage",
-    },
-    "CleanUpOutput": {"order": 9, "total": 9, "desc": "Finalizing output"},
+def _get_pipeline_total() -> int:
+    """Get the total number of pipeline steps (depends on transcriptome config)."""
+    try:
+        return 10 if GeneralConfig().reference_transcriptome else 9
+    except Exception:
+        return 10
+
+
+def _get_pipeline_stages() -> dict:
+    """Build pipeline stage definitions with correct ordering."""
+    has_txome = False
+    try:
+        has_txome = bool(GeneralConfig().reference_transcriptome)
+    except Exception:
+        has_txome = True  # Assume yes before config is loaded
+
+    if has_txome:
+        total = 10
+        return {
+            "PrepareSequence": {"order": 1, "total": total, "desc": "Preparing gene sequence"},
+            "GenerateAllProbes": {"order": 2, "total": total, "desc": "Generating candidate probes"},
+            "BasicFiltering": {"order": 3, "total": total, "desc": "Filtering by TM/GC content"},
+            "FilterRibosomalRNA": {"order": 4, "total": total, "desc": "Screening rDNA/satellite off-targets"},
+            "AlignProbeCandidates": {"order": 5, "total": total, "desc": "Aligning probes to genome"},
+            "KMerFiltering": {"order": 6, "total": total, "desc": "Filtering by k-mer frequency"},
+            "SecondaryStructureFiltering": {"order": 7, "total": total, "desc": "Filtering by secondary structure"},
+            "TranscriptomeFiltering": {"order": 8, "total": total, "desc": "Filtering by transcriptome off-targets"},
+            "OptimizeProbeCoverage": {"order": 9, "total": total, "desc": "Optimizing probe coverage"},
+            "CleanUpOutput": {"order": 10, "total": total, "desc": "Finalizing output"},
+        }
+    else:
+        total = 9
+        return {
+            "PrepareSequence": {"order": 1, "total": total, "desc": "Preparing gene sequence"},
+            "GenerateAllProbes": {"order": 2, "total": total, "desc": "Generating candidate probes"},
+            "BasicFiltering": {"order": 3, "total": total, "desc": "Filtering by TM/GC content"},
+            "FilterRibosomalRNA": {"order": 4, "total": total, "desc": "Screening rDNA/satellite off-targets"},
+            "AlignProbeCandidates": {"order": 5, "total": total, "desc": "Aligning probes to genome"},
+            "TranscriptomeFiltering": {"order": 0, "total": 0, "desc": "Filtering by transcriptome off-targets"},
+            "KMerFiltering": {"order": 6, "total": total, "desc": "Filtering by k-mer frequency"},
+            "SecondaryStructureFiltering": {"order": 7, "total": total, "desc": "Filtering by secondary structure"},
+            "OptimizeProbeCoverage": {"order": 8, "total": total, "desc": "Optimizing probe coverage"},
+            "CleanUpOutput": {"order": 9, "total": total, "desc": "Finalizing output"},
+        }
+
+
+# Static entries for stages that don't depend on config
+PIPELINE_STAGES_STATIC = {
     # Index building (shown separately)
     "BuildBowtieIndex": {"order": 0, "total": 0, "desc": "Building bowtie index"},
     "BuildBowtie2Index": {"order": 0, "total": 0, "desc": "Building bowtie2 index"},
@@ -54,6 +75,10 @@ PIPELINE_STAGES = {
         "desc": "Downloading sequence from NCBI",
     },
 }
+
+# Backwards-compatible alias — callers that read PIPELINE_STAGES at import
+# time get the static entries; dynamic stages are resolved via _get_pipeline_stages().
+PIPELINE_STAGES = PIPELINE_STAGES_STATIC
 
 
 def log_stage_start(logger: logging.Logger, stage_name: str) -> None:
@@ -66,7 +91,10 @@ def log_stage_start(logger: logging.Logger, stage_name: str) -> None:
     if RunConfig().analyze_probeset:
         return
 
-    stage = PIPELINE_STAGES.get(stage_name, {})
+    # Use dynamic stages (config-aware) for pipeline steps,
+    # fall back to static for index building etc.
+    stages = _get_pipeline_stages()
+    stage = stages.get(stage_name) or PIPELINE_STAGES_STATIC.get(stage_name, {})
     order = stage.get("order", 0)
     total = stage.get("total", 0)
     desc = stage.get("desc", stage_name)
@@ -78,7 +106,10 @@ def log_stage_start(logger: logging.Logger, stage_name: str) -> None:
         if is_silent():
             logger.info(f"[{order}/{total}] {desc}...")
     else:
-        logger.info(f"{desc}...")
+        # Unnumbered stages (downloads, index building, etc.)
+        print_stage(0, 0, desc)
+        if is_silent():
+            logger.info(f"{desc}...")
 
 
 def get_output_dir(config: luigi.Config = GeneralConfig) -> Any:
@@ -172,7 +203,8 @@ def secure_filename(filename: str) -> str:
 
 def get_stage_description(name: str) -> str:
     """Get the human-readable description for a stage."""
-    stage = PIPELINE_STAGES.get(name, {})
+    stages = _get_pipeline_stages()
+    stage = stages.get(name) or PIPELINE_STAGES_STATIC.get(name, {})
     return stage.get("desc", name)
 
 
