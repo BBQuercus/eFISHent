@@ -35,6 +35,20 @@ def _is_rnastructure_fold(path: str) -> bool:
         return False
 
 
+def _fold_works(path: str, datapath: str) -> bool:
+    """Smoke-test a Fold binary + DATAPATH with a tiny sequence."""
+    try:
+        env = {**os.environ, "DATAPATH": datapath}
+        out = subprocess.run(
+            [path, "-", "-", "--bracket", "--MFE"],
+            input=">t\nAUGC\n", capture_output=True, text=True,
+            timeout=10, env=env,
+        )
+        return out.returncode == 0
+    except Exception:
+        return False
+
+
 def _resolve_fold() -> None:
     """Find the best Fold binary and its DATAPATH (cached after first call)."""
     global _fold_path, _fold_datapath
@@ -52,11 +66,14 @@ def _resolve_fold() -> None:
     # unrelated binaries that happen to be named "Fold".
     system_fold = shutil.which("Fold")
     if system_fold and _is_rnastructure_fold(system_fold):
-        _fold_path = system_fold
-        # Keep existing DATAPATH if set (RNAstructure install sets it),
-        # otherwise fall back to bundled data tables.
-        _fold_datapath = os.environ.get("DATAPATH", bundled_data)
-        return
+        # Use existing DATAPATH if set, otherwise bundled data tables.
+        # Verify the data tables actually contain required files before
+        # committing — an incomplete install will silently fail at runtime.
+        candidate_data = os.environ.get("DATAPATH", bundled_data)
+        if _fold_works(system_fold, candidate_data):
+            _fold_path = system_fold
+            _fold_datapath = candidate_data
+            return
 
     # Fall back to bundled binary
     if sys.platform in ("linux", "linux2"):
