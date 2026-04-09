@@ -348,6 +348,53 @@ def test_cross_hybridization_warning_only(monkeypatch):
             _luigi_config_restore(old, cfg)
 
 
+def test_cross_hybridization_24mer_uses_length_scaled_threshold(monkeypatch):
+    """Longer probes should need proportionally longer contiguous off-target matches."""
+    records = _make_records(
+        ("probe24", "ATGCGTACGTAGCTAGCTAGCTAG"),
+        ("safe-probe", "TTTTGGGGAAAACCCCTTTTGAAA"),
+    )
+    # 19nt on a 24nt probe stays below the current auto-threshold (20nt) -> kept
+    blast = (
+        "probe24\tother_gene\t96.0\t19\t0\t0\t1\t19\t100\t118\t1e-6\t45\n"
+        "safe-probe\ttargetgene_transcript\t100.0\t24\t0\t0\t1\t24\t1\t24\t0.0\t50\n"
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        task, out_fa, _, old, cfg = _setup_task(
+            monkeypatch, tmpdir, records, blast_lines=blast,
+            extra_config={
+                ("ProbeConfig", "min_length"): "24",
+                ("ProbeConfig", "max_length"): "24",
+                ("ProbeConfig", "max_transcriptome_off_targets"): "1",
+            },
+        )
+        try:
+            task.run()
+            kept = [r.id for r in Bio.SeqIO.parse(out_fa, "fasta")]
+            assert kept == ["probe24", "safe-probe"]
+        finally:
+            _luigi_config_restore(old, cfg)
+
+
+def test_cross_hybridization_override_applies_explicit_length(monkeypatch):
+    """An explicit cross_hyb_min_length should override the auto 85% threshold."""
+    records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
+    # 17nt match would fail the auto threshold on a 21nt probe (auto=17 after int floor),
+    # so use an explicit 18nt override to prove the config is honored.
+    blast = "probe1\tother_gene\t97.0\t17\t0\t0\t1\t17\t100\t116\t1e-6\t45\n"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        task, out_fa, _, old, cfg = _setup_task(
+            monkeypatch, tmpdir, records, blast_lines=blast,
+            extra_config={("ProbeConfig", "cross_hyb_min_length"): "18"},
+        )
+        try:
+            task.run()
+            kept = [r.id for r in Bio.SeqIO.parse(out_fa, "fasta")]
+            assert kept == ["probe1"]
+        finally:
+            _luigi_config_restore(old, cfg)
+
+
 def test_empty_probe_set(monkeypatch):
     """Empty probe set produces empty output."""
     records = []

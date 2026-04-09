@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -453,3 +454,25 @@ class TestAggregateOffTargetGenes:
         )
         assert "probe-1" in results
         assert "probe-2" in results
+
+    def test_cli_gene_name_variant_excluded_as_self_hit(self, transcript_mapping):
+        """CLI gene names should exclude self-hits even when target_gene includes organism prefix."""
+        df = pd.DataFrame(
+            {
+                "qseqid": ["probe-1", "probe-1"],
+                "sseqid": ["ENST00000123456", "ENST00000654321"],
+                "pident": [100.0, 92.0],
+                "length": [25, 21],
+                "mismatch": [0, 2],
+            }
+        )
+
+        with patch("eFISHent.config.SequenceConfig") as mock_cfg:
+            mock_cfg.return_value.gene_name = "BRCA1"
+            results = aggregate_off_target_genes(
+                df, transcript_mapping, target_gene="homo_sapiens_brca1"
+            )
+
+        info = results["probe-1"]
+        assert info["txome_off_targets"] == 1
+        assert info["off_target_genes"] == "TP53(1)"

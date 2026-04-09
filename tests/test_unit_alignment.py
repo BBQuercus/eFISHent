@@ -40,6 +40,8 @@ def _make_task(**overrides):
         has_annotation=False,
         has_intergenic_filter=False,
         has_rrna_filter=False,
+        has_pseudogene_filter=False,
+        has_transcriptome=False,
     )
     defaults.update(overrides)
     for k, v in defaults.items():
@@ -597,6 +599,68 @@ class TestFilterUniqueProbesMocked:
         df, df_pre = self._run_filter(lines, is_endogenous=True, max_off_targets=0)
         assert set(df_pre["qname"].unique()) == {"probe1", "probe2"}
         assert set(df["qname"].unique()) == {"probe1"}
+
+    def test_bowtie2_partial_alignments_filtered_by_cigar_match_fraction(self):
+        """Short local alignments should not count as real off-targets."""
+        lines = "\n".join([
+            "probe1\t0\tchrI\t1000\t60\t21M\t*\t0\t0\tATGCATGCATGCATGCATGCA\t*",
+            "probe1\t0\tchrII\t2000\t60\t10M11S\t*\t0\t0\tATGCATGCATGCATGCATGCA\t*",
+        ])
+        df, df_pre = self._run_filter(lines, is_endogenous=True, max_off_targets=0)
+        assert set(df_pre["cigar"]) == {"21M"}
+        assert len(df) == 1
+        assert df.iloc[0]["rname"] == "chrI"
+
+    def test_transcriptome_presence_skips_genome_count_filter_at_default(self):
+        """With transcriptome BLAST enabled, default genome hit count should not reject probes."""
+        lines = "\n".join([
+            _make_sam_line("probe1", "0", "chrI", "1000", "60"),
+            _make_sam_line("probe1", "0", "chrII", "2000", "60"),
+            _make_sam_line("probe1", "0", "chrIII", "3000", "60"),
+        ])
+        task = _make_task(is_endogenous=True, aligner="bowtie2", max_off_targets=0)
+        task.fname_sam = "/tmp/fake.sam"
+        task.has_transcriptome = True
+        with patch("eFISHent.alignment.pysam.view", return_value=lines):
+            df, df_pre = task.filter_unique_probes()
+        assert len(df_pre) == 3
+        assert len(df) == 3
+
+
+class TestAlignmentHelpers:
+    """Unit tests for helper filters added around alignment parsing."""
+
+    def test_cigar_match_fraction_counts_soft_clips_and_insertions_in_denominator(self):
+        assert AlignProbeCandidates._cigar_match_fraction("16M2I3S") == pytest.approx(16 / 21)
+
+    def test_filter_pseudogene_off_targets_removes_overlapping_hits(self, tmp_path):
+        task = _make_task(is_endogenous=True, aligner="bowtie2")
+        task.has_pseudogene_filter = True
+
+        annotation_path = tmp_path / "annotation.gtf.parq"
+        pd.DataFrame(
+            {
+                "seqname": ["chr1", "chr1", "chr2"],
+                "start": [90, 500, 700],
+                "end": [150, 550, 750],
+                "feature": ["gene", "gene", "gene"],
+                "gene_biotype": ["processed_pseudogene", "protein_coding", "pseudogene"],
+            }
+        ).to_parquet(annotation_path)
+
+        task.input = lambda: {"annotation": MagicMock(path=str(annotation_path))}
+        df = pd.DataFrame(
+            {
+                "qname": ["probe1", "probe1", "probe2"],
+                "rname": ["chr1", "chr1", "chr2"],
+                "pos": ["100", "520", "720"],
+                "cigar": ["21M", "21M", "21M"],
+            }
+        )
+
+        filtered = task.filter_pseudogene_off_targets(df)
+        assert len(filtered) == 1
+        assert filtered.iloc[0]["pos"] == "520"
 
 
 class TestCountTableParsing:

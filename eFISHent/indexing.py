@@ -3,7 +3,6 @@
 import logging
 import os
 import subprocess
-import warnings
 
 import luigi
 import pandas as pd

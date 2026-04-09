@@ -222,6 +222,51 @@ class TestSelectSequenceEdgeCases:
         result = task.select_sequence([short, long_seq])
         assert result.id == "long"
 
+    def test_multiple_sequences_filter_to_gene_name_before_selecting_longest(self):
+        """Related-gene transcripts should be excluded before longest-isoform selection."""
+        task = PrepareSequence()
+        actb_short = Bio.SeqRecord.SeqRecord(
+            Bio.Seq.Seq("ATCG"),
+            id="actb-short",
+            description="NM_001 ACTB transcript variant 1",
+        )
+        actb_long = Bio.SeqRecord.SeqRecord(
+            Bio.Seq.Seq("ATCGATCG"),
+            id="actb-long",
+            description="NM_002 actb transcript variant 2",
+        )
+        unrelated_longer = Bio.SeqRecord.SeqRecord(
+            Bio.Seq.Seq("ATCGATCGATCG"),
+            id="potef",
+            description="NM_003 POTEF transcript variant 1",
+        )
+
+        with patch("eFISHent.prepare_sequence.SequenceConfig") as mock_cfg:
+            mock_cfg.return_value.gene_name = "ACTB"
+            result = task.select_sequence([actb_short, actb_long, unrelated_longer])
+
+        assert result.id == "actb-long"
+
+    def test_multiple_sequences_without_gene_match_still_selects_longest(self):
+        """If no descriptions match the gene name, fall back to longest sequence."""
+        task = PrepareSequence()
+        shorter = Bio.SeqRecord.SeqRecord(
+            Bio.Seq.Seq("ATCG"),
+            id="tx1",
+            description="NM_001 hypothetical transcript",
+        )
+        longer = Bio.SeqRecord.SeqRecord(
+            Bio.Seq.Seq("ATCGATCG"),
+            id="tx2",
+            description="NM_002 hypothetical transcript",
+        )
+
+        with patch("eFISHent.prepare_sequence.SequenceConfig") as mock_cfg:
+            mock_cfg.return_value.gene_name = "ACTB"
+            result = task.select_sequence([shorter, longer])
+
+        assert result.id == "tx2"
+
 
 class TestGetNuccoreQuery:
     """Tests for nuccore query building."""
