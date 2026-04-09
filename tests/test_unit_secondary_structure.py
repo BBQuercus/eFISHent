@@ -67,6 +67,15 @@ def test_get_free_energy_unsupported_platform():
     """
     sequence = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATCGATCG"), id="test")
 
-    with patch("eFISHent.secondary_structure.sys.platform", "win32"):
-        with pytest.raises(NotImplementedError, match="not supported"):
-            get_free_energy(sequence)
+    import eFISHent.secondary_structure as ss
+    saved_path, saved_datapath = ss._fold_path, ss._fold_datapath
+    ss._fold_path = ""  # Reset cache so _resolve_fold re-runs
+    ss._fold_datapath = ""
+    try:
+        with patch("eFISHent.secondary_structure.sys.platform", "win32"), \
+             patch("eFISHent.secondary_structure.shutil.which", return_value=None):
+            with pytest.raises(NotImplementedError, match="not supported"):
+                get_free_energy(sequence)
+    finally:
+        ss._fold_path = saved_path
+        ss._fold_datapath = saved_datapath
