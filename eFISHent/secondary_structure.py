@@ -23,6 +23,18 @@ _fold_path: str = ""
 _fold_datapath: str = ""
 
 
+def _is_rnastructure_fold(path: str) -> bool:
+    """Check whether a Fold binary is from the RNAstructure package."""
+    try:
+        out = subprocess.run(
+            [path, "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return "Mathews Lab" in (out.stdout + out.stderr)
+    except Exception:
+        return False
+
+
 def _resolve_fold() -> None:
     """Find the best Fold binary and its DATAPATH (cached after first call)."""
     global _fold_path, _fold_datapath
@@ -35,9 +47,11 @@ def _resolve_fold() -> None:
 
     # Prefer system-installed Fold (from RNAstructure package) — it ships
     # with matching data tables, avoiding version mismatches with the
-    # bundled binary.
+    # bundled binary.  Validate that the candidate is actually RNAstructure
+    # (its --version output contains "Mathews Lab") to avoid picking up
+    # unrelated binaries that happen to be named "Fold".
     system_fold = shutil.which("Fold")
-    if system_fold:
+    if system_fold and _is_rnastructure_fold(system_fold):
         _fold_path = system_fold
         # Keep existing DATAPATH if set (RNAstructure install sets it),
         # otherwise fall back to bundled data tables.
