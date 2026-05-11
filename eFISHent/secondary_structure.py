@@ -110,12 +110,20 @@ def get_free_energy(sequence: Bio.SeqRecord.SeqRecord) -> float:
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,
         )
     except subprocess.CalledProcessError as e:
         logger = logging.getLogger("custom-logger")
         logger.warning(
             f"Fold failed for {sequence.id} (exit code {e.returncode}): "
             f"{e.stderr.strip() or 'no error message'}. "
+            "Assuming no secondary structure (deltaG = 0)."
+        )
+        return 0.0
+    except subprocess.TimeoutExpired:
+        logger = logging.getLogger("custom-logger")
+        logger.warning(
+            f"Fold timed out (>30s) for {sequence.id}. "
             "Assuming no secondary structure (deltaG = 0)."
         )
         return 0.0

@@ -287,6 +287,42 @@ def get_reference_paths(
     }
 
 
+def try_download_supplemental_index(
+    genome_id: str,
+    kmer_length: int,
+    cache_dir: Optional[str] = None,
+) -> bool:
+    """Try to download a pre-built jellyfish index for a non-default kmer_length.
+
+    The standard download includes only genome_15.jf. For other kmer lengths
+    (e.g. 20), the index can be hosted separately on HF and fetched on demand
+    here so users never have to build from the full genome locally.
+
+    Returns True if the file is now present (either already there or freshly
+    downloaded), False if it is unavailable (not yet hosted or network error).
+    """
+    filename = f"genome_{kmer_length}.jf"
+    genome_dir = get_genome_dir(genome_id, cache_dir)
+    out_path = os.path.join(genome_dir, filename)
+
+    if os.path.isfile(out_path):
+        return True
+
+    hf_path = f"{genome_id}/{filename}"
+    try:
+        from huggingface_hub import hf_hub_download
+        hf_hub_download(
+            repo_id=HF_REPO_ID,
+            filename=hf_path,
+            repo_type="dataset",
+            local_dir=get_cache_dir(cache_dir),
+            local_dir_use_symlinks=False,
+        )
+        return os.path.isfile(out_path)
+    except Exception:
+        return False
+
+
 def list_available_genomes() -> List[Dict[str, str]]:
     """List all available genome aliases and their canonical IDs."""
     # Group aliases by canonical ID

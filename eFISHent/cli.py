@@ -527,6 +527,47 @@ def validate_parameter_warnings(args: argparse.Namespace) -> List[str]:
             "  Consider --spacing 2 for denser probe tiling."
         )
 
+    # Pre-built genome + non-default kmer_length: forced jellyfish rebuild
+    # genome_15.jf is the only pre-built jellyfish index; any other kl builds
+    # from the full genome and takes 10-30+ min on large genomes (longer on NFS).
+    if getattr(args, "genome", None) and args.kmer_length != 15:
+        warnings.append(
+            f"Using --genome with -kl {args.kmer_length} (not 15): "
+            "the pre-built package only includes a 15-mer jellyfish index.\n"
+            f"  eFISHent will check HuggingFace for a pre-built {args.kmer_length}-mer index "
+            "and download it automatically if available.\n"
+            "  If not available, the index will be built locally from the full genome "
+            "(slow on large genomes / NFS — consider keeping -kl 15)."
+        )
+
+    # Pre-built genome on NFS: bowtie2 reads ~6 GB index; suggest cache on scratch.
+    # Only shown on Linux (where HPC/NFS setups are the norm; macOS home is local).
+    if (
+        getattr(args, "genome", None)
+        and not getattr(args, "index_cache_dir", None)
+        and sys.platform.startswith("linux")
+    ):
+        warnings.append(
+            "Using --genome: indices default to ~/.local/efishent/indices/.\n"
+            "  On HPC systems where HOME is NFS-mounted, genome alignment can take "
+            "30-60+ min instead of ~1 min.\n"
+            "  Add --index-cache-dir /path/to/scratch to store indices on a fast "
+            "local filesystem."
+        )
+
+    # Long probes + strict k-mer filter: a 50-mer has ~36 sub-15-mers, so the
+    # probability of any one exceeding max_kmers=5 is much higher than for a
+    # 20-24-mer (the smfish preset default target length).
+    if args.min_length > 30 and args.max_kmers <= 5:
+        suggested = max(10, round(args.max_kmers * args.min_length / 24))
+        warnings.append(
+            f"Long probes ({args.min_length}–{args.max_length} nt) with strict k-mer filter "
+            f"(--max-kmers {args.max_kmers}) may remove most probes.\n"
+            f"  A {args.min_length}-mer contains ~{args.min_length - 14} sub-15-mers; "
+            "the chance of any one exceeding the count threshold is much higher than for short probes.\n"
+            f"  Consider --max-kmers {suggested} for long probe designs."
+        )
+
     # High-GC target warning: compute gene GC from sequence file if available
     seq_file = getattr(args, "sequence_file", None)
     if seq_file and os.path.isfile(seq_file):
@@ -1178,7 +1219,10 @@ def main():
     # Handle --genome: resolve and set reference paths
     genome_arg = getattr(args, "genome", None)
     if genome_arg:
-        from .prebuilt import download_genome, get_reference_paths, is_genome_cached, resolve_genome
+        from .prebuilt import (
+            download_genome, get_reference_paths, is_genome_cached,
+            resolve_genome, try_download_supplemental_index,
+        )
         if getattr(args, "reference_genome", None):
             print("Error: --genome and --reference-genome are mutually exclusive.")
             sys.exit(1)
@@ -1189,6 +1233,21 @@ def main():
         if not is_genome_cached(genome_id, cache_dir):
             print(f"Genome {genome_id} not cached. Downloading...")
             download_genome(genome_id, cache_dir=cache_dir)
+
+        # Auto-fetch supplemental jellyfish index for non-default kmer_length.
+        # genome_15.jf is always bundled; other kl values are hosted separately
+        # on HuggingFace and downloaded here on first use.
+        if args.kmer_length != 15:
+            from .console import console
+            console.print(
+                f"  Checking HuggingFace for pre-built {args.kmer_length}-mer index...",
+                end="",
+            )
+            found = try_download_supplemental_index(genome_id, args.kmer_length, cache_dir)
+            if found:
+                console.print(" [green]found[/green]")
+            else:
+                console.print(" [yellow]not available — will build locally[/yellow]")
 
         paths = get_reference_paths(genome_id, cache_dir)
         args.reference_genome = paths["reference_genome"]

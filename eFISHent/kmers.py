@@ -143,12 +143,39 @@ class BuildJellyfishIndex(luigi.Task):
             f"{util.get_genome_name()}_{ProbeConfig().kmer_length}.jf"
         )
 
+    @staticmethod
+    def _jellyfish_size(genome_path: str, kmer_length: int) -> str:
+        """Pick a jellyfish hash-table size appropriate for the genome and k-mer length.
+
+        The default 100M is well-tested for kl=15 on all supported genomes (most
+        15-mers repeat, so effective distinct entries << genome size). For larger
+        k-mers, almost every k-mer is unique, so 100M causes ~30 overflow passes
+        on large genomes and multi-hour runtimes. 500M cuts that to ~6 passes
+        at ~4-5 GB RAM — still slow, but the pre-flight warning tells users to
+        keep kl=15 instead.
+        """
+        if kmer_length <= 15:
+            return "100M"
+        try:
+            nbytes = os.path.getsize(genome_path)
+        except OSError:
+            return "100M"
+        gb = nbytes / 1e9
+        if gb > 1.0:
+            return "500M"
+        if gb > 0.1:
+            return "200M"
+        return "100M"
+
     def run(self):
         util.log_stage_start(self.logger, "BuildJellyfishIndex")
         if ProbeConfig().max_kmers <= 2:
             self.logger.warning(
                 f"{util.UniCode.warn} Jellyfish index will be created but not used because max_kmers <= 2."
             )
+
+        genome_path = os.path.abspath(GeneralConfig().reference_genome)
+        jf_size = self._jellyfish_size(genome_path, ProbeConfig().kmer_length)
 
         args_jellyfish = [
             "jellyfish",
@@ -160,12 +187,12 @@ class BuildJellyfishIndex(luigi.Task):
             "--lower-count",
             "2",
             "--size",
-            "100M",
+            jf_size,
             "--threads",
             str(GeneralConfig().threads),
             "--output",
             self.output().path,
-            GeneralConfig().reference_genome,
+            genome_path,
         ]
         self.logger.debug(f"Running jellyfish with - {' '.join(args_jellyfish)}")
         from .console import spinner

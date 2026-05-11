@@ -223,7 +223,9 @@ class TranscriptomeFiltering(luigi.Task):
 
         # Also try extracting a cleaner gene name by stripping common suffixes
         # (e.g., "EIF2B1_cds" -> "EIF2B1", "METTL3_cds_odd" -> "METTL3")
-        gene_name_clean = re.sub(r"[_-]?(cds|mrna|transcript|seq|odd|even).*$", "", gene_name_raw)
+        gene_name_clean = re.sub(r"[_-]?(cds|mrna|rna|transcript|seq|odd|even).*$", "", gene_name_raw)
+        # Strip 2-letter species codes (e.g., "Chd4_Mm" -> "Chd4", "TAF10_Hs" -> "TAF10")
+        gene_name_clean = re.sub(r"[_-](?:mm|hs|rn|dm|dr|ce|sc)$", "", gene_name_clean)
         if gene_name_clean != gene_name_raw:
             gene_name_clean_esc = re.escape(gene_name_clean)
             gene_pattern_clean = rf"(?:^|[|_\-.\s]){gene_name_clean_esc}(?:$|[|_\-.\s])"
@@ -278,6 +280,42 @@ class TranscriptomeFiltering(luigi.Task):
                 or sid_lower in self_transcript_ids
                 or base in self_transcript_ids
             )
+
+        # Detect transcripts that are alternative annotations of the same locus:
+        # if a non-self transcript hits ≥50% of all probes at 100% identity it
+        # is almost certainly a read-through or pseudogene overlay of the target,
+        # not a true off-target. Promote those to self-hit status.
+        n_probes = len(sequences)
+        if n_probes > 0:
+            perfect_hits = df_blast[
+                (df_blast["pident"] >= 100.0) & (df_blast["gapopen"] == 0)
+            ]
+            if not perfect_hits.empty:
+                phantom_counts = (
+                    perfect_hits[~perfect_hits["sseqid"].apply(is_self_hit)]
+                    .groupby("sseqid")["qseqid"]
+                    .nunique()
+                )
+                phantom_self = set(
+                    phantom_counts[phantom_counts >= n_probes * 0.5].index.str.lower()
+                )
+                if phantom_self:
+                    self.logger.debug(
+                        f"Auto-promoted {len(phantom_self)} transcripts to self-hit "
+                        f"(≥50% of probes hit at 100% identity): {phantom_self}"
+                    )
+                    self_transcript_ids.update(phantom_self)
+                    # Rebuild is_self_hit closure to include newly promoted IDs
+                    def is_self_hit(sseqid):  # noqa: F811
+                        sid_lower = sseqid.lower()
+                        base = sid_lower.split(".")[0]
+                        patterns = [p for p in (gene_pattern, gene_pattern_clean, cli_gene_pattern) if p]
+                        return (
+                            any(re.search(p, sid_lower) for p in patterns)
+                            or (cli_gene_name and cli_gene_name.lower() in sid_lower)
+                            or sid_lower in self_transcript_ids
+                            or base in self_transcript_ids
+                        )
 
         off_target_counts = {}
         for probe_id, group in df_hits.groupby("qseqid"):

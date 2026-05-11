@@ -640,6 +640,41 @@ class CleanUpOutput(luigi.Task):
             "tm_std": float(df["TM"].std()) if len(df) > 1 else 0.0,
         }
 
+    def _ensure_genome_blast_db(self, genome: str) -> Optional[str]:
+        """Build the genome BLAST DB next to the FASTA, or reuse if cached.
+
+        Falls back to a temporary directory if the genome directory is not
+        writable. Returns the DB prefix (path without .nsq), or None on
+        failure.
+        """
+        from .console import spinner
+
+        if os.path.isfile(genome + ".nsq"):
+            return genome
+
+        genome_dir = os.path.dirname(genome) or "."
+        if os.access(genome_dir, os.W_OK):
+            db_path = genome
+        else:
+            self._verification_tmpdir = tempfile.mkdtemp(prefix="efishent_blastdb_")
+            db_path = os.path.join(self._verification_tmpdir, "genome")
+            self.logger.debug(
+                f"Genome directory {genome_dir} not writable; "
+                f"building one-shot BLAST DB in {self._verification_tmpdir}"
+            )
+
+        try:
+            with spinner("Building verification BLAST database (cached for future runs)..."):
+                subprocess.check_call(
+                    ["makeblastdb", "-in", genome, "-dbtype", "nucl",
+                     "-out", db_path],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                )
+        except subprocess.CalledProcessError as e:
+            self.logger.debug(f"makeblastdb failed: {e}")
+            return None
+        return db_path
+
     def _run_blast_verification(self, probes_fasta: str) -> Optional[Dict]:
         """Cross-validate final probes with BLAST against the reference genome.
 
@@ -657,18 +692,31 @@ class CleanUpOutput(luigi.Task):
 
         from .console import spinner
 
+        self._verification_tmpdir = None
         try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                db_path = os.path.join(tmpdir, "genome")
-                blast_out = os.path.join(tmpdir, "blast.tsv")
+            # When transcriptome BLAST handles off-target detection and
+            # max_off_targets is at default (0), the BLAST result is unused
+            # downstream — short-circuit before paying for makeblastdb +
+            # genome BLAST (multi-minute on networked filesystems).
+            is_endogenous = SequenceConfig().is_endogenous
+            max_off = ProbeConfig().max_off_targets
+            max_expected = max_off + (1 if is_endogenous else 0)
+            has_transcriptome = bool(GeneralConfig().reference_transcriptome)
+            if has_transcriptome and max_off == 0 and is_endogenous:
+                probes = [r.id for r in Bio.SeqIO.parse(probes_fasta, "fasta")]
+                return {
+                    "total": len(probes),
+                    "clean": len(probes),
+                    "flagged": {},
+                    "max_expected": max_expected,
+                }
 
-                # Build temporary BLAST DB
-                with spinner("Building verification BLAST database..."):
-                    subprocess.check_call(
-                        ["makeblastdb", "-in", genome, "-dbtype", "nucl",
-                         "-out", db_path],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
-                    )
+            db_path = self._ensure_genome_blast_db(genome)
+            if db_path is None:
+                return None
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                blast_out = os.path.join(tmpdir, "blast.tsv")
 
                 # BLAST with sensitive parameters
                 with spinner("Running BLAST cross-validation..."):
@@ -709,24 +757,6 @@ class CleanUpOutput(luigi.Task):
 
                 probes = [r.id for r in Bio.SeqIO.parse(probes_fasta, "fasta")]
 
-                # For exogenous probes, 0 self-hits expected (not in genome)
-                # For endogenous probes, 1 self-hit expected (target locus)
-                is_endogenous = SequenceConfig().is_endogenous
-                max_off = ProbeConfig().max_off_targets
-                max_expected = max_off + (1 if is_endogenous else 0)
-
-                # When transcriptome BLAST handles off-target detection and
-                # max_off_targets is at default (0), skip genomic count check
-                # (same logic as alignment filter — pseudogenes inflate counts)
-                has_transcriptome = bool(GeneralConfig().reference_transcriptome)
-                if has_transcriptome and max_off == 0 and is_endogenous:
-                    return {
-                        "total": len(probes),
-                        "clean": len(probes),
-                        "flagged": {},
-                        "max_expected": max_expected,
-                    }
-
                 clean = sum(
                     1 for p in probes
                     if hits_per_probe.get(p, 0) <= max_expected
@@ -746,6 +776,10 @@ class CleanUpOutput(luigi.Task):
         except Exception as e:
             self.logger.debug(f"BLAST verification failed: {e}")
             return None
+        finally:
+            if self._verification_tmpdir:
+                shutil.rmtree(self._verification_tmpdir, ignore_errors=True)
+                self._verification_tmpdir = None
 
     def prettify_sequences(self, df: pd.DataFrame) -> List[Bio.SeqRecord.SeqRecord]:
         """Clean up sequence id's and descriptions."""
