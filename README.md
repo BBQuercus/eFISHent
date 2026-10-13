@@ -1,9 +1,9 @@
-[![License: MIT](https://img.shields.io/github/license/BBQuercus/eFISHent)]()
+[![License: MIT](https://img.shields.io/github/license/BBQuercus/eFISHent)](https://github.com/BBQuercus/eFISHent/blob/main/license.txt)
 [![PyPI version](https://img.shields.io/pypi/v/efishent)](https://pypi.org/project/efishent/)
-[![Github Actions Status](https://github.com/bbquercus/eFISHent/workflows/Tests/badge.svg)]()
+[![Github Actions Status](https://github.com/BBQuercus/eFISHent/actions/workflows/tests.yml/badge.svg)](https://github.com/BBQuercus/eFISHent/actions/workflows/tests.yml)
 [![CodeFactor](https://www.codefactor.io/repository/github/bbquercus/efishent/badge)](https://www.codefactor.io/repository/github/bbquercus/efishent)
 [![codecov](https://codecov.io/gh/BBQuercus/eFISHent/branch/main/graph/badge.svg?token=C1SRFYZ5VP)](https://codecov.io/gh/BBQuercus/eFISHent)
-[![Maintainability](https://api.codeclimate.com/v1/badges/7470189fdd927276f80e/maintainability)](https://codeclimate.com/github/BBQuercus/eFISHent/maintainability)
+[![Maintainability](https://qlty.sh/gh/BBQuercus/projects/eFISHent/maintainability.svg)](https://qlty.sh/gh/BBQuercus/projects/eFISHent)
 [![DOI](https://zenodo.org/badge/501129295.svg)](https://zenodo.org/badge/latestdoi/501129295)
 
 <img src="https://raw.githubusercontent.com/BBQuercus/eFISHent/main/logo.png" width="200px" align="right" alt="Logo of eFISHent.">
