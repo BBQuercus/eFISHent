@@ -466,6 +466,26 @@ else
     warn "Skipped (use --with-blast to install). Needed for --reference-transcriptome."
 fi
 
+# The Linux BLAST+ binaries link against GCC's OpenMP runtime (libgomp.so.1),
+# which minimal systems without gcc lack. Fetch it into deps/lib without root.
+if [ "$PLATFORM" = "linux" ] && [ -f "${BIN_DIR}/blastn" ] && \
+   LD_LIBRARY_PATH="${DEPS_DIR}/lib:${LD_LIBRARY_PATH:-}" ldd "${BIN_DIR}/blastn" 2>/dev/null | grep -q "libgomp.so.1 => not found"; then
+    if command -v apt-get >/dev/null 2>&1 && command -v dpkg-deb >/dev/null 2>&1; then
+        GOMP_TMP="$(mktemp -d)"
+        if (cd "$GOMP_TMP" && apt-get download libgomp1 >/dev/null 2>&1) && \
+           dpkg-deb -x "$GOMP_TMP"/libgomp1_*.deb "$GOMP_TMP/x"; then
+            mkdir -p "${DEPS_DIR}/lib"
+            cp -a "$GOMP_TMP"/x/usr/lib/*/libgomp.so.1* "${DEPS_DIR}/lib/"
+            info "Installed libgomp.so.1 (needed by blastn) into ${DEPS_DIR}/lib"
+        else
+            warn "blastn needs libgomp.so.1 — install it with: sudo apt-get install libgomp1"
+        fi
+        rm -rf "$GOMP_TMP"
+    else
+        warn "blastn needs libgomp.so.1 — install your distribution's libgomp package"
+    fi
+fi
+
 # ── 7. Install gffread (optional, for transcriptome building) ──────────────
 
 step "[7/9] gffread (build transcriptome from genome + GTF — optional)"
@@ -738,7 +758,11 @@ done
 for tool in glpsol esearch blastn dustmasker gffread; do
     if command -v "$tool" >/dev/null 2>&1; then
         tool_path="$(command -v "$tool")"
-        info "$tool: $tool_path"
+        if [ "$tool" = "blastn" ] && ! blastn -version >/dev/null 2>&1; then
+            warn "blastn: $tool_path is installed but fails to run (missing shared library?)"
+        else
+            info "$tool: $tool_path"
+        fi
     else
         warn "$tool: not found (optional)"
     fi
