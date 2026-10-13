@@ -31,6 +31,7 @@ EFISHENT_VERSION="latest"
 BOWTIE_VERSION="1.3.1"
 BOWTIE2_VERSION="2.5.5"
 JELLYFISH_VERSION="2.3.1"
+JELLYFISH_BINARY_VERSION="2.3.0"  # last release with a static Linux binary
 GLPK_VERSION="5.0"
 BLAST_VERSION="2.17.0"
 RNASTRUCTURE_VERSION="6.4"
@@ -60,6 +61,23 @@ need_cmd() {
         err "Required command not found: $1"
         err "Please install it and retry."
         exit 1
+    fi
+}
+
+# Unzip helper — uses unzip, or python3's zipfile (keeping file modes) if unzip is missing
+extract_zip() {
+    if command -v unzip >/dev/null 2>&1; then
+        unzip -qo "$1"
+    else
+        python3 - "$1" <<'PYEOF'
+import os, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as zf:
+    for member in zf.infolist():
+        path = zf.extract(member)
+        mode = member.external_attr >> 16
+        if mode:
+            os.chmod(path, mode & 0o7777)
+PYEOF
     fi
 }
 
@@ -147,8 +165,11 @@ fi
 # Need tar for extracting archives
 need_cmd tar
 
-# Need unzip for bowtie
-need_cmd unzip
+# Need unzip (or python3 as a fallback) for bowtie
+if ! command -v unzip >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
+    err "Neither unzip nor python3 found. Install unzip and retry."
+    exit 1
+fi
 
 # Check for a C compiler (still needed for jellyfish/glpk if no binary available)
 HAS_COMPILER=false
@@ -203,7 +224,7 @@ else
     if [ -n "${BOWTIE_URL:-}" ]; then
         download "$BOWTIE_URL" "${DEPS_DIR}/bowtie.zip"
         cd "${DEPS_DIR}"
-        unzip -qo bowtie.zip
+        extract_zip bowtie.zip
         cp "${BOWTIE_DIR}"/bowtie* "${BIN_DIR}/"
         rm -rf bowtie.zip "${BOWTIE_DIR}"
         # Remove macOS quarantine
@@ -255,7 +276,7 @@ else
     if [ -n "${BOWTIE2_URL:-}" ]; then
         download "$BOWTIE2_URL" "${DEPS_DIR}/bowtie2.zip"
         cd "${DEPS_DIR}"
-        unzip -qo bowtie2.zip
+        extract_zip bowtie2.zip
         cp "${BOWTIE2_DIR}"/bowtie2* "${BIN_DIR}/"
         rm -rf bowtie2.zip "${BOWTIE2_DIR}"
         # Remove macOS quarantine
@@ -276,6 +297,17 @@ if [ -f "${BIN_DIR}/jellyfish" ]; then
 else
     # Try pre-compiled binary first
     JELLYFISH_INSTALLED=false
+    if [ "${PLATFORM}-${ARCH_NAME}" = "linux-x86_64" ]; then
+        if download "https://github.com/gmarcais/Jellyfish/releases/download/v${JELLYFISH_BINARY_VERSION}/jellyfish-linux" "${BIN_DIR}/jellyfish" \
+           && chmod +x "${BIN_DIR}/jellyfish" \
+           && "${BIN_DIR}/jellyfish" --version >/dev/null 2>&1; then
+            info "Installed jellyfish ${JELLYFISH_BINARY_VERSION} (pre-built)"
+            JELLYFISH_INSTALLED=true
+        else
+            rm -f "${BIN_DIR}/jellyfish"
+            warn "Pre-built jellyfish failed — falling back to compiling from source"
+        fi
+    fi
 
     # Fallback: compile from source
     if [ "$JELLYFISH_INSTALLED" = false ]; then
