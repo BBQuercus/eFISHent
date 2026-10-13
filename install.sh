@@ -496,7 +496,7 @@ step "[8/9] Fold / RNAstructure (secondary structure prediction)"
 
 # Fold is a bundled binary that must live inside the Python package directory.
 # We download the RNAstructure package and extract just the Fold binary.
-# The actual placement into site-packages happens after the Python package is installed (step 7).
+# The actual placement into site-packages happens after the Python package is installed (step 8).
 FOLD_BINARY=""
 if [ "$PLATFORM" = "linux" ]; then
     FOLD_NAME="Fold"
@@ -537,7 +537,7 @@ else
     fi
 fi
 
-# ── 7. Install eFISHent Python package ────────────────────────────────────────
+# ── 8. Install eFISHent Python package ────────────────────────────────────────
 
 if [ "$DEPS_ONLY" = false ]; then
     step "[9/9] eFISHent (Python package)"
