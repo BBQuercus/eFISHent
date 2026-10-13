@@ -312,7 +312,7 @@ else
     fi
 fi
 
-# ── 3. Install GLPK ──────────────────────────────────────────────────────────
+# ── 4. Install GLPK ──────────────────────────────────────────────────────────
 
 step "[4/9] GLPK (linear programming solver)"
 
@@ -353,7 +353,7 @@ else
     fi
 fi
 
-# ── 4. Install Entrez Direct ─────────────────────────────────────────────────
+# ── 5. Install Entrez Direct ─────────────────────────────────────────────────
 
 step "[5/9] Entrez Direct (NCBI tools — optional)"
 
@@ -393,7 +393,7 @@ else
     fi
 fi
 
-# ── 5. Install BLAST+ (optional) ────────────────────────────────────────────
+# ── 6. Install BLAST+ (optional) ────────────────────────────────────────────
 
 step "[6/9] BLAST+ (off-target filtering — optional)"
 
@@ -434,7 +434,7 @@ else
     warn "Skipped (use --with-blast to install). Needed for --reference-transcriptome."
 fi
 
-# ── 6. Install gffread (optional, for transcriptome building) ──────────────
+# ── 7. Install gffread (optional, for transcriptome building) ──────────────
 
 step "[7/9] gffread (build transcriptome from genome + GTF — optional)"
 
@@ -490,13 +490,13 @@ else
     warn "Skipped (use --with-blast to install). Needed to build transcriptome FASTA."
 fi
 
-# ── 7. Install Fold (RNAstructure) ─────────────────────────────────────────
+# ── 8. Install Fold (RNAstructure) ─────────────────────────────────────────
 
 step "[8/9] Fold / RNAstructure (secondary structure prediction)"
 
 # Fold is a bundled binary that must live inside the Python package directory.
 # We download the RNAstructure package and extract just the Fold binary.
-# The actual placement into site-packages happens after the Python package is installed (step 8).
+# The actual placement into site-packages happens after the Python package is installed (step 9).
 FOLD_BINARY=""
 if [ "$PLATFORM" = "linux" ]; then
     FOLD_NAME="Fold"
@@ -537,7 +537,7 @@ else
     fi
 fi
 
-# ── 8. Install eFISHent Python package ────────────────────────────────────────
+# ── 9. Install eFISHent Python package ────────────────────────────────────────
 
 if [ "$DEPS_ONLY" = false ]; then
     step "[9/9] eFISHent (Python package)"
