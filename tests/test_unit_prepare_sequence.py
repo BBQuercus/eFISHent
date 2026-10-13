@@ -7,8 +7,7 @@ import Bio.SeqRecord
 import pandas as pd
 import pytest
 
-from eFISHent.prepare_sequence import DownloadEntrezGeneSequence
-from eFISHent.prepare_sequence import PrepareSequence
+from eFISHent.prepare_sequence import DownloadEntrezGeneSequence, PrepareSequence
 
 ESEARCH_AVAILABLE = shutil.which("esearch") is not None
 

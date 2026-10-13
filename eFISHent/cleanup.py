@@ -3,7 +3,6 @@
 Remove the files that are not needed and prettify the kept output.
 """
 
-from typing import Dict, List, Optional
 import glob
 import logging
 import multiprocessing
@@ -22,23 +21,20 @@ import pandas as pd
 
 from . import util
 from .alignment import AlignProbeCandidates
-from .basic_filtering import compute_duplex_dg
-from .basic_filtering import get_cpg_fraction
-from .basic_filtering import get_gc_content
-from .basic_filtering import get_melting_temp
-from .config import GeneralConfig
-from .config import ProbeConfig
-from .config import RunConfig
-from .config import SequenceConfig
-from .gene_annotation import aggregate_off_target_genes
-from .gene_annotation import build_transcript_gene_map
-from .kmers import BuildJellyfishIndex
-from .kmers import get_max_kmer_counts_batch
+from .basic_filtering import (
+    compute_duplex_dg,
+    get_cpg_fraction,
+    get_gc_content,
+    get_melting_temp,
+)
+from .config import GeneralConfig, ProbeConfig, RunConfig, SequenceConfig
+from .gene_annotation import aggregate_off_target_genes, build_transcript_gene_map
+from .kmers import BuildJellyfishIndex, get_max_kmer_counts_batch
 from .optimization import OptimizeProbeCoverage
 from .secondary_structure import get_free_energy
 
 
-def _classify_expression_risk(gene: str, gene_expression: Dict[str, float]) -> Optional[str]:
+def _classify_expression_risk(gene: str, gene_expression: dict[str, float]) -> str | None:
     """Classify expression risk for a single off-target gene."""
     if gene not in gene_expression:
         return None
@@ -83,7 +79,7 @@ class CleanUpOutput(luigi.Task):
 
     def prettify_table(
         self,
-        sequences: List[Bio.SeqRecord.SeqRecord],
+        sequences: list[Bio.SeqRecord.SeqRecord],
         basename: str,
         jellyfish_path: str,
         alignment_path: str,
@@ -214,7 +210,7 @@ class CleanUpOutput(luigi.Task):
             return
 
         # Build gene name mapping
-        mapping: Dict[str, str] = {}
+        mapping: dict[str, str] = {}
         if annotation:
             # build_transcript_gene_map handles parquet discovery internally
             mapping = build_transcript_gene_map(annotation)
@@ -233,7 +229,7 @@ class CleanUpOutput(luigi.Task):
 
     def _blast_final_probes(
         self, df: pd.DataFrame, txome: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """BLAST final probes against the transcriptome for detailed reporting."""
         if not shutil.which("blastn"):
             return None
@@ -328,7 +324,7 @@ class CleanUpOutput(luigi.Task):
             return
 
         # Build gene->expression mapping if count table is available
-        gene_expression: Dict[str, float] = {}
+        gene_expression: dict[str, float] = {}
         if count_table and os.path.isfile(count_table):
             try:
                 sep = "\t" if count_table.endswith(".tsv") else ","
@@ -640,7 +636,7 @@ class CleanUpOutput(luigi.Task):
             "tm_std": float(df["TM"].std()) if len(df) > 1 else 0.0,
         }
 
-    def _ensure_genome_blast_db(self, genome: str) -> Optional[str]:
+    def _ensure_genome_blast_db(self, genome: str) -> str | None:
         """Build the genome BLAST DB next to the FASTA, or reuse if cached.
 
         Falls back to a temporary directory if the genome directory is not
@@ -675,7 +671,7 @@ class CleanUpOutput(luigi.Task):
             return None
         return db_path
 
-    def _run_blast_verification(self, probes_fasta: str) -> Optional[Dict]:
+    def _run_blast_verification(self, probes_fasta: str) -> dict | None:
         """Cross-validate final probes with BLAST against the reference genome.
 
         Uses a different algorithm than Bowtie2 alignment to independently
@@ -781,7 +777,7 @@ class CleanUpOutput(luigi.Task):
                 shutil.rmtree(self._verification_tmpdir, ignore_errors=True)
                 self._verification_tmpdir = None
 
-    def prettify_sequences(self, df: pd.DataFrame) -> List[Bio.SeqRecord.SeqRecord]:
+    def prettify_sequences(self, df: pd.DataFrame) -> list[Bio.SeqRecord.SeqRecord]:
         """Clean up sequence id's and descriptions."""
         return [
             Bio.SeqRecord.SeqRecord(
@@ -839,7 +835,7 @@ class CleanUpOutput(luigi.Task):
 
         for _ in range(max_iterations):
             # Count how many probes hit each off-target gene
-            gene_probe_counts: Dict[str, List[int]] = {}
+            gene_probe_counts: dict[str, list[int]] = {}
             for idx, row in df.iterrows():
                 genes_str = row.get("off_target_genes", "")
                 if not genes_str:
@@ -879,7 +875,7 @@ class CleanUpOutput(luigi.Task):
         "HSP", "RPL", "RPS", "EIF", "PCDH", "CDH", "CLDN",
     ]
 
-    def _detect_off_target_clustering(self, df: pd.DataFrame) -> List[str]:
+    def _detect_off_target_clustering(self, df: pd.DataFrame) -> list[str]:
         """Detect when multiple probes hit the same off-target gene.
 
         Returns a list of warning messages. Also detects paralog families
@@ -889,7 +885,7 @@ class CleanUpOutput(luigi.Task):
             return []
 
         # Count how many probes hit each off-target gene
-        gene_probe_counts: Dict[str, int] = {}
+        gene_probe_counts: dict[str, int] = {}
         for _, row in df.iterrows():
             genes_str = row.get("off_target_genes", "")
             if not genes_str:

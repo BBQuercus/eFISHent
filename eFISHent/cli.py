@@ -1,7 +1,5 @@
 """Command line interface."""
 
-from pathlib import Path
-from typing import Any, Dict, List, TYPE_CHECKING
 import argparse
 import configparser
 import logging
@@ -12,6 +10,8 @@ import sys
 import tempfile
 import time
 import warnings
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 # Silence some troublemakers before heavy imports
 warnings.filterwarnings("ignore")
@@ -21,14 +21,13 @@ logging.getLogger("matplotlib.font_manager").setLevel(level=logging.CRITICAL)
 import luigi
 
 from . import __version__
-from .constants import CLI_SHORTFORM
-from .constants import CONFIG_CLASSES
+from .constants import CLI_SHORTFORM, CONFIG_CLASSES
 from .util import UniCode
 
 if TYPE_CHECKING:
     from .analyze import AnalyzeProbeset
     from .cleanup import CleanUpOutput
-    from .indexing import BuildBowtieIndex, BuildBowtie2Index
+    from .indexing import BuildBowtie2Index, BuildBowtieIndex
     from .kmers import BuildJellyfishIndex
 
 
@@ -60,7 +59,7 @@ def positive_int(value) -> int:
     try:
         ivalue = int(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"Invalid integer value: '{value}'")
+        raise argparse.ArgumentTypeError(f"Invalid integer value: '{value}'") from None
     if ivalue < 1:
         raise argparse.ArgumentTypeError(f"Value must be >= 1, got {ivalue}")
     return ivalue
@@ -71,7 +70,7 @@ def non_negative_int(value) -> int:
     try:
         ivalue = int(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"Invalid integer value: '{value}'")
+        raise argparse.ArgumentTypeError(f"Invalid integer value: '{value}'") from None
     if ivalue < 0:
         raise argparse.ArgumentTypeError(f"Value must be >= 0, got {ivalue}")
     return ivalue
@@ -82,7 +81,7 @@ def percentage(value) -> float:
     try:
         fvalue = float(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"Invalid number: '{value}'")
+        raise argparse.ArgumentTypeError(f"Invalid number: '{value}'") from None
     if not 0 <= fvalue <= 100:
         raise argparse.ArgumentTypeError(f"Percentage must be 0-100, got {fvalue}")
     return fvalue
@@ -464,7 +463,7 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         parser.error("\n  " + "\n  ".join(errors))
 
 
-def validate_parameter_warnings(args: argparse.Namespace) -> List[str]:
+def validate_parameter_warnings(args: argparse.Namespace) -> list[str]:
     """Check for risky parameter combinations and return warning messages.
 
     These are non-fatal warnings — the pipeline will still run.
@@ -670,7 +669,7 @@ DEPENDENCIES = {
 }
 
 
-def check_all_dependencies() -> Dict[str, dict]:
+def check_all_dependencies() -> dict[str, dict]:
     """Check all external dependencies and return status dict."""
     results = {}
 
@@ -725,7 +724,7 @@ def check_all_dependencies() -> Dict[str, dict]:
     return results
 
 
-def check_required_dependencies(args: argparse.Namespace) -> List[str]:
+def check_required_dependencies(args: argparse.Namespace) -> list[str]:
     """Check only the dependencies required for the current run mode.
 
     Returns list of missing dependency names (empty = all good).
@@ -982,8 +981,8 @@ def check_for_updates() -> None:
                     return
 
             # Query PyPI
-            import urllib.request
             import urllib.parse
+            import urllib.request
             url = "https://pypi.org/pypi/efishent/json"
             if urllib.parse.urlparse(url).scheme != "https":
                 return
@@ -1119,19 +1118,19 @@ def format_duration(seconds: float) -> str:
 
 def _prefill_cached_steps(add_cached_step_fn) -> None:
     """Check which pipeline steps are already cached and add them to the display."""
-    from .util import _get_pipeline_stages
+    from .alignment import AlignProbeCandidates
+    from .basic_filtering import BasicFiltering
+    from .cleanup import CleanUpOutput
+    from .generate_probes import GenerateAllProbes
+    from .kmers import KMerFiltering
+    from .optimization import OptimizeProbeCoverage
 
     # Map stage names to Luigi task classes
     from .prepare_sequence import PrepareSequence
-    from .generate_probes import GenerateAllProbes
-    from .basic_filtering import BasicFiltering
     from .rdna_filter import FilterRibosomalRNA
-    from .alignment import AlignProbeCandidates
-    from .transcriptome_filter import TranscriptomeFiltering
-    from .kmers import KMerFiltering
     from .secondary_structure import SecondaryStructureFiltering
-    from .optimization import OptimizeProbeCoverage
-    from .cleanup import CleanUpOutput
+    from .transcriptome_filter import TranscriptomeFiltering
+    from .util import _get_pipeline_stages
 
     task_classes = {
         "PrepareSequence": PrepareSequence,
@@ -1220,8 +1219,11 @@ def main():
     genome_arg = getattr(args, "genome", None)
     if genome_arg:
         from .prebuilt import (
-            download_genome, get_reference_paths, is_genome_cached,
-            resolve_genome, try_download_supplemental_index,
+            download_genome,
+            get_reference_paths,
+            is_genome_cached,
+            resolve_genome,
+            try_download_supplemental_index,
         )
         if getattr(args, "reference_genome", None):
             print("Error: --genome and --reference-genome are mutually exclusive.")
@@ -1292,7 +1294,7 @@ def main():
     # Lazy imports - only load heavy modules after arg parsing
     from .analyze import AnalyzeProbeset
     from .cleanup import CleanUpOutput
-    from .indexing import BuildBowtieIndex, BuildBowtie2Index
+    from .indexing import BuildBowtie2Index, BuildBowtieIndex
     from .kmers import BuildJellyfishIndex
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1300,7 +1302,7 @@ def main():
         create_custom_config(args, config_file)
         luigi.configuration.add_config_path(config_file)
 
-        tasks: List[luigi.Task] = []
+        tasks: list[luigi.Task] = []
         if args.build_indices:
             if args.aligner == "bowtie2":
                 index_task = BuildBowtie2Index()

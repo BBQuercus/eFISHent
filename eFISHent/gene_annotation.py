@@ -3,17 +3,16 @@
 import logging
 import os
 import re
-from typing import Dict
 
 import pandas as pd
 
 logger = logging.getLogger("custom-logger")
 
 # Cache for transcript-to-gene mapping
-_transcript_gene_cache: Dict[str, Dict[str, str]] = {}
+_transcript_gene_cache: dict[str, dict[str, str]] = {}
 
 
-def build_transcript_gene_map(gtf_path: str) -> Dict[str, str]:
+def build_transcript_gene_map(gtf_path: str) -> dict[str, str]:
     """Build a mapping from transcript_id to gene_name using a GTF file.
 
     Supports Ensembl GTF (gene_name attribute), GENCODE GTF, and
@@ -29,7 +28,7 @@ def build_transcript_gene_map(gtf_path: str) -> Dict[str, str]:
     if gtf_path in _transcript_gene_cache:
         return _transcript_gene_cache[gtf_path]
 
-    mapping: Dict[str, str] = {}
+    mapping: dict[str, str] = {}
 
     # Try parquet first (prepared by indexing.py / PrepareAnnotationFile)
     # PrepareAnnotationFile outputs "{gtf_path}.parq", so check both extensions
@@ -58,10 +57,10 @@ def build_transcript_gene_map(gtf_path: str) -> Dict[str, str]:
     return mapping
 
 
-def _parse_parquet_gtf(parquet_path: str) -> Dict[str, str]:
+def _parse_parquet_gtf(parquet_path: str) -> dict[str, str]:
     """Parse a parquet-formatted GTF file for transcript->gene mapping."""
     df = pd.read_parquet(parquet_path)
-    mapping: Dict[str, str] = {}
+    mapping: dict[str, str] = {}
 
     # Check which columns are available
     has_gene_name = "gene_name" in df.columns
@@ -93,11 +92,11 @@ def _parse_parquet_gtf(parquet_path: str) -> Dict[str, str]:
     return mapping
 
 
-def _parse_raw_gtf(gtf_path: str) -> Dict[str, str]:
+def _parse_raw_gtf(gtf_path: str) -> dict[str, str]:
     """Parse a raw GTF file for transcript->gene mapping."""
     import gzip
 
-    mapping: Dict[str, str] = {}
+    mapping: dict[str, str] = {}
 
     opener = gzip.open if gtf_path.endswith(".gz") else open
     with opener(gtf_path, "rt") as f:  # type: ignore
@@ -136,7 +135,7 @@ def _parse_raw_gtf(gtf_path: str) -> Dict[str, str]:
 
 
 def map_transcript_to_gene(
-    transcript_id: str, mapping: Dict[str, str]
+    transcript_id: str, mapping: dict[str, str]
 ) -> str:
     """Map a single transcript ID to its gene name.
 
@@ -185,9 +184,9 @@ def map_transcript_to_gene(
 
 def aggregate_off_target_genes(
     blast_hits: pd.DataFrame,
-    mapping: Dict[str, str],
+    mapping: dict[str, str],
     target_gene: str,
-) -> Dict[str, Dict]:
+) -> dict[str, dict]:
     """Aggregate BLAST hits per probe into off-target gene summaries.
 
     Args:
@@ -229,10 +228,10 @@ def aggregate_off_target_genes(
         pass
     target_names.discard("")
 
-    results: Dict[str, Dict] = {}
+    results: dict[str, dict] = {}
 
     for probe_id, group in blast_hits.groupby("qseqid"):
-        gene_counts: Dict[str, int] = {}
+        gene_counts: dict[str, int] = {}
         worst_pident = 0.0
         worst_length = 0
         worst_mm = 999

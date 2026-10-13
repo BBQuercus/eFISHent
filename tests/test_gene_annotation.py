@@ -255,6 +255,7 @@ class TestParseRawGtf:
     def test_gzipped_gtf(self, tmp_path):
         """Gzipped GTF file should be parsed correctly."""
         import gzip
+
         from eFISHent.gene_annotation import _parse_raw_gtf
 
         gtf_content = (
@@ -333,7 +334,10 @@ class TestBuildTranscriptGeneMapParquet:
 
     def test_prefers_parquet_over_raw_gtf(self, tmp_path):
         """When a parquet file exists alongside GTF, it should be preferred."""
-        from eFISHent.gene_annotation import build_transcript_gene_map, _transcript_gene_cache
+        from eFISHent.gene_annotation import (
+            _transcript_gene_cache,
+            build_transcript_gene_map,
+        )
 
         _transcript_gene_cache.clear()
 
@@ -361,7 +365,10 @@ class TestBuildTranscriptGeneMapParquet:
 
     def test_build_from_raw_gtf_when_no_parquet(self, mock_gtf_file):
         """When no parquet file exists, should fall back to raw GTF."""
-        from eFISHent.gene_annotation import build_transcript_gene_map, _transcript_gene_cache
+        from eFISHent.gene_annotation import (
+            _transcript_gene_cache,
+            build_transcript_gene_map,
+        )
 
         _transcript_gene_cache.clear()
 

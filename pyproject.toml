@@ -63,6 +63,17 @@ include = ["eFISHent*"]
 [tool.setuptools.package-data]
 eFISHent = ["Fold_osx", "Fold_linux", "data_tables/*", "data/*", "py.typed"]
 
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Explicit rule set so ruff's default selection can't drift between releases.
+select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B", "C4", "N"]
+ignore = [
+    "N999",  # package is named eFISHent
+    "B905",  # zip(strict=...) would change behaviour on uneven inputs
+]
+
 [tool.ruff.lint.per-file-ignores]
 "eFISHent/cli.py" = ["E402", "F401"]
 

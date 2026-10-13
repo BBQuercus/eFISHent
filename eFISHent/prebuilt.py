@@ -5,7 +5,6 @@ transcriptome, GTF) so users can skip the index-building step with
 ``--genome hg38``.
 """
 
-from typing import Dict, List, Optional, Tuple
 import hashlib
 import json
 import logging
@@ -15,7 +14,7 @@ logger = logging.getLogger("custom-logger")
 
 # Mapping of user-friendly aliases to canonical genome identifiers.
 # Only genomes with uploaded indices belong here.
-GENOME_ALIASES: Dict[str, str] = {
+GENOME_ALIASES: dict[str, str] = {
     # Human
     "hg38": "homo_sapiens/GRCh38",
     "GRCh38": "homo_sapiens/GRCh38",
@@ -49,7 +48,7 @@ GENOME_ALIASES: Dict[str, str] = {
 
 # Genomes we plan to support but have not uploaded indices for yet.
 # Maps alias -> (display name, canonical id).
-PLANNED_GENOMES: Dict[str, Tuple[str, str]] = {}
+PLANNED_GENOMES: dict[str, tuple[str, str]] = {}
 
 WIKI_URL = "https://github.com/beichenberger/efishent/wiki/Building-Custom-Indices"
 
@@ -108,7 +107,7 @@ def resolve_genome(alias: str) -> str:
 
     available = ", ".join(sorted(set(GENOME_ALIASES.values())))
     planned_names = ", ".join(
-        sorted(set(name for name, _ in PLANNED_GENOMES.values()))
+        sorted({name for name, _ in PLANNED_GENOMES.values()})
     )
     raise ValueError(
         f"Unknown genome '{alias}'. "
@@ -118,19 +117,19 @@ def resolve_genome(alias: str) -> str:
     )
 
 
-def get_cache_dir(cache_dir: Optional[str] = None) -> str:
+def get_cache_dir(cache_dir: str | None = None) -> str:
     """Get the genome cache directory, creating it if needed."""
     cache = cache_dir or os.environ.get("EFISHENT_INDEX_DIR") or DEFAULT_CACHE_DIR
     os.makedirs(cache, exist_ok=True)
     return cache
 
 
-def get_genome_dir(genome_id: str, cache_dir: Optional[str] = None) -> str:
+def get_genome_dir(genome_id: str, cache_dir: str | None = None) -> str:
     """Get the directory for a specific genome's cached files."""
     return os.path.join(get_cache_dir(cache_dir), genome_id)
 
 
-def is_genome_cached(genome_id: str, cache_dir: Optional[str] = None) -> bool:
+def is_genome_cached(genome_id: str, cache_dir: str | None = None) -> bool:
     """Check if a genome's indices are already cached and valid."""
     genome_dir = get_genome_dir(genome_id, cache_dir)
     metadata_path = os.path.join(genome_dir, METADATA_FILENAME)
@@ -151,8 +150,8 @@ def is_genome_cached(genome_id: str, cache_dir: Optional[str] = None) -> bool:
 
 
 def verify_checksums(
-    genome_id: str, cache_dir: Optional[str] = None
-) -> Tuple[bool, List[str]]:
+    genome_id: str, cache_dir: str | None = None
+) -> tuple[bool, list[str]]:
     """Verify SHA256 checksums for all cached genome files.
 
     Returns:
@@ -189,7 +188,7 @@ def verify_checksums(
 
 def download_genome(
     genome_id: str,
-    cache_dir: Optional[str] = None,
+    cache_dir: str | None = None,
     force: bool = False,
 ) -> str:
     """Download pre-built genome indices from Hugging Face Hub.
@@ -229,7 +228,7 @@ def download_genome(
     except Exception as e:
         raise RuntimeError(
             f"Could not list files for genome {genome_id} in {HF_REPO_ID}: {e}"
-        )
+        ) from e
 
     if not files:
         raise RuntimeError(
@@ -253,15 +252,15 @@ def download_genome(
             console.print(" [green]done[/green]")
         except Exception as e:
             console.print(" [red]failed[/red]")
-            raise RuntimeError(f"Failed to download {filepath}: {e}")
+            raise RuntimeError(f"Failed to download {filepath}: {e}") from e
 
     logger.info(f"Genome {genome_id} downloaded to {genome_dir}")
     return genome_dir
 
 
 def get_reference_paths(
-    genome_id: str, cache_dir: Optional[str] = None
-) -> Dict[str, str]:
+    genome_id: str, cache_dir: str | None = None
+) -> dict[str, str]:
     """Get paths to all reference files for a cached genome.
 
     Returns a dict with keys matching CLI parameter names:
@@ -290,7 +289,7 @@ def get_reference_paths(
 def try_download_supplemental_index(
     genome_id: str,
     kmer_length: int,
-    cache_dir: Optional[str] = None,
+    cache_dir: str | None = None,
 ) -> bool:
     """Try to download a pre-built jellyfish index for a non-default kmer_length.
 
@@ -323,10 +322,10 @@ def try_download_supplemental_index(
         return False
 
 
-def list_available_genomes() -> List[Dict[str, str]]:
+def list_available_genomes() -> list[dict[str, str]]:
     """List all available genome aliases and their canonical IDs."""
     # Group aliases by canonical ID
-    canonical_to_aliases: Dict[str, List[str]] = {}
+    canonical_to_aliases: dict[str, list[str]] = {}
     for alias, canonical in GENOME_ALIASES.items():
         if canonical not in canonical_to_aliases:
             canonical_to_aliases[canonical] = []

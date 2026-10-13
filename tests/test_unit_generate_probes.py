@@ -4,10 +4,12 @@ import Bio.Seq
 import Bio.SeqRecord
 import pytest
 
-from eFISHent.generate_probes import GenerateAllProbes
-from eFISHent.generate_probes import _compute_gc
-from eFISHent.generate_probes import _preferred_length
-from eFISHent.generate_probes import create_candidate_probes_generator
+from eFISHent.generate_probes import (
+    GenerateAllProbes,
+    _compute_gc,
+    _preferred_length,
+    create_candidate_probes_generator,
+)
 
 
 @pytest.fixture

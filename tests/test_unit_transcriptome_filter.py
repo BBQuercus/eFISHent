@@ -2,13 +2,16 @@ import os
 import shutil
 import tempfile
 
-import pandas as pd
-import luigi
 import Bio.Seq
 import Bio.SeqIO
 import Bio.SeqRecord
+import luigi
+import pandas as pd
 
-from eFISHent.transcriptome_filter import TranscriptomeFiltering, BuildTranscriptomeBlastDB
+from eFISHent.transcriptome_filter import (
+    BuildTranscriptomeBlastDB,
+    TranscriptomeFiltering,
+)
 
 BLAST_AVAILABLE = shutil.which("blastn") is not None
 

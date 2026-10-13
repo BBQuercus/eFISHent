@@ -23,7 +23,6 @@ from . import util
 from .basic_filtering import BasicFiltering
 from .config import ProbeConfig
 
-
 # Bundled reference sequences shipped with the package
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 RDNA_45S_FASTA = os.path.join(_DATA_DIR, "rDNA_45S_U13369.fasta")

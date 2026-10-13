@@ -14,10 +14,10 @@ from eFISHent.console import (
     _get_drop_pct,
     _get_stage_color,
     is_silent,
+    print_candidate_count,
     print_error_panel,
     print_header,
     print_stage,
-    print_candidate_count,
     print_warning,
     reset_funnel_data,
     set_silent_mode,
@@ -27,7 +27,6 @@ from eFISHent.optimization import (
     is_binding,
     visualize_assignment,
 )
-
 
 # ── Console helper functions ──
 

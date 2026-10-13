@@ -1,8 +1,7 @@
 """Parameter presets for common FISH protocols."""
 
-from typing import Dict
 
-PRESETS: Dict[str, Dict] = {
+PRESETS: dict[str, dict] = {
     "smfish": {
         "description": "Standard smFISH (20-24nt probes, adaptive length, 10% formamide)",
         "params": {
@@ -79,7 +78,7 @@ def get_preset_names():
     return list(PRESETS.keys())
 
 
-def get_preset(name: str) -> Dict:
+def get_preset(name: str) -> dict:
     """Get a preset by name. Raises KeyError if not found."""
     return PRESETS[name]
 

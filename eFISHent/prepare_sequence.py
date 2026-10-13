@@ -3,7 +3,6 @@
 Select the right strand and select intronic/exonic regions.
 """
 
-from typing import List, Optional, Tuple
 import logging
 import os
 import subprocess
@@ -14,8 +13,7 @@ import Bio.SeqRecord
 import luigi
 
 from . import util
-from .config import GeneralConfig
-from .config import SequenceConfig
+from .config import GeneralConfig, SequenceConfig
 
 
 class DownloadEntrezGeneSequence(luigi.Task):
@@ -114,11 +112,11 @@ class DownloadEntrezGeneSequence(luigi.Task):
         util.log_stage_start(self.logger, "DownloadEntrezGeneSequence")
         if not SequenceConfig().is_plus_strand:
             self.logger.warning(
-                (
+
                     "Downloading from entrez but using negative strand as target! "
                     "Entrez usually provides sequences 5'-3'. "
                     "Proceed with caution."
-                )
+
             )
         fasta = self.fetch_entrez(
             SequenceConfig().ensembl_id,
@@ -162,7 +160,7 @@ class PrepareSequence(luigi.Task):
         return luigi.LocalTarget(os.path.join(util.get_output_dir(), fname))
 
     def select_sequence(
-        self, sequences: List[Bio.SeqRecord.SeqRecord]
+        self, sequences: list[Bio.SeqRecord.SeqRecord]
     ) -> Bio.SeqRecord.SeqRecord:
         """Select a single sequence as template.
 
@@ -219,7 +217,7 @@ class PrepareSequence(luigi.Task):
         if not os.path.exists(fname):
             return False
 
-        with open(fname, "r") as fasta_file:
+        with open(fname) as fasta_file:
             in_sequence = False
             for line in fasta_file:
                 line = line.strip()
@@ -235,15 +233,16 @@ class PrepareSequence(luigi.Task):
 
     def _extract_exon_boundaries(
         self, gene_name: str, annotation_path: str
-    ) -> Optional[List[Tuple[int, int]]]:
+    ) -> list[tuple[int, int]] | None:
         """Extract exon boundaries for a gene from GTF annotation.
 
         Returns a list of (start, end) tuples in transcript-relative coordinates,
         sorted by start position. Returns None if no exons found.
         """
         try:
-            from .indexing import PrepareAnnotationFile
             import pandas as pd
+
+            from .indexing import PrepareAnnotationFile
             parq_path = annotation_path + ".parq"
             if os.path.isfile(parq_path):
                 df = pd.read_parquet(parq_path)

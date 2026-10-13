@@ -1,7 +1,7 @@
 """Unit tests for eFISHent/analyze.py."""
 
 import os
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import Bio.Seq
 import Bio.SeqRecord

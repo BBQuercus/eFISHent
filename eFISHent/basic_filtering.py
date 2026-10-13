@@ -1,6 +1,5 @@
 """Filter probes based on simple criteria."""
 
-from typing import List
 import logging
 import math
 import multiprocessing
@@ -15,8 +14,7 @@ import Bio.SeqUtils.MeltingTemp
 import luigi
 
 from . import util
-from .config import GeneralConfig
-from .config import ProbeConfig
+from .config import GeneralConfig, ProbeConfig
 from .generate_probes import GenerateAllProbes
 
 
@@ -265,8 +263,8 @@ class BasicFiltering(luigi.Task):
         return self.is_candidate_valid(candidate, self.config)
 
     def screen_sequences(
-        self, sequences: List[Bio.SeqRecord.SeqRecord]
-    ) -> List[Bio.SeqRecord.SeqRecord]:
+        self, sequences: list[Bio.SeqRecord.SeqRecord]
+    ) -> list[Bio.SeqRecord.SeqRecord]:
         """Filter candiates not matching criteria."""
         if len(sequences) > 1000:
             self.config = ProbeConfig()
@@ -283,8 +281,8 @@ class BasicFiltering(luigi.Task):
 
     @staticmethod
     def suggest_parameters(
-        sequences: List[Bio.SeqRecord.SeqRecord],
-    ) -> List[str]:
+        sequences: list[Bio.SeqRecord.SeqRecord],
+    ) -> list[str]:
         """Analyze rejected probes and suggest parameter adjustments.
 
         Computes the distribution of GC, Tm, etc. across all input probes

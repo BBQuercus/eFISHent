@@ -279,7 +279,8 @@ class TestDownloadGenome:
 
     def test_download_force_ignores_cache(self):
         """download_genome with force=True should not skip even if cached."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from eFISHent.prebuilt import download_genome
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -309,7 +310,8 @@ class TestDownloadGenome:
 
     def test_download_no_files_raises(self):
         """download_genome should raise when HF returns no files."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from eFISHent.prebuilt import download_genome
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -324,7 +326,8 @@ class TestDownloadGenome:
 
     def test_download_list_error_raises(self):
         """download_genome should raise when listing files fails."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from eFISHent.prebuilt import download_genome
 
         with tempfile.TemporaryDirectory() as tmpdir:

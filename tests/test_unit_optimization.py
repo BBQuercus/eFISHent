@@ -4,16 +4,18 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from eFISHent.optimization import OptimizeProbeCoverage
-from eFISHent.optimization import compute_accessibility_scores
-from eFISHent.optimization import compute_pre_optimization_quality
-from eFISHent.optimization import fill_coverage_gaps
-from eFISHent.optimization import fold_sequence
-from eFISHent.optimization import greedy_model
-from eFISHent.optimization import is_binding
-from eFISHent.optimization import is_overlapping
-from eFISHent.optimization import optimal_model
-from eFISHent.optimization import visualize_assignment
+from eFISHent.optimization import (
+    OptimizeProbeCoverage,
+    compute_accessibility_scores,
+    compute_pre_optimization_quality,
+    fill_coverage_gaps,
+    fold_sequence,
+    greedy_model,
+    is_binding,
+    is_overlapping,
+    optimal_model,
+    visualize_assignment,
+)
 
 GLPK_AVAILABLE = shutil.which("glpsol") is not None
 
@@ -164,7 +166,7 @@ def test_filter_binding_probes(df):
     filtered = task.filter_binding_probes(assigned, 0.75)
 
     assert len(filtered) <= len(assigned)
-    assert all([f in assigned for f in filtered])
+    assert all(f in assigned for f in filtered)
 
 
 def test_fill_coverage_gaps():
@@ -550,8 +552,8 @@ def test_quality_single_factor_variation():
 
 def test_refine_tm_uniformity_fewer_than_3():
     """Fewer than 3 probes should return input unchanged."""
-    import Bio.SeqRecord
     import Bio.Seq
+    import Bio.SeqRecord
 
     task = OptimizeProbeCoverage()
     task.df = pd.DataFrame(
@@ -574,8 +576,8 @@ def test_refine_tm_uniformity_fewer_than_3():
 
 def test_refine_tm_uniformity_already_uniform():
     """If all probes have similar Tm, no swaps should occur."""
-    import Bio.SeqRecord
     import Bio.Seq
+    import Bio.SeqRecord
 
     task = OptimizeProbeCoverage()
     # Use identical sequences so Tm is perfectly uniform

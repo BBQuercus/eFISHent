@@ -25,24 +25,24 @@ def _make_sam_line(qname, flag, rname, pos, mapq, seq="ATGCATGCATGCATGCATGCA"):
 def _make_task(**overrides):
     """Create an AlignProbeCandidates with sensible defaults, no Luigi config needed."""
     task = AlignProbeCandidates()
-    defaults = dict(
-        fname_genome="./tests/data/sacCer3",
-        is_endogenous=True,
-        max_off_targets=0,
-        no_alternative_loci=False,
-        aligner="bowtie2",
-        encode_count_table="",
-        off_target_min_tm=0,
-        mask_repeats=False,
-        intergenic_off_targets=False,
-        filter_rrna=False,
-        has_expression_filter=False,
-        has_annotation=False,
-        has_intergenic_filter=False,
-        has_rrna_filter=False,
-        has_pseudogene_filter=False,
-        has_transcriptome=False,
-    )
+    defaults = {
+        "fname_genome": "./tests/data/sacCer3",
+        "is_endogenous": True,
+        "max_off_targets": 0,
+        "no_alternative_loci": False,
+        "aligner": "bowtie2",
+        "encode_count_table": "",
+        "off_target_min_tm": 0,
+        "mask_repeats": False,
+        "intergenic_off_targets": False,
+        "filter_rrna": False,
+        "has_expression_filter": False,
+        "has_annotation": False,
+        "has_intergenic_filter": False,
+        "has_rrna_filter": False,
+        "has_pseudogene_filter": False,
+        "has_transcriptome": False,
+    }
     defaults.update(overrides)
     for k, v in defaults.items():
         setattr(task, k, v)
@@ -89,7 +89,7 @@ def test_align_probes(task_align: AlignProbeCandidates, gene, endogenous):
     task_align.fname_sam = fname_sam
 
     def get_number_of_alignments(fname):
-        with open(fname, "r") as f:
+        with open(fname) as f:
             lines = f.readlines()
         lines = list(filter(lambda x: x.startswith("candidate"), lines))
         return len(lines)
