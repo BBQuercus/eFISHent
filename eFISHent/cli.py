@@ -2,6 +2,7 @@
 
 import argparse
 import configparser
+import json
 import logging
 import os
 import shutil
@@ -223,6 +224,12 @@ for _bool_param in [
 ]:
     PARAM_METAVAR[_bool_param] = _BOOL_METAVAR
 
+# Fixed choices for specific parameters
+PARAM_CHOICES = {
+    "optimization_method": ["greedy", "optimal"],
+    "aligner": ["bowtie", "bowtie2"],
+}
+
 
 def get_parameter_type(param: luigi.Parameter) -> Any:
     """Get the type of a parameter."""
@@ -320,46 +327,45 @@ def _add_utilities(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _format_default(param: luigi.Parameter) -> str:
+    """Format a parameter's default value for the help text."""
+    if param._default is None or param._default == "":
+        return ""
+    if isinstance(param, luigi.BoolParameter):
+        return f" (default: {'yes' if param._default else 'no'})"
+    return f" (default: {param._default})"
+
+
+def _argument_kwargs(name: str, param: luigi.Parameter) -> dict[str, Any]:
+    """Build the add_argument keyword arguments for a luigi parameter."""
+    # Use custom validator if available, otherwise default type
+    if name in PARAM_VALIDATORS:
+        param_type = PARAM_VALIDATORS[name]
+    else:
+        param_type = get_parameter_type(param)
+
+    kwargs = {
+        "type": param_type,
+        "required": name in REQUIRED_PARAMS,
+        "default": param._default,
+        "help": f"{param.description}{_format_default(param)}",
+    }
+
+    # Add metavar for cleaner help output
+    if name in PARAM_METAVAR:
+        kwargs["metavar"] = PARAM_METAVAR[name]
+
+    if name in PARAM_CHOICES:
+        kwargs["choices"] = PARAM_CHOICES[name]
+        kwargs["type"] = str  # Override type when using choices
+
+    return kwargs
+
+
 def _add_group(group: argparse._ArgumentGroup, config_class: luigi.Config) -> None:
     """Add a single configuration class/group to a parser."""
     for name, param in config_class().get_params():  # type: ignore
-        # Use custom validator if available, otherwise default type
-        if name in PARAM_VALIDATORS:
-            param_type = PARAM_VALIDATORS[name]
-        else:
-            param_type = get_parameter_type(param)
-
-        is_required = name in REQUIRED_PARAMS
-
-        # Format default value display
-        if param._default is None or param._default == "":
-            default_str = ""
-        elif isinstance(param, luigi.BoolParameter):
-            default_str = f" (default: {'yes' if param._default else 'no'})"
-        else:
-            default_str = f" (default: {param._default})"
-
-        # Build argument kwargs
-        kwargs = {
-            "type": param_type,
-            "required": is_required,
-            "default": param._default,
-            "help": f"{param.description}{default_str}",
-        }
-
-        # Add metavar for cleaner help output
-        if name in PARAM_METAVAR:
-            kwargs["metavar"] = PARAM_METAVAR[name]
-
-        # Add choices for specific parameters
-        if name == "optimization_method":
-            kwargs["choices"] = ["greedy", "optimal"]
-            kwargs["type"] = str  # Override type when using choices
-
-        if name == "aligner":
-            kwargs["choices"] = ["bowtie", "bowtie2"]
-            kwargs["type"] = str
-
+        kwargs = _argument_kwargs(name, param)
         group.add_argument(
             f"-{CLI_SHORTFORM.get(name)}",
             f"--{name.replace('_', '-')}",
@@ -378,11 +384,10 @@ def _add_groups(parser: argparse.ArgumentParser) -> None:
         _add_group(group, config_class)
 
 
-def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """Validate cross-parameter constraints after parsing."""
+def _range_errors(args: argparse.Namespace) -> list[str]:
+    """Check min/max pairs and the k-mer length against the probe length."""
     errors = []
 
-    # Check min/max pairs
     if args.min_length > args.max_length:
         errors.append(
             f"--min-length ({args.min_length}) must be <= --max-length ({args.max_length})"
@@ -397,6 +402,13 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         errors.append(
             f"--kmer-length ({args.kmer_length}) must be < --min-length ({args.min_length})"
         )
+
+    return errors
+
+
+def _sequence_input_errors(args: argparse.Namespace) -> list[str]:
+    """Check that a gene sequence source is given and NCBI names come in pairs."""
+    errors = []
 
     # Check sequence input is provided (unless build_indices or analyze_probeset)
     if not args.build_indices and not args.analyze_probeset:
@@ -414,43 +426,52 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
             )
 
     # Check that gene_name requires organism_name and vice versa (for NCBI download)
-    if (
-        args.gene_name
-        and not args.organism_name
-        and not args.sequence_file
-        and not args.ensembl_id
-    ):
+    if args.sequence_file or args.ensembl_id:
+        return errors
+    if args.gene_name and not args.organism_name:
         errors.append("--gene-name requires --organism-name for NCBI download")
-    if (
-        args.organism_name
-        and not args.gene_name
-        and not args.sequence_file
-        and not args.ensembl_id
-    ):
+    if args.organism_name and not args.gene_name:
         errors.append("--organism-name requires --gene-name for NCBI download")
 
-    # Check encode_count_table requires reference_annotation
-    if args.encode_count_table and not args.reference_annotation:
-        errors.append("--encode-count-table requires --reference-annotation")
+    return errors
 
-    # Check intergenic_off_targets requires reference_annotation
-    if getattr(args, "intergenic_off_targets", False) and not args.reference_annotation:
-        errors.append("--intergenic-off-targets requires --reference-annotation")
 
-    # Check filter_rrna requires reference_annotation
-    if getattr(args, "filter_rrna", False) and not args.reference_annotation:
-        errors.append("--filter-rrna requires --reference-annotation")
+# Options that only work together with --reference-annotation
+_ANNOTATION_DEPENDENT_OPTIONS = {
+    "encode_count_table": "--encode-count-table",
+    "intergenic_off_targets": "--intergenic-off-targets",
+    "filter_rrna": "--filter-rrna",
+}
 
-    # Exogenous genes without transcriptome BLAST are under-protected:
-    # k-mer filtering is skipped, and genome alignment is fragile for short probes.
-    # Require explicit override to proceed without transcriptome.
-    if (
-        not getattr(args, "is_endogenous", True)
-        and not args.reference_transcriptome
-        and not getattr(args, "allow_no_transcriptome", False)
-        and not args.build_indices
-        and not args.analyze_probeset
-    ):
+
+def _annotation_errors(args: argparse.Namespace) -> list[str]:
+    """Check that options needing --reference-annotation have one."""
+    return [
+        f"{flag} requires --reference-annotation"
+        for name, flag in _ANNOTATION_DEPENDENT_OPTIONS.items()
+        if getattr(args, name, False) and not args.reference_annotation
+    ]
+
+
+def _lacks_exogenous_transcriptome(args: argparse.Namespace) -> bool:
+    """Whether an exogenous design runs without transcriptome BLAST protection.
+
+    Exogenous genes without transcriptome BLAST are under-protected:
+    k-mer filtering is skipped, and genome alignment is fragile for short probes.
+    Require explicit override to proceed without transcriptome.
+    """
+    if getattr(args, "is_endogenous", True):
+        return False
+    if args.reference_transcriptome or getattr(args, "allow_no_transcriptome", False):
+        return False
+    return not args.build_indices and not args.analyze_probeset
+
+
+def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Validate cross-parameter constraints after parsing."""
+    errors = _range_errors(args) + _sequence_input_errors(args) + _annotation_errors(args)
+
+    if _lacks_exogenous_transcriptome(args):
         errors.append(
             "Exogenous probe design requires --reference-transcriptome for reliable "
             "off-target detection. K-mer filtering is skipped for exogenous genes, so "
@@ -463,15 +484,8 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         parser.error("\n  " + "\n  ".join(errors))
 
 
-def validate_parameter_warnings(args: argparse.Namespace) -> list[str]:
-    """Check for risky parameter combinations and return warning messages.
-
-    These are non-fatal warnings — the pipeline will still run.
-    """
-    # Skip for non-pipeline modes
-    if args.build_indices or args.analyze_probeset:
-        return []
-
+def _probe_parameter_warnings(args: argparse.Namespace) -> list[str]:
+    """Warn about probe design thresholds that may yield few probes."""
     warnings = []
 
     # Narrow TM window
@@ -526,10 +540,20 @@ def validate_parameter_warnings(args: argparse.Namespace) -> list[str]:
             "  Consider --spacing 2 for denser probe tiling."
         )
 
+    return warnings
+
+
+def _prebuilt_genome_warnings(args: argparse.Namespace) -> list[str]:
+    """Warn about slow paths when using pre-built genome indices."""
+    if not getattr(args, "genome", None):
+        return []
+
+    warnings = []
+
     # Pre-built genome + non-default kmer_length: forced jellyfish rebuild
     # genome_15.jf is the only pre-built jellyfish index; any other kl builds
     # from the full genome and takes 10-30+ min on large genomes (longer on NFS).
-    if getattr(args, "genome", None) and args.kmer_length != 15:
+    if args.kmer_length != 15:
         warnings.append(
             f"Using --genome with -kl {args.kmer_length} (not 15): "
             "the pre-built package only includes a 15-mer jellyfish index.\n"
@@ -541,11 +565,7 @@ def validate_parameter_warnings(args: argparse.Namespace) -> list[str]:
 
     # Pre-built genome on NFS: bowtie2 reads ~6 GB index; suggest cache on scratch.
     # Only shown on Linux (where HPC/NFS setups are the norm; macOS home is local).
-    if (
-        getattr(args, "genome", None)
-        and not getattr(args, "index_cache_dir", None)
-        and sys.platform.startswith("linux")
-    ):
+    if not getattr(args, "index_cache_dir", None) and sys.platform.startswith("linux"):
         warnings.append(
             "Using --genome: indices default to ~/.local/efishent/indices/.\n"
             "  On HPC systems where HOME is NFS-mounted, genome alignment can take "
@@ -554,38 +574,80 @@ def validate_parameter_warnings(args: argparse.Namespace) -> list[str]:
             "local filesystem."
         )
 
-    # Long probes + strict k-mer filter: a 50-mer has ~36 sub-15-mers, so the
-    # probability of any one exceeding max_kmers=5 is much higher than for a
-    # 20-24-mer (the smfish preset default target length).
-    if args.min_length > 30 and args.max_kmers <= 5:
-        suggested = max(10, round(args.max_kmers * args.min_length / 24))
-        warnings.append(
-            f"Long probes ({args.min_length}–{args.max_length} nt) with strict k-mer filter "
-            f"(--max-kmers {args.max_kmers}) may remove most probes.\n"
-            f"  A {args.min_length}-mer contains ~{args.min_length - 14} sub-15-mers; "
-            "the chance of any one exceeding the count threshold is much higher than for short probes.\n"
-            f"  Consider --max-kmers {suggested} for long probe designs."
-        )
-
-    # High-GC target warning: compute gene GC from sequence file if available
-    seq_file = getattr(args, "sequence_file", None)
-    if seq_file and os.path.isfile(seq_file):
-        try:
-            import Bio.SeqIO
-            import Bio.SeqUtils
-            seq = next(Bio.SeqIO.parse(seq_file, "fasta"))
-            gene_gc = float(Bio.SeqUtils.gc_fraction(seq.seq)) * 100
-            if gene_gc > 55:
-                warnings.append(
-                    f"High-GC target detected ({gene_gc:.1f}% GC) \u2014 elevated risk of "
-                    "nuclear/nucleolar background.\n"
-                    "  Probes from high-GC genes cross-hybridize with rRNA (~60-67% GC).\n"
-                    "  Consider tightening --max-gc (e.g., 60) or using --max-cpg-fraction 0.10."
-                )
-        except Exception:
-            pass
-
     return warnings
+
+
+def _long_probe_kmer_warning(args: argparse.Namespace) -> str | None:
+    """Warn when long probes meet a strict k-mer filter.
+
+    A 50-mer has ~36 sub-15-mers, so the probability of any one exceeding
+    max_kmers=5 is much higher than for a 20-24-mer (the smfish preset
+    default target length).
+    """
+    if args.min_length <= 30 or args.max_kmers > 5:
+        return None
+    suggested = max(10, round(args.max_kmers * args.min_length / 24))
+    return (
+        f"Long probes ({args.min_length}–{args.max_length} nt) with strict k-mer filter "
+        f"(--max-kmers {args.max_kmers}) may remove most probes.\n"
+        f"  A {args.min_length}-mer contains ~{args.min_length - 14} sub-15-mers; "
+        "the chance of any one exceeding the count threshold is much higher than for short probes.\n"
+        f"  Consider --max-kmers {suggested} for long probe designs."
+    )
+
+
+def _sequence_gc_percent(seq_file: str) -> float:
+    """Return the GC content (%) of the first record in a FASTA file."""
+    import Bio.SeqIO
+    import Bio.SeqUtils
+
+    seq = next(Bio.SeqIO.parse(seq_file, "fasta"))
+    return float(Bio.SeqUtils.gc_fraction(seq.seq)) * 100
+
+
+def _high_gc_target_warning(args: argparse.Namespace) -> str | None:
+    """Warn about high-GC targets, computing gene GC from the sequence file if available."""
+    seq_file = getattr(args, "sequence_file", None)
+    if not seq_file or not os.path.isfile(seq_file):
+        return None
+
+    try:
+        gene_gc = _sequence_gc_percent(seq_file)
+    except Exception as e:
+        logging.getLogger("custom-logger").debug(
+            f"Skipping high-GC target check for {seq_file}: {e}"
+        )
+        return None
+
+    if gene_gc <= 55:
+        return None
+    return (
+        f"High-GC target detected ({gene_gc:.1f}% GC) \u2014 elevated risk of "
+        "nuclear/nucleolar background.\n"
+        "  Probes from high-GC genes cross-hybridize with rRNA (~60-67% GC).\n"
+        "  Consider tightening --max-gc (e.g., 60) or using --max-cpg-fraction 0.10."
+    )
+
+
+def validate_parameter_warnings(args: argparse.Namespace) -> list[str]:
+    """Check for risky parameter combinations and return warning messages.
+
+    These are non-fatal warnings — the pipeline will still run.
+    """
+    # Skip for non-pipeline modes
+    if args.build_indices or args.analyze_probeset:
+        return []
+
+    warnings = _probe_parameter_warnings(args) + _prebuilt_genome_warnings(args)
+    for warning in (_long_probe_kmer_warning(args), _high_gc_target_warning(args)):
+        if warning:
+            warnings.append(warning)
+    return warnings
+
+
+def _efishent_home() -> Path:
+    """Return eFISHent's per-user install directory (~/.local/efishent)."""
+    return Path.home() / ".local" / "efishent"
 
 
 def _ensure_deps_on_path() -> None:
@@ -594,7 +656,7 @@ def _ensure_deps_on_path() -> None:
     If deps were installed to ~/.local/efishent/deps/bin (the default),
     add them to PATH so users don't need to source activate.sh manually.
     """
-    default_deps = Path.home() / ".local" / "efishent" / "deps"
+    default_deps = _efishent_home() / "deps"
     deps_bin = default_deps / "bin"
     deps_edirect = default_deps / "edirect"
 
@@ -669,59 +731,108 @@ DEPENDENCIES = {
 }
 
 
-def check_all_dependencies() -> dict[str, dict]:
-    """Check all external dependencies and return status dict."""
-    results = {}
+_FOLD_PURPOSE = "secondary structure prediction"
 
-    for name, info in DEPENDENCIES.items():
-        path = shutil.which(name)
-        if path:
-            version = _get_tool_version(name, info["version_args"])
-            results[name] = {
-                "found": True,
-                "path": path,
-                "version": version or path,
-                "needed_for": info["needed_for"],
-            }
-        else:
-            results[name] = {
-                "found": False,
-                "needed_for": info["needed_for"],
-            }
 
-    # Check for Fold binary: prefer system install, fall back to bundled
+def _dependency_status(name: str, info: dict) -> dict:
+    """Look up a single external tool and report where it is found."""
+    path = shutil.which(name)
+    if not path:
+        return {"found": False, "needed_for": info["needed_for"]}
+    version = _get_tool_version(name, info["version_args"])
+    return {
+        "found": True,
+        "path": path,
+        "version": version or path,
+        "needed_for": info["needed_for"],
+    }
+
+
+def _system_fold() -> str | None:
+    """Return the RNAstructure Fold binary on PATH, if any."""
     from .secondary_structure import _is_rnastructure_fold
+
     system_fold = shutil.which("Fold")
     if system_fold and _is_rnastructure_fold(system_fold):
-        results["Fold"] = {
+        return system_fold
+    return None
+
+
+def _bundled_fold() -> Path | None:
+    """Return the executable Fold binary bundled for this platform, if any."""
+    fold_path = Path(__file__).resolve().parent
+    if sys.platform.startswith("linux"):
+        fold_bin = fold_path / "Fold_linux"
+    elif sys.platform == "darwin":
+        fold_bin = fold_path / "Fold_osx"
+    else:
+        return None
+
+    if fold_bin.exists() and os.access(fold_bin, os.X_OK):
+        return fold_bin
+    return None
+
+
+def _fold_status() -> dict:
+    """Check for Fold binary: prefer system install, fall back to bundled."""
+    system_fold = _system_fold()
+    if system_fold:
+        return {
             "found": True,
             "version": "system",
             "path": system_fold,
-            "needed_for": "secondary structure prediction",
+            "needed_for": _FOLD_PURPOSE,
         }
-    else:
-        fold_path = Path(__file__).resolve().parent
-        if sys.platform.startswith("linux"):
-            fold_bin = fold_path / "Fold_linux"
-        elif sys.platform == "darwin":
-            fold_bin = fold_path / "Fold_osx"
-        else:
-            fold_bin = None
 
-        if fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK):
-            results["Fold"] = {
-                "found": True,
-                "version": "bundled",
-                "path": str(fold_bin),
-                "needed_for": "secondary structure prediction",
-            }
-        else:
-            results["Fold"] = {
-                "found": False,
-                "needed_for": "secondary structure prediction",
-            }
+    fold_bin = _bundled_fold()
+    if fold_bin:
+        return {
+            "found": True,
+            "version": "bundled",
+            "path": str(fold_bin),
+            "needed_for": _FOLD_PURPOSE,
+        }
 
+    return {"found": False, "needed_for": _FOLD_PURPOSE}
+
+
+def check_all_dependencies() -> dict[str, dict]:
+    """Check all external dependencies and return status dict."""
+    results = {
+        name: _dependency_status(name, info) for name, info in DEPENDENCIES.items()
+    }
+    results["Fold"] = _fold_status()
     return results
+
+
+def _needs_ncbi_download(args: argparse.Namespace) -> bool:
+    """Whether the gene sequence has to be downloaded from NCBI."""
+    if args.build_indices or getattr(args, "sequence_file", None):
+        return False
+    return bool(getattr(args, "gene_name", None) or getattr(args, "ensembl_id", None))
+
+
+def _required_tools(args: argparse.Namespace) -> list[str]:
+    """List the external tools needed for the current run mode (excluding Fold)."""
+    # Aligner depends on --aligner setting
+    aligner = getattr(args, "aligner", "bowtie2")
+    required = ["bowtie2" if aligner == "bowtie2" else "bowtie", "jellyfish"]
+
+    # BLAST required if transcriptome filtering, repeat masking, or rDNA filter is enabled
+    if getattr(args, "reference_transcriptome", "") or getattr(args, "filter_rdna_45s", True):
+        required += ["blastn", "makeblastdb"]
+    if getattr(args, "mask_repeats", False):
+        required.append("dustmasker")
+
+    # glpsol only needed for optimal optimization
+    if getattr(args, "optimization_method", "greedy") == "optimal":
+        required.append("glpsol")
+
+    # esearch/efetch only needed for NCBI download
+    if _needs_ncbi_download(args):
+        required.append("esearch")
+
+    return required
 
 
 def check_required_dependencies(args: argparse.Namespace) -> list[str]:
@@ -729,58 +840,15 @@ def check_required_dependencies(args: argparse.Namespace) -> list[str]:
 
     Returns list of missing dependency names (empty = all good).
     """
-    # Aligner depends on --aligner setting
-    aligner = getattr(args, "aligner", "bowtie2")
-    if aligner == "bowtie2":
-        required = ["bowtie2", "jellyfish"]
-    else:
-        required = ["bowtie", "jellyfish"]
-
-    # BLAST required if transcriptome filtering, repeat masking, or rDNA filter is enabled
-    if getattr(args, "reference_transcriptome", ""):
-        required.append("blastn")
-        required.append("makeblastdb")
-    if getattr(args, "filter_rdna_45s", True) and "blastn" not in required:
-        required.append("blastn")
-        required.append("makeblastdb")
-    if getattr(args, "mask_repeats", False):
-        required.append("dustmasker")
-
     # Fold is required for the full pipeline (not for index building)
-    if not args.build_indices:
-        from .secondary_structure import _is_rnastructure_fold
-        system_fold = shutil.which("Fold")
-        if not (system_fold and _is_rnastructure_fold(system_fold)):
-            fold_path = Path(__file__).resolve().parent
-            if sys.platform.startswith("linux"):
-                fold_bin = fold_path / "Fold_linux"
-            elif sys.platform == "darwin":
-                fold_bin = fold_path / "Fold_osx"
-            else:
-                fold_bin = None
+    if not args.build_indices and not (_system_fold() or _bundled_fold()):
+        return ["Fold (not found in PATH and bundled binary missing)"]
 
-            if not (fold_bin and fold_bin.exists() and os.access(fold_bin, os.X_OK)):
-                return ["Fold (not found in PATH and bundled binary missing)"]
-
-    # glpsol only needed for optimal optimization
-    if getattr(args, "optimization_method", "greedy") == "optimal":
-        required.append("glpsol")
-
-    # esearch/efetch only needed for NCBI download
-    needs_ncbi = (
-        not args.build_indices
-        and not getattr(args, "sequence_file", None)
-        and (getattr(args, "gene_name", None) or getattr(args, "ensembl_id", None))
-    )
-    if needs_ncbi:
-        required.append("esearch")
-
-    missing = [name for name in required if not shutil.which(name)]
-    return missing
+    return [name for name in _required_tools(args) if not shutil.which(name)]
 
 
-def _parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Create the argument parser with rich help formatting."""
     from rich_argparse import RichHelpFormatter
 
     # Configure RichHelpFormatter for better alignment
@@ -806,6 +874,80 @@ def _parse_args() -> argparse.Namespace:
     )
     _add_groups(parser)
     _add_utilities(parser)
+    return parser
+
+
+def _argv_value(flag: str) -> str | None:
+    """Return the token following ``flag`` in sys.argv, if there is one."""
+    idx = sys.argv.index(flag)
+    if idx + 1 < len(sys.argv):
+        return sys.argv[idx + 1]
+    return None
+
+
+# Utility flags handled before full validation (they don't need other args)
+_STANDALONE_FLAGS = {
+    "--check": "check",
+    "--update": "update",
+    "--list-genomes": "list_genomes",
+}
+
+
+def _parse_standalone_args(
+    parser: argparse.ArgumentParser,
+) -> argparse.Namespace | None:
+    """Parse utility flags that bypass full argument parsing, if present."""
+    for flag, dest in _STANDALONE_FLAGS.items():
+        if flag in sys.argv:
+            return argparse.Namespace(**{dest: True})
+
+    if "--download-genome" not in sys.argv:
+        return None
+
+    genome_name = _argv_value("--download-genome")
+    if genome_name is None:
+        parser.error("--download-genome requires a genome name")
+    cache_dir = None
+    if "--index-cache-dir" in sys.argv:
+        cache_dir = _argv_value("--index-cache-dir")
+    return argparse.Namespace(
+        download_genome=genome_name,
+        index_cache_dir=cache_dir,
+        force_download="--force-download" in sys.argv,
+    )
+
+
+def _make_reference_genome_optional(parser: argparse.ArgumentParser) -> None:
+    """Drop the -g requirement (--genome sets it automatically later in main())."""
+    for action in parser._actions:
+        if "--reference-genome" in getattr(action, "option_strings", []):
+            action.required = False
+            break
+
+
+def _apply_preset(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Apply preset defaults — explicit CLI args take precedence."""
+    from .presets import PRESETS
+
+    if args.preset not in PRESETS:
+        from .presets import get_preset_names
+        parser.error(
+            f"Unknown preset '{args.preset}'. "
+            f"Available: {', '.join(get_preset_names())}"
+        )
+    preset_params = PRESETS[args.preset]["params"]
+    # Only apply preset values for params the user didn't explicitly set
+    # We detect this by checking if the value matches the parser default
+    for param_name, preset_value in preset_params.items():
+        parser_default = parser.get_default(param_name)
+        current_value = getattr(args, param_name, None)
+        if current_value == parser_default:
+            setattr(args, param_name, preset_value)
+
+
+def _parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = _build_parser()
     try:
         if len(sys.argv) == 1:
             parser.print_help()
@@ -813,73 +955,24 @@ def _parse_args() -> argparse.Namespace:
     except Exception as e:
         print(e)
 
-    # Handle utility flags before full validation (they don't need other args)
-    if "--check" in sys.argv:
-        args = argparse.Namespace(check=True)
-        return args
-
-    if "--update" in sys.argv:
-        args = argparse.Namespace(update=True)
-        return args
-
-    if "--list-genomes" in sys.argv:
-        args = argparse.Namespace(list_genomes=True)
-        return args
-
-    if "--download-genome" in sys.argv:
-        idx = sys.argv.index("--download-genome")
-        if idx + 1 < len(sys.argv):
-            genome_name = sys.argv[idx + 1]
-        else:
-            parser.error("--download-genome requires a genome name")
-        cache_dir = None
-        if "--index-cache-dir" in sys.argv:
-            cidx = sys.argv.index("--index-cache-dir")
-            if cidx + 1 < len(sys.argv):
-                cache_dir = sys.argv[cidx + 1]
-        args = argparse.Namespace(
-            download_genome=genome_name,
-            index_cache_dir=cache_dir,
-            force_download="--force-download" in sys.argv,
-        )
-        return args
+    standalone_args = _parse_standalone_args(parser)
+    if standalone_args is not None:
+        return standalone_args
 
     # Handle --preset list before full parsing
-    if "--preset" in sys.argv:
-        idx = sys.argv.index("--preset")
-        if idx + 1 < len(sys.argv) and sys.argv[idx + 1] == "list":
-            from .presets import format_preset_list
-            print(format_preset_list())
-            sys.exit(0)
+    if "--preset" in sys.argv and _argv_value("--preset") == "list":
+        from .presets import format_preset_list
+        print(format_preset_list())
+        sys.exit(0)
 
     # When --genome, --list-genomes, or --download-genome is used, -g is not required
-    # (--genome sets it automatically later in main())
     genome_flags = {"--genome", "--list-genomes", "--download-genome"}
     if genome_flags & set(sys.argv):
-        for action in parser._actions:
-            if "--reference-genome" in getattr(action, "option_strings", []):
-                action.required = False
-                break
+        _make_reference_genome_optional(parser)
 
     args = parser.parse_args()
-
-    # Apply preset defaults — explicit CLI args take precedence
     if args.preset:
-        from .presets import PRESETS
-        if args.preset not in PRESETS:
-            from .presets import get_preset_names
-            parser.error(
-                f"Unknown preset '{args.preset}'. "
-                f"Available: {', '.join(get_preset_names())}"
-            )
-        preset_params = PRESETS[args.preset]["params"]
-        # Only apply preset values for params the user didn't explicitly set
-        # We detect this by checking if the value matches the parser default
-        for param_name, preset_value in preset_params.items():
-            parser_default = parser.get_default(param_name)
-            current_value = getattr(args, param_name, None)
-            if current_value == parser_default:
-                setattr(args, param_name, preset_value)
+        _apply_preset(args, parser)
 
     validate_args(args, parser)
     return args
@@ -950,78 +1043,100 @@ def set_logging_level(silent: bool, debug: bool) -> logging.Logger:
     return logger
 
 
+_PYPI_JSON_URL = "https://pypi.org/pypi/efishent/json"
+_UPDATE_CHECK_INTERVAL = 86400  # 24 hours
+
+
+def _notify_if_newer(latest: str) -> None:
+    """Print an update notice if ``latest`` is newer than the running version."""
+    if not latest or latest == __version__:
+        return
+
+    from packaging.version import Version
+
+    if Version(latest) > Version(__version__):
+        print(
+            f"\n  Update available: v{__version__} -> v{latest}"
+            f"  (run 'efishent --update' to upgrade)\n"
+        )
+
+
+def _cached_latest_version(cache_file: Path) -> str | None:
+    """Return the cached latest version, or None if the cache is missing or stale."""
+    if not cache_file.exists():
+        return None
+    with open(cache_file) as f:
+        cache = json.load(f)
+    last_check = cache.get("timestamp", 0)
+    if time.time() - last_check >= _UPDATE_CHECK_INTERVAL:
+        return None
+    return cache.get("latest_version", "")
+
+
+def _https_get_json(url: str) -> dict:
+    """Fetch a JSON document over https; other URL schemes are refused."""
+    import urllib.parse
+    import urllib.request
+
+    if urllib.parse.urlparse(url).scheme != "https":
+        raise ValueError(f"Refusing to open non-https URL: {url}")
+
+    # Only https handlers are installed, so redirects to other schemes fail too
+    opener = urllib.request.OpenerDirector()
+    for handler in (
+        urllib.request.ProxyHandler(),
+        urllib.request.HTTPSHandler(),
+        urllib.request.HTTPRedirectHandler(),
+        urllib.request.HTTPDefaultErrorHandler(),
+        urllib.request.HTTPErrorProcessor(),
+        urllib.request.UnknownHandler(),
+    ):
+        opener.add_handler(handler)
+
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with opener.open(req, timeout=5) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _run_update_check(cache_file: Path) -> None:
+    """Notify about a newer release, querying PyPI unless a fresh cache exists."""
+    try:
+        # Check cache first (skip if checked within last 24 hours)
+        latest = _cached_latest_version(cache_file)
+        if latest is None:
+            data = _https_get_json(_PYPI_JSON_URL)
+            latest = data.get("info", {}).get("version", "")
+
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_file, "w") as f:
+                json.dump({"timestamp": time.time(), "latest_version": latest}, f)
+
+        _notify_if_newer(latest)
+    except Exception as e:
+        # Never fail the pipeline for an update check
+        logging.getLogger("custom-logger").debug(f"Update check failed: {e}")
+
+
 def check_for_updates() -> None:
     """Check PyPI for a newer version and notify the user.
 
     Non-blocking: runs in a background thread so it doesn't slow startup.
     Caches the result for 24 hours to avoid repeated network requests.
     """
-    import json
     import threading
 
-    cache_dir = Path.home() / ".local" / "efishent"
-    cache_file = cache_dir / "update_check.json"
-
-    def _check():
-        try:
-            # Check cache first (skip if checked within last 24 hours)
-            if cache_file.exists():
-                with open(cache_file) as f:
-                    cache = json.load(f)
-                last_check = cache.get("timestamp", 0)
-                if time.time() - last_check < 86400:  # 24 hours
-                    latest = cache.get("latest_version", "")
-                    if latest and latest != __version__:
-                        from packaging.version import Version
-                        if Version(latest) > Version(__version__):
-                            print(
-                                f"\n  Update available: v{__version__} -> v{latest}"
-                                f"  (run 'efishent --update' to upgrade)\n"
-                            )
-                    return
-
-            # Query PyPI
-            import urllib.parse
-            import urllib.request
-            url = "https://pypi.org/pypi/efishent/json"
-            if urllib.parse.urlparse(url).scheme != "https":
-                return
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
-            with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
-                data = json.loads(resp.read().decode())
-            latest = data.get("info", {}).get("version", "")
-
-            # Cache result
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            with open(cache_file, "w") as f:
-                json.dump({"timestamp": time.time(), "latest_version": latest}, f)
-
-            if latest and latest != __version__:
-                from packaging.version import Version
-                if Version(latest) > Version(__version__):
-                    print(
-                        f"\n  Update available: v{__version__} -> v{latest}"
-                        f"  (run 'efishent --update' to upgrade)\n"
-                    )
-        except Exception:
-            pass  # Never fail the pipeline for an update check
-
-    thread = threading.Thread(target=_check, daemon=True)
+    cache_file = _efishent_home() / "update_check.json"
+    thread = threading.Thread(target=_run_update_check, args=(cache_file,), daemon=True)
     thread.start()
 
 
-def self_update() -> None:
-    """Update eFISHent and its dependencies to the latest version."""
-    python = sys.executable
-    current_version = __version__
-    install_script_url = (
-        "https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh"
-    )
+_INSTALL_SCRIPT_URL = (
+    "https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh"
+)
 
-    print(f"Current version: {current_version}")
 
-    # Step 1: Update the Python package
-    print("\nUpdating eFISHent package...")
+def _upgrade_package(python: str) -> None:
+    """Upgrade the eFISHent package in place, exiting on failure."""
     if shutil.which("uv"):
         cmd = ["uv", "pip", "install", "--python", python, "--upgrade", "efishent"]
     else:
@@ -1029,64 +1144,71 @@ def self_update() -> None:
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if result.returncode != 0:
-            print(f"Package update failed:\n{result.stderr.strip()}")
-            sys.exit(1)
     except Exception as e:
         print(f"Package update failed: {e}")
         sys.exit(1)
+    if result.returncode != 0:
+        print(f"Package update failed:\n{result.stderr.strip()}")
+        sys.exit(1)
 
-    # Check new version
+
+def _installed_version(python: str) -> str:
+    """Return the eFISHent version importable by ``python``."""
     try:
         new_version_result = subprocess.run(
             [python, "-c", "from eFISHent import __version__; print(__version__)"],
             capture_output=True, text=True, timeout=10,
         )
-        new_version = new_version_result.stdout.strip()
+        return new_version_result.stdout.strip()
     except Exception:
-        new_version = "unknown"
+        return "unknown"
 
-    if new_version == current_version:
-        print(f"Already up to date (v{current_version}).")
-    else:
-        print(f"Updated: v{current_version} -> v{new_version}")
 
-    # Step 2: Update dependencies via install.sh
-    print("\nChecking dependencies...")
-    default_prefix = Path.home() / ".local" / "efishent"
+def _download_command(url: str) -> list[str] | None:
+    """Return a curl/wget command that writes ``url`` to stdout, if available."""
+    if shutil.which("curl"):
+        return ["curl", "-fsSL", url]
+    if shutil.which("wget"):
+        return ["wget", "-qO-", url]
+    return None
 
-    if default_prefix.is_dir():
-        # Re-run install.sh with --deps-only to update/verify deps
-        dl_cmd = None
-        if shutil.which("curl"):
-            dl_cmd = ["curl", "-fsSL", install_script_url]
-        elif shutil.which("wget"):
-            dl_cmd = ["wget", "-qO-", install_script_url]
 
-        if dl_cmd:
-            try:
-                dl_result = subprocess.run(dl_cmd, capture_output=True, text=True, timeout=30)
-                if dl_result.returncode == 0:
-                    result = subprocess.run(
-                        ["sh", "-s", "--", "--deps-only", "--no-modify-rc",
-                         "--prefix", str(default_prefix)],
-                        input=dl_result.stdout, text=True, timeout=600,
-                    )
-                    if result.returncode != 0:
-                        print("Warning: dependency update had issues.")
-                else:
-                    print("Warning: could not download install script.")
-            except Exception as e:
-                print(f"Warning: dependency update skipped ({e})")
-        else:
-            print("Warning: neither curl nor wget found, skipping dependency update.")
-    else:
-        print(f"No install directory at {default_prefix}, skipping dependency update.")
+def _run_install_script(dl_cmd: list[str], prefix: Path) -> None:
+    """Download install.sh and re-run it with --deps-only to update/verify deps."""
+    dl_result = subprocess.run(dl_cmd, capture_output=True, text=True, timeout=30)
+    if dl_result.returncode != 0:
+        print("Warning: could not download install script.")
+        return
+    result = subprocess.run(
+        ["sh", "-s", "--", "--deps-only", "--no-modify-rc",
+         "--prefix", str(prefix)],
+        input=dl_result.stdout, text=True, timeout=600,
+    )
+    if result.returncode != 0:
+        print("Warning: dependency update had issues.")
+
+
+def _update_dependencies(prefix: Path) -> None:
+    """Update dependencies via install.sh if eFISHent was installed with it."""
+    if not prefix.is_dir():
+        print(f"No install directory at {prefix}, skipping dependency update.")
         print("Run the full installer to set up dependencies:")
-        print(f"  curl -LsSf {install_script_url} | sh")
+        print(f"  curl -LsSf {_INSTALL_SCRIPT_URL} | sh")
+        return
 
-    # Step 3: Verify dependencies
-    print()
+    dl_cmd = _download_command(_INSTALL_SCRIPT_URL)
+    if not dl_cmd:
+        print("Warning: neither curl nor wget found, skipping dependency update.")
+        return
+
+    try:
+        _run_install_script(dl_cmd, prefix)
+    except Exception as e:
+        print(f"Warning: dependency update skipped ({e})")
+
+
+def _print_dependency_summary() -> None:
+    """Print which dependencies are found and how to install missing ones."""
     _ensure_deps_on_path()
     results = check_all_dependencies()
     all_found = all(r["found"] for r in results.values())
@@ -1099,7 +1221,33 @@ def self_update() -> None:
 
     if not all_found:
         print("\nSome dependencies are missing. Run the full installer:")
-        print(f"  curl -LsSf {install_script_url} | sh")
+        print(f"  curl -LsSf {_INSTALL_SCRIPT_URL} | sh")
+
+
+def self_update() -> None:
+    """Update eFISHent and its dependencies to the latest version."""
+    python = sys.executable
+    current_version = __version__
+
+    print(f"Current version: {current_version}")
+
+    # Step 1: Update the Python package
+    print("\nUpdating eFISHent package...")
+    _upgrade_package(python)
+
+    new_version = _installed_version(python)
+    if new_version == current_version:
+        print(f"Already up to date (v{current_version}).")
+    else:
+        print(f"Updated: v{current_version} -> v{new_version}")
+
+    # Step 2: Update dependencies via install.sh
+    print("\nChecking dependencies...")
+    _update_dependencies(_efishent_home())
+
+    # Step 3: Verify dependencies
+    print()
+    _print_dependency_summary()
 
 
 def format_duration(seconds: float) -> str:
@@ -1163,98 +1311,252 @@ def _prefill_cached_steps(add_cached_step_fn) -> None:
             break
 
 
-def main():
-    """Run eFISHent tasks."""
-    from .console import (
-        add_cached_step,
-        pipeline_progress,
-        print_completion,
-        print_dependency_check,
-        print_header,
-        print_missing_deps_error,
-        print_parameter_warnings,
-    )
+def _run_dependency_check() -> None:
+    """Handle --check: show dependency report and exit."""
+    from .console import print_dependency_check, print_header
 
-    # Auto-discover deps installed by install.sh
-    _ensure_deps_on_path()
+    print_header(__version__)
+    results = check_all_dependencies()
+    print_dependency_check(results)
+    sys.exit(0 if all(r["found"] for r in results.values()) else 1)
 
-    start_time = time.time()
-    args = _parse_args()
 
-    # Handle --check: show dependency report and exit
+def _list_genomes() -> None:
+    """Handle --list-genomes: show available genomes and exit."""
+    from .prebuilt import list_available_genomes
+
+    print("Available pre-built genomes:")
+    for genome in list_available_genomes():
+        print(f"  {genome['display']}")
+    print()
+    print("Usage: efishent --genome hg38 --gene-name TP53 --organism-name 'Homo sapiens'")
+    print("Pre-download: efishent --download-genome hg38")
+    sys.exit(0)
+
+
+def _download_genome_only(args: argparse.Namespace, genome_name: str) -> None:
+    """Handle --download-genome: pre-download and exit."""
+    from .prebuilt import download_genome, resolve_genome
+
+    genome_id = resolve_genome(genome_name)
+    cache_dir = getattr(args, "index_cache_dir", None)
+    force = getattr(args, "force_download", False)
+    download_genome(genome_id, cache_dir=cache_dir, force=force)
+    print(f"Genome {genome_id} downloaded successfully.")
+    sys.exit(0)
+
+
+def _run_standalone_modes(args: argparse.Namespace) -> None:
+    """Run utility modes that exit without running the pipeline."""
     if getattr(args, "check", False):
-        print_header(__version__)
-        results = check_all_dependencies()
-        print_dependency_check(results)
-        sys.exit(0 if all(r["found"] for r in results.values()) else 1)
+        _run_dependency_check()
 
     # Handle --update: self-update and exit
     if getattr(args, "update", False):
         self_update()
         sys.exit(0)
 
-    # Handle --list-genomes: show available genomes and exit
     if getattr(args, "list_genomes", False):
-        from .prebuilt import list_available_genomes
-        print("Available pre-built genomes:")
-        for genome in list_available_genomes():
-            print(f"  {genome['display']}")
-        print()
-        print("Usage: efishent --genome hg38 --gene-name TP53 --organism-name 'Homo sapiens'")
-        print("Pre-download: efishent --download-genome hg38")
-        sys.exit(0)
+        _list_genomes()
 
-    # Handle --download-genome: pre-download and exit
     download_genome_arg = getattr(args, "download_genome", None)
     if download_genome_arg:
-        from .prebuilt import download_genome, resolve_genome
-        genome_id = resolve_genome(download_genome_arg)
-        cache_dir = getattr(args, "index_cache_dir", None)
-        force = getattr(args, "force_download", False)
-        download_genome(genome_id, cache_dir=cache_dir, force=force)
-        print(f"Genome {genome_id} downloaded successfully.")
-        sys.exit(0)
+        _download_genome_only(args, download_genome_arg)
 
-    # Handle --genome: resolve and set reference paths
+
+def _fetch_supplemental_kmer_index(
+    genome_id: str, kmer_length: int, cache_dir: str | None
+) -> None:
+    """Auto-fetch supplemental jellyfish index for non-default kmer_length.
+
+    genome_15.jf is always bundled; other kl values are hosted separately
+    on HuggingFace and downloaded here on first use.
+    """
+    from .console import console
+    from .prebuilt import try_download_supplemental_index
+
+    console.print(
+        f"  Checking HuggingFace for pre-built {kmer_length}-mer index...",
+        end="",
+    )
+    found = try_download_supplemental_index(genome_id, kmer_length, cache_dir)
+    if found:
+        console.print(" [green]found[/green]")
+    else:
+        console.print(" [yellow]not available — will build locally[/yellow]")
+
+
+def _use_prebuilt_genome(args: argparse.Namespace, genome_name: str) -> None:
+    """Handle --genome: resolve and set reference paths."""
+    from .prebuilt import (
+        download_genome,
+        get_reference_paths,
+        is_genome_cached,
+        resolve_genome,
+    )
+
+    if getattr(args, "reference_genome", None):
+        print("Error: --genome and --reference-genome are mutually exclusive.")
+        sys.exit(1)
+
+    genome_id = resolve_genome(genome_name)
+    cache_dir = getattr(args, "index_cache_dir", None)
+
+    if not is_genome_cached(genome_id, cache_dir):
+        print(f"Genome {genome_id} not cached. Downloading...")
+        download_genome(genome_id, cache_dir=cache_dir)
+
+    if args.kmer_length != 15:
+        _fetch_supplemental_kmer_index(genome_id, args.kmer_length, cache_dir)
+
+    paths = get_reference_paths(genome_id, cache_dir)
+    args.reference_genome = paths["reference_genome"]
+    args.reference_annotation = paths["reference_annotation"]
+    args.reference_transcriptome = paths["reference_transcriptome"]
+
+
+def _announce_start(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Print header banner (and check for updates) or log the start when silent."""
+    if args.silent:
+        logger.info(f"{UniCode.fishing} eFISHent v{__version__} starting...")
+        return
+
+    from .console import print_header
+
+    print_header(__version__)
+    check_for_updates()
+
+
+def _exit_if_missing_dependencies(
+    args: argparse.Namespace, logger: logging.Logger
+) -> None:
+    """Check required dependencies before starting the pipeline."""
+    missing = check_required_dependencies(args)
+    if not missing:
+        return
+
+    if not args.silent:
+        from .console import print_missing_deps_error
+
+        print_missing_deps_error(missing)
+    else:
+        logger.error(
+            f"Missing required dependencies: {', '.join(missing)}. "
+            "Run efishent --check for details."
+        )
+    sys.exit(1)
+
+
+def _report_parameter_warnings(
+    args: argparse.Namespace, logger: logging.Logger
+) -> None:
+    """Show pre-flight parameter warnings."""
+    param_warnings = validate_parameter_warnings(args)
+    if not param_warnings:
+        return
+
+    if not args.silent:
+        from .console import print_parameter_warnings
+
+        print_parameter_warnings(param_warnings)
+    else:
+        for w in param_warnings:
+            logger.warning(w.replace("\n", " "))
+
+
+def _task_classes(args: argparse.Namespace) -> list[type[luigi.Task]]:
+    """Select the luigi tasks to run for the current mode."""
+    # Lazy imports - only load heavy modules after arg parsing
+    from .analyze import AnalyzeProbeset
+    from .cleanup import CleanUpOutput
+    from .indexing import BuildBowtie2Index, BuildBowtieIndex
+    from .kmers import BuildJellyfishIndex
+
+    if args.build_indices:
+        if args.aligner == "bowtie2":
+            index_task = BuildBowtie2Index
+        else:
+            index_task = BuildBowtieIndex
+        return [BuildJellyfishIndex, index_task]
+    if args.analyze_probeset:
+        return [AnalyzeProbeset]
+    return [CleanUpOutput]
+
+
+def _run_tasks(tasks: list[luigi.Task], args: argparse.Namespace) -> None:
+    """Run the tasks, with progress tracking unless silent."""
+    if args.silent:
+        luigi.build(tasks, local_scheduler=True)
+        return
+
+    from .console import add_cached_step, pipeline_progress
+
+    if args.analyze_probeset:
+        # Analysis has 7 steps
+        with pipeline_progress(total_stages=7, mode="analyze"):
+            luigi.build(tasks, local_scheduler=True)
+    elif args.build_indices:
+        with pipeline_progress(total_stages=2, mode="pipeline"):
+            luigi.build(tasks, local_scheduler=True)
+    else:
+        from .util import _get_pipeline_total
+        with pipeline_progress(total_stages=_get_pipeline_total()):
+            _prefill_cached_steps(add_cached_step)
+            luigi.build(tasks, local_scheduler=True)
+
+
+def _task_output_files(task: luigi.Task) -> list[str]:
+    """Collect output file paths of a task."""
+    task_output = task.output()
+    if isinstance(task_output, dict):
+        return [t.path for t in task_output.values() if hasattr(t, "path")]
+    if hasattr(task_output, "path"):
+        return [task_output.path]
+    return []
+
+
+def _report_completion(
+    task: luigi.Task,
+    args: argparse.Namespace,
+    logger: logging.Logger,
+    duration: float,
+) -> None:
+    """Show the completion summary for the final task."""
+    output_files = _task_output_files(task)
+
+    if args.silent:
+        logger.info(
+            f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
+        )
+        for f in output_files:
+            logger.info(f"  Output: {f}")
+        return
+
+    from .console import print_completion
+
+    # Get summary stats and probe data from CleanUpOutput task if available
+    print_completion(
+        format_duration(duration),
+        output_files,
+        getattr(task, "_summary", None),
+        getattr(task, "_probe_df", None),
+        getattr(task, "_verification", None),
+    )
+
+
+def main():
+    """Run eFISHent tasks."""
+    # Auto-discover deps installed by install.sh
+    _ensure_deps_on_path()
+
+    start_time = time.time()
+    args = _parse_args()
+
+    _run_standalone_modes(args)
+
     genome_arg = getattr(args, "genome", None)
     if genome_arg:
-        from .prebuilt import (
-            download_genome,
-            get_reference_paths,
-            is_genome_cached,
-            resolve_genome,
-            try_download_supplemental_index,
-        )
-        if getattr(args, "reference_genome", None):
-            print("Error: --genome and --reference-genome are mutually exclusive.")
-            sys.exit(1)
-
-        genome_id = resolve_genome(genome_arg)
-        cache_dir = getattr(args, "index_cache_dir", None)
-
-        if not is_genome_cached(genome_id, cache_dir):
-            print(f"Genome {genome_id} not cached. Downloading...")
-            download_genome(genome_id, cache_dir=cache_dir)
-
-        # Auto-fetch supplemental jellyfish index for non-default kmer_length.
-        # genome_15.jf is always bundled; other kl values are hosted separately
-        # on HuggingFace and downloaded here on first use.
-        if args.kmer_length != 15:
-            from .console import console
-            console.print(
-                f"  Checking HuggingFace for pre-built {args.kmer_length}-mer index...",
-                end="",
-            )
-            found = try_download_supplemental_index(genome_id, args.kmer_length, cache_dir)
-            if found:
-                console.print(" [green]found[/green]")
-            else:
-                console.print(" [yellow]not available — will build locally[/yellow]")
-
-        paths = get_reference_paths(genome_id, cache_dir)
-        args.reference_genome = paths["reference_genome"]
-        args.reference_annotation = paths["reference_annotation"]
-        args.reference_transcriptome = paths["reference_transcriptome"]
+        _use_prebuilt_genome(args, genome_arg)
 
     # Validate that reference_genome is set (either via -g or --genome)
     if not getattr(args, "reference_genome", None):
@@ -1262,99 +1564,21 @@ def main():
         sys.exit(2)
 
     logger = set_logging_level(args.silent, args.debug)
+    _announce_start(args, logger)
+    _exit_if_missing_dependencies(args, logger)
+    _report_parameter_warnings(args, logger)
 
-    # Print header banner
-    if not args.silent:
-        print_header(__version__)
-        check_for_updates()
-    else:
-        logger.info(f"{UniCode.fishing} eFISHent v{__version__} starting...")
-
-    # Check required dependencies before starting the pipeline
-    missing = check_required_dependencies(args)
-    if missing:
-        if not args.silent:
-            print_missing_deps_error(missing)
-        else:
-            logger.error(
-                f"Missing required dependencies: {', '.join(missing)}. "
-                "Run efishent --check for details."
-            )
-        sys.exit(1)
-
-    # Pre-flight parameter warnings
-    param_warnings = validate_parameter_warnings(args)
-    if param_warnings:
-        if not args.silent:
-            print_parameter_warnings(param_warnings)
-        else:
-            for w in param_warnings:
-                logger.warning(w.replace("\n", " "))
-
-    # Lazy imports - only load heavy modules after arg parsing
-    from .analyze import AnalyzeProbeset
-    from .cleanup import CleanUpOutput
-    from .indexing import BuildBowtie2Index, BuildBowtieIndex
-    from .kmers import BuildJellyfishIndex
+    task_classes = _task_classes(args)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         config_file = os.path.join(tmp_dir, "luigi.cfg")
         create_custom_config(args, config_file)
         luigi.configuration.add_config_path(config_file)
 
-        tasks: list[luigi.Task] = []
-        if args.build_indices:
-            if args.aligner == "bowtie2":
-                index_task = BuildBowtie2Index()
-            else:
-                index_task = BuildBowtieIndex()
-            tasks = [BuildJellyfishIndex(), index_task]
-        elif args.analyze_probeset:
-            tasks = [AnalyzeProbeset()]
-        else:
-            tasks = [CleanUpOutput()]
-
-        # Run with progress tracking
-        if not args.silent:
-            if args.analyze_probeset:
-                # Analysis has 7 steps
-                with pipeline_progress(total_stages=7, mode="analyze"):
-                    luigi.build(tasks, local_scheduler=True)
-            elif args.build_indices:
-                with pipeline_progress(total_stages=2, mode="pipeline"):
-                    luigi.build(tasks, local_scheduler=True)
-            else:
-                from .util import _get_pipeline_total
-                with pipeline_progress(total_stages=_get_pipeline_total()):
-                    _prefill_cached_steps(add_cached_step)
-                    luigi.build(tasks, local_scheduler=True)
-        else:
-            luigi.build(tasks, local_scheduler=True)
+        tasks = [task_cls() for task_cls in task_classes]
+        _run_tasks(tasks, args)
 
     duration = time.time() - start_time
 
     if tasks[-1].complete():
-        # Collect output file paths
-        output_files = []
-        task_output = tasks[-1].output()
-        if isinstance(task_output, dict):
-            output_files = [t.path for t in task_output.values() if hasattr(t, "path")]
-        elif hasattr(task_output, "path"):
-            output_files = [task_output.path]
-
-        # Get summary stats and probe data from CleanUpOutput task if available
-        summary = getattr(tasks[-1], "_summary", None)
-        probe_df = getattr(tasks[-1], "_probe_df", None)
-        verification = getattr(tasks[-1], "_verification", None)
-
-        if not args.silent:
-            print_completion(
-                format_duration(duration), output_files, summary, probe_df,
-                verification,
-            )
-        else:
-            logger.info(
-                f"{UniCode.party} eFISHent has finished running in {format_duration(duration)}!"
-            )
-            for f in output_files:
-                logger.info(f"  Output: {f}")
+        _report_completion(tasks[-1], args, logger, duration)
