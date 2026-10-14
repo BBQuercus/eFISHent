@@ -18,7 +18,7 @@ import pandas as pd
 import pyomo.environ as pe
 
 from . import util
-from .config import GeneralConfig, ProbeConfig, RunConfig
+from .config import GeneralConfig, ProbeConfig, RunConfig, SequenceConfig
 from .secondary_structure import SecondaryStructureFiltering
 
 
@@ -75,6 +75,37 @@ class OptimizeProbeCoverage(luigi.Task):
         """Run sequential greedy model."""
         return greedy_model(self.df)
 
+    def screen_genome_hits(
+        self, sequences: list[Bio.SeqRecord.SeqRecord], fasta_path: str
+    ) -> list[Bio.SeqRecord.SeqRecord]:
+        """Drop exogenous candidates that the final genome BLAST check rejects.
+
+        CleanUpOutput removes final probes with any near-full-length genomic
+        hit. Running that same check on all candidates here lets the optimizer
+        fill those positions with clean probes instead of leaving gaps.
+        """
+        verification = self._genome_verification(fasta_path)
+        if not verification or not verification["flagged"]:
+            return sequences
+        flagged = set(verification["flagged"])
+        if len(flagged) == len(sequences):
+            self.logger.warning(
+                "Every candidate has a genomic BLAST hit; keeping them for optimization."
+            )
+            return sequences
+        self.logger.info(
+            f"Genome BLAST screen removed {len(flagged)}/{len(sequences)} "
+            "candidates with genomic hits"
+        )
+        return [seq for seq in sequences if seq.id not in flagged]
+
+    @staticmethod
+    def _genome_verification(fasta_path: str) -> dict | None:
+        """CleanUpOutput's genome BLAST check on a candidate FASTA."""
+        from .cleanup import CleanUpOutput
+
+        return CleanUpOutput()._run_blast_verification(fasta_path)
+
     def filter_binding_probes(
         self, assigned: list[str], match_percentage: float
     ) -> list[str]:
@@ -105,6 +136,8 @@ class OptimizeProbeCoverage(luigi.Task):
         inp = self.input()
         fasta_path = inp["fasta"].path if isinstance(inp, dict) else inp.path
         sequences = list(Bio.SeqIO.parse(fasta_path, "fasta"))
+        if not SequenceConfig().is_endogenous:
+            sequences = self.screen_genome_hits(sequences, fasta_path)
         self.df = util.create_data_table(sequences)
         self.df["end"] += ProbeConfig().spacing
 
