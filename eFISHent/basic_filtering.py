@@ -5,6 +5,7 @@ import math
 import multiprocessing
 import os
 import re
+from collections.abc import Callable
 
 import Bio.Seq
 import Bio.SeqIO
@@ -195,6 +196,80 @@ def compute_off_target_tm(
         return 0.0
 
 
+def _has_long_homopolymer(sequence: Bio.Seq.Seq, config: luigi.Config) -> bool:
+    """Check homopolymer runs (legacy fallback: any GGGG) against the config."""
+    max_homopolymer = getattr(config, "max_homopolymer_length", 0)
+    if max_homopolymer > 0:
+        return get_max_homopolymer_run(sequence) >= max_homopolymer
+    # Legacy fallback: only filter GGGG
+    return get_g_quadruplet_count(sequence) > 0
+
+
+def _has_excess_cpg(sequence: Bio.Seq.Seq, config: luigi.Config) -> bool:
+    """CpG depletion filter (optional)."""
+    max_cpg = getattr(config, "max_cpg_fraction", 0.0)
+    return max_cpg > 0 and get_cpg_fraction(sequence) > max_cpg
+
+
+def _is_low_complexity(sequence: Bio.Seq.Seq, config: luigi.Config) -> bool:
+    """Low-complexity filter (optional)."""
+    return bool(getattr(config, "filter_low_complexity", False)) and (
+        has_low_complexity(sequence) or get_dinucleotide_repeat_count(sequence) > 0
+    )
+
+
+def _forms_g_quadruplex(sequence: Bio.Seq.Seq, config: luigi.Config) -> bool:
+    """G-quadruplex filter (optional)."""
+    return bool(getattr(config, "filter_g_quadruplex", False)) and has_g_quadruplex(
+        sequence
+    )
+
+
+def _suggest_wider_range(
+    option: str,
+    values: list[float],
+    bounds: tuple[float, float],
+    widen_min: Callable[[float], float],
+    widen_max: Callable[[float], float],
+) -> list[str]:
+    """Suggest a wider --min-/--max-<option> range if most values fall outside it.
+
+    The new bounds are derived from the 5th/95th percentile of values.
+    """
+    current_min, current_max = bounds
+    in_range = sum(1 for v in values if current_min <= v <= current_max)
+    if in_range >= len(values) * 0.5:
+        return []
+
+    suggestions = []
+    p5 = sorted(values)[max(0, len(values) // 20)]
+    p95 = sorted(values)[min(len(values) - 1, len(values) * 19 // 20)]
+    if p5 < current_min:
+        new_min = widen_min(p5)
+        would_pass = sum(1 for v in values if new_min <= v <= current_max)
+        suggestions.append(
+            f"--min-{option} {new_min:.0f}  (currently {current_min:.0f}, "
+            f"{would_pass} probes would pass)"
+        )
+    if p95 > current_max:
+        new_max = widen_max(p95)
+        would_pass = sum(1 for v in values if current_min <= v <= new_max)
+        suggestions.append(
+            f"--max-{option} {new_max:.0f}  (currently {current_max:.0f}, "
+            f"{would_pass} probes would pass)"
+        )
+    return suggestions
+
+
+# Sequence-composition checks rejecting a candidate, evaluated in order
+_SEQUENCE_REJECTION_CHECKS = (
+    _has_long_homopolymer,
+    _has_excess_cpg,
+    _is_low_complexity,
+    _forms_g_quadruplex,
+)
+
+
 class BasicFiltering(luigi.Task):
     """Initial probe filtering based on melting temperature and GC content."""
 
@@ -230,33 +305,9 @@ class BasicFiltering(luigi.Task):
         if not (config.min_tm <= melting_temp <= config.max_tm):
             return False
 
-        # Homopolymer filtering
-        max_homopolymer = getattr(config, "max_homopolymer_length", 0)
-        if max_homopolymer > 0:
-            if get_max_homopolymer_run(sequence) >= max_homopolymer:
-                return False
-        else:
-            # Legacy fallback: only filter GGGG
-            if get_g_quadruplet_count(sequence) > 0:
-                return False
-
-        # CpG depletion filter (optional)
-        max_cpg = getattr(config, "max_cpg_fraction", 0.0)
-        if max_cpg > 0:
-            if get_cpg_fraction(sequence) > max_cpg:
-                return False
-
-        # Low-complexity filter (optional)
-        if getattr(config, "filter_low_complexity", False):
-            if has_low_complexity(sequence) or get_dinucleotide_repeat_count(sequence) > 0:
-                return False
-
-        # G-quadruplex filter (optional)
-        if getattr(config, "filter_g_quadruplex", False):
-            if has_g_quadruplex(sequence):
-                return False
-
-        return True
+        return not any(
+            is_rejected(sequence, config) for is_rejected in _SEQUENCE_REJECTION_CHECKS
+        )
 
     def _is_candidate_valid(self, candidate: Bio.SeqRecord.SeqRecord) -> bool:
         """Counteracting the really weird multiprocess class behavior."""
@@ -304,46 +355,16 @@ class BasicFiltering(luigi.Task):
             for seq in sequences
         ]
 
-        # GC suggestions
-        gc_in_range = sum(1 for gc in gc_values if config.min_gc <= gc <= config.max_gc)
-        if gc_in_range < len(sequences) * 0.5:
-            # Most probes fail GC filter
-            p5 = sorted(gc_values)[max(0, len(gc_values) // 20)]
-            p95 = sorted(gc_values)[min(len(gc_values) - 1, len(gc_values) * 19 // 20)]
-            if p5 < config.min_gc:
-                new_min = max(10.0, round(p5, 0))
-                would_pass = sum(1 for gc in gc_values if new_min <= gc <= config.max_gc)
-                suggestions.append(
-                    f"--min-gc {new_min:.0f}  (currently {config.min_gc:.0f}, "
-                    f"{would_pass} probes would pass)"
-                )
-            if p95 > config.max_gc:
-                new_max = min(95.0, round(p95, 0))
-                would_pass = sum(1 for gc in gc_values if config.min_gc <= gc <= new_max)
-                suggestions.append(
-                    f"--max-gc {new_max:.0f}  (currently {config.max_gc:.0f}, "
-                    f"{would_pass} probes would pass)"
-                )
-
-        # Tm suggestions
-        tm_in_range = sum(1 for tm in tm_values if config.min_tm <= tm <= config.max_tm)
-        if tm_in_range < len(sequences) * 0.5:
-            p5 = sorted(tm_values)[max(0, len(tm_values) // 20)]
-            p95 = sorted(tm_values)[min(len(tm_values) - 1, len(tm_values) * 19 // 20)]
-            if p5 < config.min_tm:
-                new_min = round(p5 - 1, 0)
-                would_pass = sum(1 for tm in tm_values if new_min <= tm <= config.max_tm)
-                suggestions.append(
-                    f"--min-tm {new_min:.0f}  (currently {config.min_tm:.0f}, "
-                    f"{would_pass} probes would pass)"
-                )
-            if p95 > config.max_tm:
-                new_max = round(p95 + 1, 0)
-                would_pass = sum(1 for tm in tm_values if config.min_tm <= tm <= new_max)
-                suggestions.append(
-                    f"--max-tm {new_max:.0f}  (currently {config.max_tm:.0f}, "
-                    f"{would_pass} probes would pass)"
-                )
+        suggestions += _suggest_wider_range(
+            "gc", gc_values, (config.min_gc, config.max_gc),
+            widen_min=lambda p5: max(10.0, round(p5, 0)),
+            widen_max=lambda p95: min(95.0, round(p95, 0)),
+        )
+        suggestions += _suggest_wider_range(
+            "tm", tm_values, (config.min_tm, config.max_tm),
+            widen_min=lambda p5: round(p5 - 1, 0),
+            widen_max=lambda p95: round(p95 + 1, 0),
+        )
 
         # CpG suggestion
         max_cpg = getattr(config, "max_cpg_fraction", 0.0)

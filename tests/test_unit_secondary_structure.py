@@ -39,7 +39,7 @@ def test_get_free_energy_fold_failure_returns_zero():
             returncode=1, cmd=["Fold", "-", "-"], stderr="some error"
         )
         energy = get_free_energy(sequence)
-    assert energy == 0.0
+    assert energy == pytest.approx(0.0)
 
 
 def test_get_free_energy_fold_failure_logs_warning():

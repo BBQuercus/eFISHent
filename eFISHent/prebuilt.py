@@ -12,38 +12,40 @@ import os
 
 logger = logging.getLogger("custom-logger")
 
+# Canonical genome identifiers (species/assembly) of the hosted indices.
+HUMAN = "homo_sapiens/GRCh38"
+MOUSE = "mus_musculus/GRCm39"
+YEAST = "saccharomyces_cerevisiae/R64"
+WORM = "caenorhabditis_elegans/WBcel235"
+FLY = "drosophila_melanogaster/BDGP6"
+ZEBRAFISH = "danio_rerio/GRCz11"
+RAT = "rattus_norvegicus/GRCr8"
+
 # Mapping of user-friendly aliases to canonical genome identifiers.
 # Only genomes with uploaded indices belong here.
 GENOME_ALIASES: dict[str, str] = {
-    # Human
-    "hg38": "homo_sapiens/GRCh38",
-    "GRCh38": "homo_sapiens/GRCh38",
-    "human": "homo_sapiens/GRCh38",
-    # Mouse
-    "mm39": "mus_musculus/GRCm39",
-    "GRCm39": "mus_musculus/GRCm39",
-    "mouse": "mus_musculus/GRCm39",
-    # Yeast
-    "R64": "saccharomyces_cerevisiae/R64",
-    "sacCer3": "saccharomyces_cerevisiae/R64",
-    "yeast": "saccharomyces_cerevisiae/R64",
-    # C. elegans
-    "WBcel235": "caenorhabditis_elegans/WBcel235",
-    "ce11": "caenorhabditis_elegans/WBcel235",
-    "worm": "caenorhabditis_elegans/WBcel235",
-    "elegans": "caenorhabditis_elegans/WBcel235",
-    # Drosophila
-    "dm6": "drosophila_melanogaster/BDGP6",
-    "BDGP6": "drosophila_melanogaster/BDGP6",
-    "fly": "drosophila_melanogaster/BDGP6",
-    # Zebrafish
-    "danRer11": "danio_rerio/GRCz11",
-    "GRCz11": "danio_rerio/GRCz11",
-    "zebrafish": "danio_rerio/GRCz11",
-    # Rat
-    "GRCr8": "rattus_norvegicus/GRCr8",
-    "rn7": "rattus_norvegicus/GRCr8",
-    "rat": "rattus_norvegicus/GRCr8",
+    "hg38": HUMAN,
+    "GRCh38": HUMAN,
+    "human": HUMAN,
+    "mm39": MOUSE,
+    "GRCm39": MOUSE,
+    "mouse": MOUSE,
+    "R64": YEAST,
+    "sacCer3": YEAST,
+    "yeast": YEAST,
+    "WBcel235": WORM,
+    "ce11": WORM,
+    "worm": WORM,
+    "elegans": WORM,
+    "dm6": FLY,
+    "BDGP6": FLY,
+    "fly": FLY,
+    "danRer11": ZEBRAFISH,
+    "GRCz11": ZEBRAFISH,
+    "zebrafish": ZEBRAFISH,
+    "GRCr8": RAT,
+    "rn7": RAT,
+    "rat": RAT,
 }
 
 # Genomes we plan to support but have not uploaded indices for yet.

@@ -27,14 +27,12 @@ fi
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-EFISHENT_VERSION="latest"
 BOWTIE_VERSION="1.3.1"
 BOWTIE2_VERSION="2.5.5"
 JELLYFISH_VERSION="2.3.1"
 JELLYFISH_BINARY_VERSION="2.3.0"  # last release with a static Linux binary
 GLPK_VERSION="5.0"
 BLAST_VERSION="2.17.0"
-RNASTRUCTURE_VERSION="6.4"
 
 # Colors (disabled if not a terminal)
 if [ -t 1 ]; then
@@ -402,14 +400,9 @@ else
         mv "${HOME}/edirect" "$EDIRECT_BACKUP"
     fi
 
-    INSTALL_CMD=""
-    if command -v curl >/dev/null 2>&1; then
-        INSTALL_CMD='sh -c "$(curl -fsSL https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh)"'
-    elif command -v wget >/dev/null 2>&1; then
-        INSTALL_CMD='sh -c "$(wget -q https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"'
-    fi
-
-    if eval "$INSTALL_CMD" > "${DEPS_DIR}/edirect_install.log" 2>&1; then
+    EDIRECT_INSTALLER="${DEPS_DIR}/install-edirect.sh"
+    if download "https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh" "$EDIRECT_INSTALLER" \
+       && sh "$EDIRECT_INSTALLER" > "${DEPS_DIR}/edirect_install.log" 2>&1; then
         if [ -d "${HOME}/edirect" ]; then
             mv "${HOME}/edirect" "${EDIRECT_DIR}"
             info "Installed Entrez Direct"
@@ -418,6 +411,7 @@ else
         warn "Entrez Direct installation failed (optional — only needed for NCBI gene download)."
         warn "You can provide sequence files directly with --sequence-file instead."
     fi
+    rm -f "$EDIRECT_INSTALLER"
 
     # Restore backup
     if [ -n "$EDIRECT_BACKUP" ] && [ -d "$EDIRECT_BACKUP" ]; then
@@ -448,11 +442,11 @@ elif [ "$WITH_BLAST" = true ]; then
             ;;
     esac
 
-    printf "  Downloading BLAST+ ${BLAST_VERSION}...\n"
+    printf "  Downloading BLAST+ %s...\n" "${BLAST_VERSION}"
     download "$BLAST_URL" "${DEPS_DIR}/blast.tar.gz"
     cd "${DEPS_DIR}"
     tar -xzf blast.tar.gz
-    BLAST_DIR=$(ls -d ncbi-blast-${BLAST_VERSION}+* 2>/dev/null | head -1)
+    BLAST_DIR=$(find . -maxdepth 1 -type d -name "ncbi-blast-${BLAST_VERSION}+*" | head -1)
     if [ -n "$BLAST_DIR" ]; then
         cp "${BLAST_DIR}/bin/blastn" "${BLAST_DIR}/bin/dustmasker" "${BLAST_DIR}/bin/makeblastdb" "${BIN_DIR}/"
         rm -rf blast.tar.gz "${BLAST_DIR}"
@@ -511,11 +505,11 @@ elif [ "$WITH_BLAST" = true ]; then
     esac
 
     if [ -n "$GFFREAD_URL" ]; then
-        printf "  Downloading gffread ${GFFREAD_VERSION}...\n"
+        printf "  Downloading gffread %s...\n" "${GFFREAD_VERSION}"
         if download "$GFFREAD_URL" "${DEPS_DIR}/gffread.tar.gz" 2>/dev/null; then
             cd "${DEPS_DIR}"
             tar -xzf gffread.tar.gz
-            GFFREAD_DIR=$(ls -d gffread-${GFFREAD_VERSION}* 2>/dev/null | head -1)
+            GFFREAD_DIR=$(find . -maxdepth 1 -type d -name "gffread-${GFFREAD_VERSION}*" | head -1)
             if [ -n "$GFFREAD_DIR" ] && [ -f "${GFFREAD_DIR}/gffread" ]; then
                 cp "${GFFREAD_DIR}/gffread" "${BIN_DIR}/"
                 chmod +x "${BIN_DIR}/gffread"
@@ -608,6 +602,7 @@ if [ "$DEPS_ONLY" = false ]; then
         # Source cargo env to get uv on PATH
         [ -f "${UV_INSTALL_DIR}/uv" ] && export PATH="${UV_INSTALL_DIR}:${PATH}"
         [ -f "${HOME}/.local/bin/uv" ] && export PATH="${HOME}/.local/bin:${PATH}"
+        # shellcheck source=/dev/null
         [ -f "${HOME}/.cargo/env" ] && . "${HOME}/.cargo/env"
         if ! command -v uv >/dev/null 2>&1; then
             err "uv installation failed. Install manually: https://docs.astral.sh/uv/"
@@ -725,7 +720,7 @@ if [ "$MODIFY_RC" = true ]; then
                     mkdir -p "$(dirname "$RC_FILE")"
                     printf '\n%s\nfish_add_path "%s"\nfish_add_path "%s"\n' "$MARKER" "${WRAPPER_DIR}" "${BIN_DIR}" >> "$RC_FILE"
                 else
-                    printf '\n%s\nexport PATH="%s:%s:$PATH"\n' "$MARKER" "${WRAPPER_DIR}" "${BIN_DIR}" >> "$RC_FILE"
+                    printf '\n%s\nexport PATH="%s:%s:%s"\n' "$MARKER" "${WRAPPER_DIR}" "${BIN_DIR}" "\$PATH" >> "$RC_FILE"
                 fi
                 info "Added to ${RC_FILE} (wrapper + dependency binaries)"
                 RC_UPDATED=true
@@ -806,10 +801,10 @@ if [ "$WITH_BLAST" = false ] && ! command -v blastn >/dev/null 2>&1; then
     printf "  transcriptome off-target filtering (%s--reference-transcriptome%s).\n\n" "${CYAN}" "${RESET}"
 fi
 if ! command -v gffread >/dev/null 2>&1; then
-    printf "  ${YELLOW}Note:${RESET} gffread is not installed. It is needed to build a transcriptome\n"
-    printf "  from genome + GTF. See: ${CYAN}https://github.com/gpertea/gffread${RESET}\n\n"
+    printf "  %sNote:%s gffread is not installed. It is needed to build a transcriptome\n" "${YELLOW}" "${RESET}"
+    printf "  from genome + GTF. See: %shttps://github.com/gpertea/gffread%s\n\n" "${CYAN}" "${RESET}"
 fi
 
 printf "  To uninstall:\n"
-printf "    ${CYAN}curl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash -s -- --uninstall${RESET}\n"
+printf "    %scurl -LsSf https://raw.githubusercontent.com/BBQuercus/eFISHent/main/install.sh | bash -s -- --uninstall%s\n" "${CYAN}" "${RESET}"
 printf "\n"

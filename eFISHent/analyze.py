@@ -32,6 +32,20 @@ from .optimization import is_binding
 from .prepare_sequence import PrepareSequence
 from .secondary_structure import get_free_energy
 
+KCAL_PER_MOL = "kcal/mol"
+
+# Per-metric summary rows: (label, column, unit, decimals)
+SUMMARY_METRICS = [
+    ("Length", "length", "nt", 0),
+    ("Tm", "TM", "°C", 1),
+    ("GC", "GC", "%", 1),
+    ("CpG fraction", "cpg_fraction", "", 3),
+    ("ΔG (secondary)", "deltaG", KCAL_PER_MOL, 1),
+    ("ΔG (binding)", "on_target_dg", KCAL_PER_MOL, 1),
+    ("K-mer max", "kmers", "", 0),
+    ("Homopolymer", "homopolymer_run", "nt", 0),
+    ("Low complexity", "low_complexity", "", 3),
+]
 
 class AnalyzeProbeset(luigi.Task):
     """Analysis of a probe set with summary stats, plots, and CSV output."""
@@ -306,6 +320,25 @@ class AnalyzeProbeset(luigi.Task):
         """Print a text summary to the terminal."""
         from .console import console
 
+        self._print_overview(df)
+        self._print_metrics(df)
+        flags = self._collect_flags(df)
+
+        if flags:
+            console.print()
+            console.print("  [bold yellow]Flags:[/bold yellow]")
+            for f in flags:
+                console.print(f"    [yellow]![/yellow] {f}")
+        else:
+            console.print()
+            console.print("  [green]No issues detected[/green]")
+
+        console.print()
+
+    def _print_overview(self, df: pd.DataFrame):
+        """Print the probe count, gene length, and gene coverage."""
+        from .console import console
+
         n = len(df)
         gene_len = len(self.gene)
         mapped = df[df["start"] >= 0]
@@ -323,21 +356,13 @@ class AnalyzeProbeset(luigi.Task):
             )
         console.print()
 
-        # Per-metric summary table
-        metrics = [
-            ("Length", "length", "nt", 0),
-            ("Tm", "TM", "°C", 1),
-            ("GC", "GC", "%", 1),
-            ("CpG fraction", "cpg_fraction", "", 3),
-            ("ΔG (secondary)", "deltaG", "kcal/mol", 1),
-            ("ΔG (binding)", "on_target_dg", "kcal/mol", 1),
-            ("K-mer max", "kmers", "", 0),
-            ("Homopolymer", "homopolymer_run", "nt", 0),
-            ("Low complexity", "low_complexity", "", 3),
-        ]
+    @staticmethod
+    def _print_metrics(df: pd.DataFrame):
+        """Print the per-metric median and range table."""
+        from .console import console
 
         console.print("  [dim]Metric              Median     Range[/dim]")
-        for label, col, unit, dec in metrics:
+        for label, col, unit, dec in SUMMARY_METRICS:
             if col not in df.columns:
                 continue
             vals = df[col]
@@ -362,7 +387,9 @@ class AnalyzeProbeset(luigi.Task):
                 f"  {'Quality score':<20s} {q.median():>8.1f}   {q.min():.1f} – {q.max():.1f}"
             )
 
-        # Flags
+    @staticmethod
+    def _collect_flags(df: pd.DataFrame) -> list[str]:
+        """Collect warnings about potentially problematic probes."""
         flags = []
         g4_count = df["g_quadruplex"].sum()
         if g4_count > 0:
@@ -379,25 +406,20 @@ class AnalyzeProbeset(luigi.Task):
                 flags.append(f"{multi_ot} probe(s) have genome off-target hits")
 
         # Cross-hybridization
+        binding_pairs = AnalyzeProbeset._count_binding_pairs(df["sequence"].values)
+        if binding_pairs > 0:
+            flags.append(f"{binding_pairs} probe pair(s) may cross-hybridize (≥75% k-mer overlap)")
+        return flags
+
+    @staticmethod
+    def _count_binding_pairs(seqs) -> int:
+        """Count probe pairs that may cross-hybridize (≥75% k-mer overlap)."""
         binding_pairs = 0
-        seqs = df["sequence"].values
         for i in range(len(seqs)):
             for j in range(i + 1, len(seqs)):
                 if is_binding(seqs[i], seqs[j], 0.75):
                     binding_pairs += 1
-        if binding_pairs > 0:
-            flags.append(f"{binding_pairs} probe pair(s) may cross-hybridize (≥75% k-mer overlap)")
-
-        if flags:
-            console.print()
-            console.print("  [bold yellow]Flags:[/bold yellow]")
-            for f in flags:
-                console.print(f"    [yellow]![/yellow] {f}")
-        else:
-            console.print()
-            console.print("  [green]No issues detected[/green]")
-
-        console.print()
+        return binding_pairs
 
     def _save_csv(self, df: pd.DataFrame):
         """Save per-probe metrics as CSV alongside the PDF."""
@@ -440,10 +462,10 @@ class AnalyzeProbeset(luigi.Task):
         self.histplot(ax, df["kmers"].tolist(), "K-mer count", -1)
 
     def _add_free_energy(self, ax: plt.Axes, df: pd.DataFrame):
-        self.boxplot(ax, df["deltaG"].tolist(), "Secondary structure ΔG", "kcal/mol")
+        self.boxplot(ax, df["deltaG"].tolist(), "Secondary structure ΔG", KCAL_PER_MOL)
 
     def _add_duplex_dg(self, ax: plt.Axes, df: pd.DataFrame):
-        self.boxplot(ax, df["on_target_dg"].tolist(), "On-target binding ΔG", "kcal/mol")
+        self.boxplot(ax, df["on_target_dg"].tolist(), "On-target binding ΔG", KCAL_PER_MOL)
 
     def _add_off_targets(self, ax: plt.Axes, df: pd.DataFrame):
         if "off_targets" in df.columns:

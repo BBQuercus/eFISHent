@@ -33,6 +33,63 @@ from .kmers import BuildJellyfishIndex, get_max_kmer_counts_batch
 from .optimization import OptimizeProbeCoverage
 from .secondary_structure import get_free_energy
 
+# Matches each "GENE(count)" entry of the off_target_genes column
+_OFF_TARGET_GENE_RE = re.compile(r"([^,\s]+)\(\d+\)")
+
+# Quality score weights per (has_accessibility, has_binding) combination
+_QUALITY_WEIGHTS: dict[tuple[bool, bool], dict[str, float]] = {
+    (True, True): {
+        "tm": 0.16, "gc": 0.12, "cpg": 0.05, "dg": 0.11, "ot": 0.21,
+        "kmer": 0.08, "lc": 0.08, "acc": 0.09, "binding": 0.10,
+    },
+    (True, False): {
+        "tm": 0.18, "gc": 0.14, "cpg": 0.05, "dg": 0.13, "ot": 0.23,
+        "kmer": 0.09, "lc": 0.09, "acc": 0.09,
+    },
+    (False, True): {
+        "tm": 0.18, "gc": 0.13, "cpg": 0.05, "dg": 0.13, "ot": 0.23,
+        "kmer": 0.08, "lc": 0.10, "binding": 0.10,
+    },
+    (False, False): {
+        "tm": 0.20, "gc": 0.15, "cpg": 0.05, "dg": 0.15, "ot": 0.25,
+        "kmer": 0.10, "lc": 0.10,
+    },
+}
+
+
+def _parse_off_target_genes(genes_str: str) -> list[str]:
+    """Extract gene names (in order, with repeats) from an off_target_genes entry."""
+    return [match.group(1) for match in _OFF_TARGET_GENE_RE.finditer(genes_str)]
+
+
+def _iter_probe_off_target_genes(df: pd.DataFrame):
+    """Yield (index, gene names) for each probe with off-target genes."""
+    for idx, genes_str in df["off_target_genes"].items():
+        if genes_str:
+            yield idx, _parse_off_target_genes(genes_str)
+
+
+def _gc_score(gc: float) -> float:
+    """Score GC content: full score in 45-52%, linear penalty outside, steep above 55%."""
+    if 45.0 <= gc <= 52.0:
+        return 1.0
+    elif gc < 45.0:
+        # Linear decay from 45% down to 20% (score 0)
+        return max(0.0, (gc - 20.0) / 25.0)
+    elif gc <= 55.0:
+        # Gentle penalty 52-55%
+        return 1.0 - (gc - 52.0) / 10.0
+    else:
+        # Steep penalty above 55% (p=0.002 for unspecific binding)
+        return max(0.0, 0.7 - (gc - 55.0) / 15.0)
+
+
+def _score_column(df: pd.DataFrame, column: str, score_fn) -> pd.Series | float:
+    """Apply ``score_fn`` to ``df[column]``, or return a perfect score if absent."""
+    if column in df.columns:
+        return score_fn(df[column])
+    return 1.0
+
 
 def _classify_expression_risk(gene: str, gene_expression: dict[str, float]) -> str | None:
     """Classify expression risk for a single off-target gene."""
@@ -83,9 +140,10 @@ class CleanUpOutput(luigi.Task):
         basename: str,
         jellyfish_path: str,
         alignment_path: str,
-        config: luigi.Config = ProbeConfig,  # type: ignore
     ) -> pd.DataFrame:
         """Create table with probe information."""
+        cfg = ProbeConfig()
+
         # Create basic table with probe start/end positions and name
         df = util.create_data_table(sequences)
         sequences = sorted(sequences, key=lambda x: int(x.id.split("-")[-1]))
@@ -95,7 +153,7 @@ class CleanUpOutput(luigi.Task):
         df["TM"] = [
             round(
                 get_melting_temp(
-                    seq.seq, config().na_concentration, config().formamide_concentration  # type: ignore
+                    seq.seq, cfg.na_concentration, cfg.formamide_concentration
                 ),
                 2,
             )
@@ -121,17 +179,16 @@ class CleanUpOutput(luigi.Task):
         ]
 
         # Add target site accessibility scoring if enabled
-        if ProbeConfig().accessibility_scoring:
+        if cfg.accessibility_scoring:
             df["accessibility"] = self._compute_accessibility_scores(df)
         else:
             df["accessibility"] = 1.0
 
         # Add on-target duplex ΔG (binding stability)
-        cfg_inst = config()
         df["on_target_dg"] = [
             round(
                 compute_duplex_dg(
-                    seq.seq, cfg_inst.na_concentration, cfg_inst.formamide_concentration
+                    seq.seq, cfg.na_concentration, cfg.formamide_concentration
                 ),
                 2,
             )
@@ -323,44 +380,52 @@ class CleanUpOutput(luigi.Task):
         if not annotation or "off_target_genes" not in df.columns:
             return
 
-        # Build gene->expression mapping if count table is available
-        gene_expression: dict[str, float] = {}
-        if count_table and os.path.isfile(count_table):
-            try:
-                sep = "\t" if count_table.endswith(".tsv") else ","
-                df_expr = pd.read_csv(count_table, sep=sep)
-                cols = df_expr.columns.tolist()
-                if len(cols) >= 2:
-                    # First col = gene_id, second col = expression value
-                    # Build gene_id -> gene_name mapping from GTF
-                    mapping = build_transcript_gene_map(annotation)
-
-                    # Map gene_ids to expression values, using gene_name as key
-                    for _, row in df_expr.iterrows():
-                        gid = str(row.iloc[0])
-                        expr_val = float(row.iloc[1])
-                        # Try to get gene name from mapping
-                        gname = mapping.get(gid, gid)
-                        gene_expression[gname] = expr_val
-                        gene_expression[gid] = expr_val
-            except Exception as e:
-                self.logger.debug(f"Could not load expression table: {e}")
+        gene_expression = self._load_gene_expression(count_table, annotation)
 
         # Annotate each probe
-        for idx, row in df.iterrows():
-            genes_str = row.get("off_target_genes", "")
-            if not genes_str:
-                continue
-
-            risks = []
-            for match in re.finditer(r"([^,\s]+)\(\d+\)", genes_str):
-                gene = match.group(1)
-                risk = _classify_expression_risk(gene, gene_expression)
-                if risk:
-                    risks.append(risk)
-
+        for idx, genes in _iter_probe_off_target_genes(df):
+            risks = [
+                risk
+                for risk in (
+                    _classify_expression_risk(gene, gene_expression) for gene in genes
+                )
+                if risk
+            ]
             if risks:
                 df.at[idx, "expression_risk"] = "; ".join(risks)
+
+    def _load_gene_expression(
+        self, count_table: str, annotation: str
+    ) -> dict[str, float]:
+        """Build a gene->expression mapping from the count table, if available.
+
+        Expression values are keyed by both gene ID and gene name (via GTF).
+        """
+        gene_expression: dict[str, float] = {}
+        if not count_table or not os.path.isfile(count_table):
+            return gene_expression
+
+        try:
+            sep = "\t" if count_table.endswith(".tsv") else ","
+            df_expr = pd.read_csv(count_table, sep=sep)
+            if len(df_expr.columns) < 2:
+                return gene_expression
+
+            # First col = gene_id, second col = expression value
+            # Build gene_id -> gene_name mapping from GTF
+            mapping = build_transcript_gene_map(annotation)
+
+            # Map gene_ids to expression values, using gene_name as key
+            for _, row in df_expr.iterrows():
+                gid = str(row.iloc[0])
+                expr_val = float(row.iloc[1])
+                # Try to get gene name from mapping
+                gname = mapping.get(gid, gid)
+                gene_expression[gname] = expr_val
+                gene_expression[gid] = expr_val
+        except Exception as e:
+            self.logger.debug(f"Could not load expression table: {e}")
+        return gene_expression
 
     @staticmethod
     def _compute_recommendation(row: pd.Series) -> str:
@@ -400,6 +465,20 @@ class CleanUpOutput(luigi.Task):
         - kmers: lower is better (10%)
         - low-complexity: penalize low-complexity probes (10%)
         """
+        scores = CleanUpOutput._compute_component_scores(df)
+
+        # Data-driven weighted composite
+        # Accessibility gets weight when enabled (redistributed from others)
+        has_accessibility = "accessibility" in df.columns and (df["accessibility"] < 1.0).any()
+        has_binding = "on_target_dg" in df.columns and (df["on_target_dg"] < 0.0).any()
+        weights = _QUALITY_WEIGHTS[(bool(has_accessibility), bool(has_binding))]
+
+        quality = sum(scores[col] * weight for col, weight in weights.items())
+        return (quality * 100).round(1)
+
+    @staticmethod
+    def _compute_component_scores(df: pd.DataFrame) -> pd.DataFrame:
+        """Compute the individual quality score components, each in [0, 1]."""
         cfg = ProbeConfig()
         scores = pd.DataFrame(index=df.index)
 
@@ -409,28 +488,13 @@ class CleanUpOutput(luigi.Task):
         scores["tm"] = 1.0 - (df["TM"] - tm_median).abs().clip(upper=tm_range) / tm_range
 
         # GC score: data-driven optimal range 45-52%
-        # Full score in 45-52%, linear penalty outside, steep above 55%
-        def _gc_score(gc: float) -> float:
-            if 45.0 <= gc <= 52.0:
-                return 1.0
-            elif gc < 45.0:
-                # Linear decay from 45% down to 20% (score 0)
-                return max(0.0, (gc - 20.0) / 25.0)
-            elif gc <= 55.0:
-                # Gentle penalty 52-55%
-                return 1.0 - (gc - 52.0) / 10.0
-            else:
-                # Steep penalty above 55% (p=0.002 for unspecific binding)
-                return max(0.0, 0.7 - (gc - 55.0) / 15.0)
-
         scores["gc"] = df["GC"].apply(_gc_score)
 
         # CpG score: CpG frequency penalty (p=0.004 for nuclear background)
-        if "cpg_fraction" in df.columns:
-            # 0.0 CpG = perfect, 0.10+ = zero score
-            scores["cpg"] = (1.0 - df["cpg_fraction"].clip(upper=0.10) / 0.10)
-        else:
-            scores["cpg"] = 1.0
+        # 0.0 CpG = perfect, 0.10+ = zero score
+        scores["cpg"] = _score_column(
+            df, "cpg_fraction", lambda cpg: 1.0 - cpg.clip(upper=0.10) / 0.10
+        )
 
         # deltaG score: 0 is ideal, more negative is worse
         dg_max = abs(cfg.max_deltag) if cfg.max_deltag < 0 else 10.0
@@ -449,82 +513,29 @@ class CleanUpOutput(luigi.Task):
         scores["ot"] = (genome_ot_score * 0.5 + txome_ot_score * 0.5)
 
         # Low-complexity score: penalize probes with low Shannon entropy
-        if "low_complexity" in df.columns:
-            scores["lc"] = 1.0 - df["low_complexity"].clip(upper=0.3) / 0.3
-        else:
-            scores["lc"] = 1.0
+        scores["lc"] = _score_column(
+            df, "low_complexity", lambda lc: 1.0 - lc.clip(upper=0.3) / 0.3
+        )
 
         # Accessibility score: higher = more unpaired target bases = better binding
-        if "accessibility" in df.columns:
-            scores["acc"] = df["accessibility"].clip(lower=0.0, upper=1.0)
-        else:
-            scores["acc"] = 1.0
+        scores["acc"] = _score_column(
+            df, "accessibility", lambda acc: acc.clip(lower=0.0, upper=1.0)
+        )
 
         # On-target duplex ΔG score: more negative = more stable binding = better
         # Typical range: -20 to -60 kcal/mol for 20-25nt probes
-        if "on_target_dg" in df.columns:
-            # Normalize: -60 or below → 1.0, 0 → 0.0
-            dg_floor = -60.0
-            scores["binding"] = (df["on_target_dg"].clip(upper=0.0) / dg_floor).clip(
-                lower=0.0, upper=1.0
-            )
-        else:
-            scores["binding"] = 1.0
+        # Normalize: -60 or below → 1.0, 0 → 0.0
+        dg_floor = -60.0
+        scores["binding"] = _score_column(
+            df,
+            "on_target_dg",
+            lambda dg: (dg.clip(upper=0.0) / dg_floor).clip(lower=0.0, upper=1.0),
+        )
 
         # Clip all component scores to [0, 1] for robustness
         for col in scores.columns:
             scores[col] = scores[col].clip(lower=0.0, upper=1.0)
-
-        # Data-driven weighted composite
-        # Accessibility gets weight when enabled (redistributed from others)
-        has_accessibility = "accessibility" in df.columns and (df["accessibility"] < 1.0).any()
-        has_binding = "on_target_dg" in df.columns and (df["on_target_dg"] < 0.0).any()
-
-        if has_accessibility and has_binding:
-            quality = (
-                scores["tm"] * 0.16
-                + scores["gc"] * 0.12
-                + scores["cpg"] * 0.05
-                + scores["dg"] * 0.11
-                + scores["ot"] * 0.21
-                + scores["kmer"] * 0.08
-                + scores["lc"] * 0.08
-                + scores["acc"] * 0.09
-                + scores["binding"] * 0.10
-            )
-        elif has_accessibility:
-            quality = (
-                scores["tm"] * 0.18
-                + scores["gc"] * 0.14
-                + scores["cpg"] * 0.05
-                + scores["dg"] * 0.13
-                + scores["ot"] * 0.23
-                + scores["kmer"] * 0.09
-                + scores["lc"] * 0.09
-                + scores["acc"] * 0.09
-            )
-        elif has_binding:
-            quality = (
-                scores["tm"] * 0.18
-                + scores["gc"] * 0.13
-                + scores["cpg"] * 0.05
-                + scores["dg"] * 0.13
-                + scores["ot"] * 0.23
-                + scores["kmer"] * 0.08
-                + scores["lc"] * 0.10
-                + scores["binding"] * 0.10
-            )
-        else:
-            quality = (
-                scores["tm"] * 0.20
-                + scores["gc"] * 0.15
-                + scores["cpg"] * 0.05
-                + scores["dg"] * 0.15
-                + scores["ot"] * 0.25
-                + scores["kmer"] * 0.10
-                + scores["lc"] * 0.10
-            )
-        return (quality * 100).round(1)
+        return scores
 
     def _compute_accessibility_scores(self, df: pd.DataFrame) -> pd.Series:
         """Compute target RNA accessibility for each probe's binding site.
@@ -686,8 +697,6 @@ class CleanUpOutput(luigi.Task):
         if not genome or not os.path.isfile(genome):
             return None
 
-        from .console import spinner
-
         self._verification_tmpdir = None
         try:
             # When transcriptome BLAST handles off-target detection and
@@ -699,76 +708,29 @@ class CleanUpOutput(luigi.Task):
             max_expected = max_off + (1 if is_endogenous else 0)
             has_transcriptome = bool(GeneralConfig().reference_transcriptome)
             if has_transcriptome and max_off == 0 and is_endogenous:
-                probes = [r.id for r in Bio.SeqIO.parse(probes_fasta, "fasta")]
-                return {
-                    "total": len(probes),
-                    "clean": len(probes),
-                    "flagged": {},
-                    "max_expected": max_expected,
-                }
+                hits_per_probe: dict[str, int] = {}
+            else:
+                db_path = self._ensure_genome_blast_db(genome)
+                if db_path is None:
+                    return None
+                hits_per_probe = self._count_genomic_hits(probes_fasta, db_path)
 
-            db_path = self._ensure_genome_blast_db(genome)
-            if db_path is None:
-                return None
-
-            with tempfile.TemporaryDirectory() as tmpdir:
-                blast_out = os.path.join(tmpdir, "blast.tsv")
-
-                # BLAST with sensitive parameters
-                with spinner("Running BLAST cross-validation..."):
-                    subprocess.check_call(
-                        ["blastn", "-task", "blastn",
-                         "-query", probes_fasta, "-db", db_path,
-                         "-evalue", "10", "-word_size", "11",
-                         "-dust", "no",
-                         "-num_threads", str(GeneralConfig().threads),
-                         "-outfmt", "6 qseqid sseqid pident length mismatch "
-                                    "gapopen qstart qend sstart send qlen",
-                         "-out", blast_out],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
-                    )
-
-                # Parse results
-                cols = ["qseqid", "sseqid", "pident", "length", "mismatch",
-                        "gapopen", "qstart", "qend", "sstart", "send", "qlen"]
-                if os.path.getsize(blast_out) > 0:
-                    df_blast = pd.read_csv(blast_out, sep="\t", header=None, names=cols)
-                else:
-                    df_blast = pd.DataFrame(columns=cols)
-
-                # Significant hits: near-full-length high-identity matches only
-                # >= 95% identity AND alignment covers >= 80% of probe length
-                # For a 20nt probe this means ~16nt at ≤1 mismatch
-                df_blast["effective_len"] = df_blast["length"] - df_blast["gapopen"]
-                sig = df_blast[
-                    (df_blast["pident"] >= 95)
-                    & (df_blast["effective_len"] >= df_blast["qlen"] * 0.80)
-                ]
-
-                # Count unique genomic loci per probe
-                # Group by chromosome + 1kb-binned position to deduplicate
-                sig = sig.copy()
-                sig["locus"] = sig["sseqid"] + ":" + (sig["sstart"] // 1000).astype(str)
-                hits_per_probe = sig.groupby("qseqid")["locus"].nunique().to_dict()
-
-                probes = [r.id for r in Bio.SeqIO.parse(probes_fasta, "fasta")]
-
-                clean = sum(
-                    1 for p in probes
-                    if hits_per_probe.get(p, 0) <= max_expected
-                )
-                flagged = {
-                    p: hits_per_probe.get(p, 0)
-                    for p in probes
-                    if hits_per_probe.get(p, 0) > max_expected
-                }
-
-                return {
-                    "total": len(probes),
-                    "clean": clean,
-                    "flagged": flagged,
-                    "max_expected": max_expected,
-                }
+            probes = [r.id for r in Bio.SeqIO.parse(probes_fasta, "fasta")]
+            clean = sum(
+                1 for p in probes
+                if hits_per_probe.get(p, 0) <= max_expected
+            )
+            flagged = {
+                p: hits_per_probe.get(p, 0)
+                for p in probes
+                if hits_per_probe.get(p, 0) > max_expected
+            }
+            return {
+                "total": len(probes),
+                "clean": clean,
+                "flagged": flagged,
+                "max_expected": max_expected,
+            }
         except Exception as e:
             self.logger.debug(f"BLAST verification failed: {e}")
             return None
@@ -776,6 +738,51 @@ class CleanUpOutput(luigi.Task):
             if self._verification_tmpdir:
                 shutil.rmtree(self._verification_tmpdir, ignore_errors=True)
                 self._verification_tmpdir = None
+
+    @staticmethod
+    def _count_genomic_hits(probes_fasta: str, db_path: str) -> dict[str, int]:
+        """BLAST probes against the genome and count significant loci per probe."""
+        from .console import spinner
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            blast_out = os.path.join(tmpdir, "blast.tsv")
+
+            # BLAST with sensitive parameters
+            with spinner("Running BLAST cross-validation..."):
+                subprocess.check_call(
+                    ["blastn", "-task", "blastn",
+                     "-query", probes_fasta, "-db", db_path,
+                     "-evalue", "10", "-word_size", "11",
+                     "-dust", "no",
+                     "-num_threads", str(GeneralConfig().threads),
+                     "-outfmt", "6 qseqid sseqid pident length mismatch "
+                                "gapopen qstart qend sstart send qlen",
+                     "-out", blast_out],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                )
+
+            # Parse results
+            cols = ["qseqid", "sseqid", "pident", "length", "mismatch",
+                    "gapopen", "qstart", "qend", "sstart", "send", "qlen"]
+            if os.path.getsize(blast_out) > 0:
+                df_blast = pd.read_csv(blast_out, sep="\t", header=None, names=cols)
+            else:
+                df_blast = pd.DataFrame(columns=cols)
+
+        # Significant hits: near-full-length high-identity matches only
+        # >= 95% identity AND alignment covers >= 80% of probe length
+        # For a 20nt probe this means ~16nt at ≤1 mismatch
+        df_blast["effective_len"] = df_blast["length"] - df_blast["gapopen"]
+        sig = df_blast[
+            (df_blast["pident"] >= 95)
+            & (df_blast["effective_len"] >= df_blast["qlen"] * 0.80)
+        ]
+
+        # Count unique genomic loci per probe
+        # Group by chromosome + 1kb-binned position to deduplicate
+        sig = sig.copy()
+        sig["locus"] = sig["sseqid"] + ":" + (sig["sstart"] // 1000).astype(str)
+        return sig.groupby("qseqid")["locus"].nunique().to_dict()
 
     def prettify_sequences(self, df: pd.DataFrame) -> list[Bio.SeqRecord.SeqRecord]:
         """Clean up sequence id's and descriptions."""
@@ -834,22 +841,10 @@ class CleanUpOutput(luigi.Task):
         max_iterations = len(df)  # safety limit
 
         for _ in range(max_iterations):
-            # Count how many probes hit each off-target gene
-            gene_probe_counts: dict[str, list[int]] = {}
-            for idx, row in df.iterrows():
-                genes_str = row.get("off_target_genes", "")
-                if not genes_str:
-                    continue
-                for match in re.finditer(r"([^,\s]+)\(\d+\)", genes_str):
-                    gene = match.group(1)
-                    if gene not in gene_probe_counts:
-                        gene_probe_counts[gene] = []
-                    gene_probe_counts[gene].append(idx)
-
             # Find genes exceeding the cap
             over_cap = {
                 gene: probes
-                for gene, probes in gene_probe_counts.items()
+                for gene, probes in self._probes_per_off_target_gene(df).items()
                 if len(probes) > cap
             }
 
@@ -869,6 +864,15 @@ class CleanUpOutput(luigi.Task):
 
         return df.reset_index(drop=True)
 
+    @staticmethod
+    def _probes_per_off_target_gene(df: pd.DataFrame) -> dict[str, list[int]]:
+        """Map each off-target gene to the indices of the probes hitting it."""
+        gene_probes: dict[str, list[int]] = {}
+        for idx, genes in _iter_probe_off_target_genes(df):
+            for gene in genes:
+                gene_probes.setdefault(gene, []).append(idx)
+        return gene_probes
+
     # Common gene family prefixes for paralog detection
     _GENE_FAMILY_PREFIXES = [
         "ACT", "MYH", "MYL", "HIST", "HLA", "KRT", "COL", "TUBB", "TUBA",
@@ -886,74 +890,67 @@ class CleanUpOutput(luigi.Task):
 
         # Count how many probes hit each off-target gene
         gene_probe_counts: dict[str, int] = {}
-        for _, row in df.iterrows():
-            genes_str = row.get("off_target_genes", "")
-            if not genes_str:
-                continue
-            seen_genes = set()
-            for match in re.finditer(r"([^,\s]+)\(\d+\)", genes_str):
-                gene = match.group(1)
-                if gene not in seen_genes:
-                    seen_genes.add(gene)
-                    gene_probe_counts[gene] = gene_probe_counts.get(gene, 0) + 1
+        for _, genes in _iter_probe_off_target_genes(df):
+            for gene in dict.fromkeys(genes):
+                gene_probe_counts[gene] = gene_probe_counts.get(gene, 0) + 1
 
-        warnings = []
         cluster_threshold = 5
         n_probes = len(df)
         target_gene = util.get_gene_name(hashed=False)
 
-        for gene, count in sorted(
-            gene_probe_counts.items(), key=lambda x: -x[1]
-        ):
-            if count < cluster_threshold:
-                break
+        return [
+            self._clustering_warning(gene, count, n_probes, target_gene)
+            for gene, count in sorted(gene_probe_counts.items(), key=lambda x: -x[1])
+            if count >= cluster_threshold
+        ]
 
-            # Check if this is a paralog family
-            is_paralog = False
-            for prefix in self._GENE_FAMILY_PREFIXES:
-                if (
-                    gene.upper().startswith(prefix)
-                    and target_gene.upper().startswith(prefix)
-                ):
-                    is_paralog = True
-                    break
+    @classmethod
+    def _is_paralog(cls, gene: str, target_gene: str) -> bool:
+        """Check whether two genes share a known gene family prefix."""
+        return any(
+            gene.upper().startswith(prefix) and target_gene.upper().startswith(prefix)
+            for prefix in cls._GENE_FAMILY_PREFIXES
+        )
 
-            # Undruggable detection: ≥50% of probes hit same off-target
-            is_undruggable = n_probes > 0 and count >= n_probes * 0.5
+    @classmethod
+    def _clustering_warning(
+        cls, gene: str, count: int, n_probes: int, target_gene: str
+    ) -> str:
+        """Build the warning for ``count`` probes clustering on off-target ``gene``."""
+        is_paralog = cls._is_paralog(gene, target_gene)
+        # Undruggable detection: ≥50% of probes hit same off-target
+        is_undruggable = n_probes > 0 and count >= n_probes * 0.5
 
-            if is_undruggable and is_paralog:
-                warnings.append(
-                    f"UNDRUGGABLE TARGET: {count}/{n_probes} probes "
-                    f"({count * 100 // n_probes}%) hit {gene} "
-                    f"(paralog of {target_gene}). "
-                    f"This gene cannot be uniquely targeted by exonic FISH probes "
-                    f"due to conserved gene family homology. "
-                    f"Alternatives: (1) use --target-regions intron for intronic probes "
-                    f"(introns diverge between paralogs), "
-                    f"(2) choose a different target gene."
-                )
-            elif is_undruggable:
-                warnings.append(
-                    f"UNDRUGGABLE TARGET: {count}/{n_probes} probes "
-                    f"({count * 100 // n_probes}%) hit off-target gene {gene}. "
-                    f"This target may not be uniquely targetable. "
-                    f"Consider intronic probes (--target-regions intron) or "
-                    f"a different target gene."
-                )
-            elif is_paralog:
-                warnings.append(
-                    f"Off-target clustering: {count}/{n_probes} probes hit {gene} "
-                    f"(paralog of {target_gene}). This target may not be uniquely "
-                    f"targetable by FISH due to gene family homology. "
-                    f"Consider intronic probes instead."
-                )
-            else:
-                warnings.append(
-                    f"Off-target clustering: {count}/{n_probes} probes hit "
-                    f"off-target gene {gene}."
-                )
-
-        return warnings
+        if is_undruggable and is_paralog:
+            return (
+                f"UNDRUGGABLE TARGET: {count}/{n_probes} probes "
+                f"({count * 100 // n_probes}%) hit {gene} "
+                f"(paralog of {target_gene}). "
+                f"This gene cannot be uniquely targeted by exonic FISH probes "
+                f"due to conserved gene family homology. "
+                f"Alternatives: (1) use --target-regions intron for intronic probes "
+                f"(introns diverge between paralogs), "
+                f"(2) choose a different target gene."
+            )
+        if is_undruggable:
+            return (
+                f"UNDRUGGABLE TARGET: {count}/{n_probes} probes "
+                f"({count * 100 // n_probes}%) hit off-target gene {gene}. "
+                f"This target may not be uniquely targetable. "
+                f"Consider intronic probes (--target-regions intron) or "
+                f"a different target gene."
+            )
+        if is_paralog:
+            return (
+                f"Off-target clustering: {count}/{n_probes} probes hit {gene} "
+                f"(paralog of {target_gene}). This target may not be uniquely "
+                f"targetable by FISH due to gene family homology. "
+                f"Consider intronic probes instead."
+            )
+        return (
+            f"Off-target clustering: {count}/{n_probes} probes hit "
+            f"off-target gene {gene}."
+        )
 
     def run(self):
         util.log_stage_start(self.logger, "CleanUpOutput")

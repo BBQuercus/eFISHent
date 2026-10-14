@@ -120,7 +120,7 @@ def test_filter_unique_probes(task_align: AlignProbeCandidates, gene):
     df_exo, _ = task_align.filter_unique_probes()
     assert "qname" in df_endo
     assert "qname" in df_exo
-    assert len(pd.merge(df_endo, df_exo, how="inner", on="qname")) == 0
+    assert len(pd.merge(df_endo, df_exo, how="inner", on="qname", validate="many_to_many")) == 0
 
 
 # ===========================================================================
@@ -698,7 +698,7 @@ class TestCountTableParsing:
         os.unlink(task.fname_count)
 
         assert len(df) == 1
-        assert df.iloc[0]["count"] == 42.5
+        assert df.iloc[0]["count"] == pytest.approx(42.5)
 
     def test_invalid_extension_raises(self):
         """Non-TSV/CSV/TXT files should raise ValueError."""

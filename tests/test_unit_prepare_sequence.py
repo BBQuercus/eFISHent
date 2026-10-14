@@ -126,7 +126,7 @@ def test_get_sequence_multiple_selects_longest(task_prepare):
 
 def test_get_sequence_error(task_prepare):
     with pytest.raises(ValueError):
-        assert task_prepare.select_sequence([])
+        task_prepare.select_sequence([])
 
 
 def test_get_strand_plus(task_prepare, sequence):

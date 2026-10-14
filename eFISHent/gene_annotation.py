@@ -57,41 +57,57 @@ def build_transcript_gene_map(gtf_path: str) -> dict[str, str]:
     return mapping
 
 
+def _add_transcript(mapping: dict[str, str], tid: str, gname: str) -> None:
+    """Map a transcript ID and its unversioned base ID to a gene name.
+
+    Versioned IDs (ENST00000123456.1 -> gene) are also mapped without version.
+    """
+    mapping[tid] = gname
+    base_id = tid.split(".")[0]
+    if base_id != tid:
+        mapping[base_id] = gname
+
+
+def _string_pairs(df: pd.DataFrame, key_col: str, value_col: str) -> list[tuple[str, str]]:
+    """Unique non-null (key, value) pairs of two columns, as strings."""
+    pairs = df[[key_col, value_col]].dropna().drop_duplicates()
+    return [(str(row[key_col]), str(row[value_col])) for _, row in pairs.iterrows()]
+
+
 def _parse_parquet_gtf(parquet_path: str) -> dict[str, str]:
     """Parse a parquet-formatted GTF file for transcript->gene mapping."""
     from .indexing import read_annotation
 
     df = read_annotation(parquet_path, ["transcript_id", "gene_id", "gene_name"])
     mapping: dict[str, str] = {}
+    columns = set(df.columns)
 
-    # Check which columns are available
-    has_gene_name = "gene_name" in df.columns
-    has_gene_id = "gene_id" in df.columns
-    has_transcript_id = "transcript_id" in df.columns
-
-    if has_transcript_id and (has_gene_name or has_gene_id):
-        name_col = "gene_name" if has_gene_name else "gene_id"
-        pairs = df[["transcript_id", name_col]].dropna().drop_duplicates()
-        for _, row in pairs.iterrows():
-            tid = str(row["transcript_id"])
-            gname = str(row[name_col])
+    name_col = "gene_name" if "gene_name" in columns else "gene_id"
+    if {"transcript_id", name_col} <= columns:
+        for tid, gname in _string_pairs(df, "transcript_id", name_col):
             if tid and gname:
-                mapping[tid] = gname
-                # Also map versioned IDs (ENST00000123456.1 -> gene)
-                base_id = tid.split(".")[0]
-                if base_id != tid:
-                    mapping[base_id] = gname
+                _add_transcript(mapping, tid, gname)
 
     # Also build gene_id -> gene_name mapping
-    if has_gene_name and has_gene_id:
-        gene_pairs = df[["gene_id", "gene_name"]].dropna().drop_duplicates()
-        for _, row in gene_pairs.iterrows():
-            gid = str(row["gene_id"])
-            gname = str(row["gene_name"])
+    if {"gene_id", "gene_name"} <= columns:
+        for gid, gname in _string_pairs(df, "gene_id", "gene_name"):
             if gid and gname and gid != gname:
                 mapping[gid] = gname
 
     return mapping
+
+
+def _transcript_and_gene(attrs: str) -> tuple[str, str] | None:
+    """Extract transcript_id and gene_name (preferred) or gene_id from GTF attributes."""
+    tid_match = re.search(r'transcript_id "([^"]+)"', attrs)
+    if not tid_match:
+        return None
+    gene_match = re.search(r'gene_name "([^"]+)"', attrs) or re.search(
+        r'gene_id "([^"]+)"', attrs
+    )
+    if not gene_match:
+        return None
+    return tid_match.group(1), gene_match.group(1)
 
 
 def _parse_raw_gtf(gtf_path: str) -> dict[str, str]:
@@ -108,32 +124,31 @@ def _parse_raw_gtf(gtf_path: str) -> dict[str, str]:
             fields = line.rstrip("\n").split("\t")
             if len(fields) < 9:
                 continue
-
-            attrs = fields[8]
-
-            # Extract transcript_id
-            tid_match = re.search(r'transcript_id "([^"]+)"', attrs)
-            if not tid_match:
-                continue
-            tid = tid_match.group(1)
-
-            # Extract gene_name (preferred) or gene_id
-            gname_match = re.search(r'gene_name "([^"]+)"', attrs)
-            if gname_match:
-                gname = gname_match.group(1)
-            else:
-                gid_match = re.search(r'gene_id "([^"]+)"', attrs)
-                if gid_match:
-                    gname = gid_match.group(1)
-                else:
-                    continue
-
-            mapping[tid] = gname
-            base_id = tid.split(".")[0]
-            if base_id != tid:
-                mapping[base_id] = gname
+            pair = _transcript_and_gene(fields[8])
+            if pair is not None:
+                _add_transcript(mapping, *pair)
 
     return mapping
+
+
+def _candidate_ids(transcript_id: str):
+    """Yield the IDs to look up for a BLAST subject ID, in order of preference."""
+    # Direct lookup, then without version suffix
+    yield transcript_id
+    yield transcript_id.split(".")[0]
+
+    # Handle pipe-delimited IDs (gffread format: gene|transcript|...)
+    if "|" in transcript_id:
+        for part in transcript_id.split("|"):
+            part = part.strip()
+            yield part
+            yield part.split(".")[0]
+
+    # Handle underscore-delimited IDs: try first two parts
+    # (common in RefSeq: NM_001234)
+    parts = transcript_id.split("_")
+    if len(parts) >= 2:
+        yield f"{parts[0]}_{parts[1]}"
 
 
 def map_transcript_to_gene(
@@ -153,35 +168,94 @@ def map_transcript_to_gene(
     Returns:
         Gene name if found, otherwise the original transcript_id.
     """
-    # Direct lookup
-    if transcript_id in mapping:
-        return mapping[transcript_id]
-
-    # Try without version suffix
-    base_id = transcript_id.split(".")[0]
-    if base_id in mapping:
-        return mapping[base_id]
-
-    # Handle pipe-delimited IDs (gffread format: gene|transcript|...)
-    if "|" in transcript_id:
-        for part in transcript_id.split("|"):
-            part = part.strip()
-            if part in mapping:
-                return mapping[part]
-            part_base = part.split(".")[0]
-            if part_base in mapping:
-                return mapping[part_base]
-
-    # Handle underscore-delimited IDs
-    if "_" in transcript_id:
-        parts = transcript_id.split("_")
-        # Try first two parts (common in RefSeq: NM_001234)
-        if len(parts) >= 2:
-            refseq_id = f"{parts[0]}_{parts[1]}"
-            if refseq_id in mapping:
-                return mapping[refseq_id]
-
+    for candidate in _candidate_ids(transcript_id):
+        if candidate in mapping:
+            return mapping[candidate]
     return transcript_id
+
+
+def _cli_gene_name() -> str:
+    """The --gene-name CLI value (lowercase), or "" if unavailable."""
+    try:
+        from .config import SequenceConfig
+
+        return (SequenceConfig().gene_name or "").strip().lower()
+    except Exception as e:
+        logger.debug(f"Could not read --gene-name for self-hit detection: {e}")
+        return ""
+
+
+def _target_name_variants(target_gene: str) -> set[str]:
+    """Build the set of target gene name variants for self-hit detection.
+
+    target_gene may be "homo_sapiens_actb" (file-based) while the GTF
+    gene name is just "ACTB", so also include the CLI --gene-name value
+    and any suffix of the target after underscores (organism prefix).
+    """
+    target_lower = target_gene.lower()
+    # Strip common suffixes to get clean gene name for matching
+    # e.g., "EIF2B1_cds" -> "eif2b1", "METTL3_cds_odd" -> "mettl3"
+    target_clean = re.sub(
+        r"[_\-]?(cds|mrna|transcript|seq|odd|even).*$", "", target_lower
+    )
+    target_names = {target_lower, target_clean}
+    # Add the bare gene name (last component after organism prefix)
+    # e.g., "homo_sapiens_actb" -> "actb"
+    parts = target_lower.split("_")
+    if len(parts) > 1:
+        target_names.add(parts[-1])
+    cli_name = _cli_gene_name()
+    if cli_name:
+        target_names.add(cli_name)
+    target_names.discard("")
+    return target_names
+
+
+def _is_target_hit(gene: str, sseqid: str, target_names: set[str]) -> bool:
+    """Check if a hit is to the target gene (by gene name or subject ID)."""
+    if gene.lower() in target_names:
+        return True
+    sseqid_lower = sseqid.lower()
+    return any(name in sseqid_lower for name in target_names)
+
+
+def _summarize_probe_hits(
+    group: pd.DataFrame, mapping: dict[str, str], target_names: set[str]
+) -> dict:
+    """Summarize one probe's off-target BLAST hits."""
+    gene_counts: dict[str, int] = {}
+    worst_pident = 0.0
+    worst_length = 0
+    worst_mm = 999
+
+    for _, hit in group.iterrows():
+        gene = map_transcript_to_gene(str(hit["sseqid"]), mapping)
+        if _is_target_hit(gene, str(hit["sseqid"]), target_names):
+            continue
+
+        gene_counts[gene] = gene_counts.get(gene, 0) + 1
+
+        # Track worst (highest quality) off-target match
+        pident = float(hit["pident"])
+        length = int(hit["length"])
+        mm = int(hit.get("mismatch", 0))
+        if pident > worst_pident or (pident == worst_pident and length > worst_length):
+            worst_pident = pident
+            worst_length = length
+            worst_mm = mm
+
+    gene_str = ""
+    worst_str = ""
+    if gene_counts:
+        sorted_genes = sorted(gene_counts.items(), key=lambda x: -x[1])
+        gene_str = ", ".join(f"{g}({c})" for g, c in sorted_genes)
+        worst_str = f"{worst_pident:.0f}%/{worst_length}bp/{worst_mm}mm"
+
+    return {
+        "txome_off_targets": sum(gene_counts.values()),
+        "off_target_genes": gene_str,
+        "worst_match": worst_str,
+    }
 
 
 def aggregate_off_target_genes(
@@ -203,77 +277,8 @@ def aggregate_off_target_genes(
             "worst_match": str (best match quality "pident%/length_bp/mismatches_mm"),
         }
     """
-    target_lower = target_gene.lower()
-    # Strip common suffixes to get clean gene name for matching
-    # e.g., "EIF2B1_cds" -> "eif2b1", "METTL3_cds_odd" -> "mettl3"
-    target_clean = re.sub(
-        r"[_\-]?(cds|mrna|transcript|seq|odd|even).*$", "", target_lower
-    )
-
-    # Build set of target gene name variants for self-hit detection.
-    # target_gene may be "homo_sapiens_actb" (file-based) while the GTF
-    # gene name is just "ACTB", so also include the CLI --gene-name value
-    # and any suffix of the target after underscores (organism prefix).
-    target_names = {target_lower, target_clean}
-    # Add the bare gene name (last component after organism prefix)
-    # e.g., "homo_sapiens_actb" -> "actb"
-    parts = target_lower.split("_")
-    if len(parts) > 1:
-        target_names.add(parts[-1])
-    # Add CLI gene name if available
-    try:
-        from .config import SequenceConfig
-        cli_name = (SequenceConfig().gene_name or "").strip().lower()
-        if cli_name:
-            target_names.add(cli_name)
-    except Exception:
-        pass
-    target_names.discard("")
-
-    results: dict[str, dict] = {}
-
-    for probe_id, group in blast_hits.groupby("qseqid"):
-        gene_counts: dict[str, int] = {}
-        worst_pident = 0.0
-        worst_length = 0
-        worst_mm = 999
-
-        for _, hit in group.iterrows():
-            gene = map_transcript_to_gene(str(hit["sseqid"]), mapping)
-
-            # Skip self-hits (match against all target gene name variants)
-            gene_lower = gene.lower()
-            if gene_lower in target_names:
-                continue
-            # Also skip if the sseqid contains any target gene name variant
-            sseqid_lower = str(hit["sseqid"]).lower()
-            if any(name in sseqid_lower for name in target_names):
-                continue
-
-            gene_counts[gene] = gene_counts.get(gene, 0) + 1
-
-            # Track worst (highest quality) off-target match
-            pident = float(hit["pident"])
-            length = int(hit["length"])
-            mm = int(hit.get("mismatch", 0))
-            if pident > worst_pident or (pident == worst_pident and length > worst_length):
-                worst_pident = pident
-                worst_length = length
-                worst_mm = mm
-
-        # Format gene list
-        if gene_counts:
-            sorted_genes = sorted(gene_counts.items(), key=lambda x: -x[1])
-            gene_str = ", ".join(f"{g}({c})" for g, c in sorted_genes)
-            worst_str = f"{worst_pident:.0f}%/{worst_length}bp/{worst_mm}mm"
-        else:
-            gene_str = ""
-            worst_str = ""
-
-        results[str(probe_id)] = {
-            "txome_off_targets": sum(gene_counts.values()),
-            "off_target_genes": gene_str,
-            "worst_match": worst_str,
-        }
-
-    return results
+    target_names = _target_name_variants(target_gene)
+    return {
+        str(probe_id): _summarize_probe_hits(group, mapping, target_names)
+        for probe_id, group in blast_hits.groupby("qseqid")
+    }
