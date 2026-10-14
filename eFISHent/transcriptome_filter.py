@@ -22,6 +22,15 @@ from . import util
 from .config import GeneralConfig, ProbeConfig
 
 
+# Sensitivity settings shared by the filter and the final-probe report.
+# With fewer reported targets, short perfect matches (e.g. 16 nt, e~1) outrank
+# the 18+ nt one-mismatch hits (e~14) that the off-target rule counts and push
+# them out of the result, so qualifying off-targets go unseen. Values follow
+# TrueProbes (Neuert Lab, 2025): word 7, evalue 1000, 1000 alignments.
+BLAST_EVALUE = "1000"
+BLAST_MAX_TARGETS = "1000"
+
+
 def _run_blast_chunk(args):
     """Run a single BLAST process (top-level function for pickling)."""
     subprocess.check_call(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -90,14 +99,14 @@ class TranscriptomeFiltering(luigi.Task):
             "-task", task,
             "-query", query,
             "-db", db,
-            "-evalue", "100",
+            "-evalue", BLAST_EVALUE,
             "-word_size", "7",
             "-gapopen", "5",
             "-gapextend", "2",
             "-reward", "1",
             "-penalty", "-3",
             "-dust", "no",
-            "-max_target_seqs", "50",
+            "-max_target_seqs", BLAST_MAX_TARGETS,
             "-perc_identity", str(perc_identity),
             "-num_threads", str(threads),
             "-outfmt", "6 qseqid sseqid pident length mismatch gapopen "
