@@ -295,48 +295,70 @@ class AlignProbeCandidates(luigi.Task):
         after mask/intergenic filtering but before count-based filtering (used by
         thermodynamic rescue to evaluate probes against the same filtered hits).
         """
-        if self.aligner == "bowtie2":
-            if self.is_endogenous:
-                # Keep all mapped reads, filter by hit count below
-                filtered_sam = pysam.view(self.fname_sam, "--exclude-flags", "4")  # type: ignore
-            else:
-                filtered_sam = pysam.view(self.fname_sam, "--require-flags", "4")  # type: ignore
-        else:
+        df = self.parse_raw_pysam(self._view_filtered_sam())
+        df = self._drop_partial_alignments(df)
+        self._warn_if_all_exogenous_unmapped(df)
+        df = self._filter_pre_count_off_targets(df)
+
+        # Snapshot before count-based filtering (for thermodynamic rescue)
+        df_pre_count = df.copy()
+
+        df = self._filter_by_off_target_count(df)
+        return df, df_pre_count
+
+    def _view_filtered_sam(self) -> str:
+        """Return the SAM records relevant for filtering via samtools view."""
+        if self.aligner != "bowtie2":
             flags = ["--min-MQ", "60"] if self.is_endogenous else ["--require-flags", "4"]
             self.logger.debug(f"Running samtools with - {' '.join(flags)}")
-            filtered_sam = pysam.view(self.fname_sam, *flags)  # type: ignore
+            return pysam.view(self.fname_sam, *flags)  # type: ignore
+        if self.is_endogenous:
+            # Keep all mapped reads, filter by hit count later
+            return pysam.view(self.fname_sam, "--exclude-flags", "4")  # type: ignore
+        return pysam.view(self.fname_sam, "--require-flags", "4")  # type: ignore
 
-        df = self.parse_raw_pysam(filtered_sam)
+    def _drop_partial_alignments(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Remove bowtie2 local alignments that cover too little of the probe.
 
-        # For bowtie2 local mode, filter out partial alignments that are too
-        # short to be real off-targets. The sensitive local parameters (-L 10)
-        # report matches of 10-11nt on 20+nt probes — these won't stably
-        # hybridize. Keep only alignments where >=80% of the probe is matched.
-        if self.aligner == "bowtie2" and self.is_endogenous and not df.empty:
-            pre_filter = len(df)
-            min_match_frac = 0.80
-            df = df[df["cigar"].apply(
-                lambda c: self._cigar_match_fraction(c) >= min_match_frac
-            )]
-            n_removed = pre_filter - len(df)
-            if n_removed > 0:
-                self.logger.debug(
-                    f"Filtered {n_removed} partial alignments "
-                    f"(<80% match by CIGAR) from {pre_filter} total"
-                )
+        The sensitive local parameters (-L 10) report matches of 10-11nt on
+        20+nt probes — these won't stably hybridize. Keep only alignments
+        where >=80% of the probe is matched.
+        """
+        if self.aligner != "bowtie2" or not self.is_endogenous or df.empty:
+            return df
 
-        # Warn when all exogenous probes pass unmapped — indicates alignment
-        # parameters may be too strict to find off-targets
-        if not self.is_endogenous and self.aligner == "bowtie2" and hasattr(self, "fname_fasta"):
-            total_probes = len(list(Bio.SeqIO.parse(self.fname_fasta, "fasta")))
-            if total_probes > 0 and len(df) == total_probes:
-                self.logger.warning(
-                    f"All {total_probes} exogenous probes passed Bowtie2 unmapped. "
-                    "This may indicate alignment parameters are too strict to detect "
-                    "off-targets. The rDNA/satellite filter and transcriptome BLAST "
-                    "provide additional protection."
-                )
+        pre_filter = len(df)
+        min_match_frac = 0.80
+        df = df[df["cigar"].apply(
+            lambda c: self._cigar_match_fraction(c) >= min_match_frac
+        )]
+        n_removed = pre_filter - len(df)
+        if n_removed > 0:
+            self.logger.debug(
+                f"Filtered {n_removed} partial alignments "
+                f"(<80% match by CIGAR) from {pre_filter} total"
+            )
+        return df
 
+    def _warn_if_all_exogenous_unmapped(self, df: pd.DataFrame) -> None:
+        """Warn when all exogenous probes pass unmapped.
+
+        This indicates alignment parameters may be too strict to find off-targets.
+        """
+        if self.is_endogenous or self.aligner != "bowtie2" or not hasattr(self, "fname_fasta"):
+            return
+
+        total_probes = len(list(Bio.SeqIO.parse(self.fname_fasta, "fasta")))
+        if total_probes > 0 and len(df) == total_probes:
+            self.logger.warning(
+                f"All {total_probes} exogenous probes passed Bowtie2 unmapped. "
+                "This may indicate alignment parameters are too strict to detect "
+                "off-targets. The rDNA/satellite filter and transcriptome BLAST "
+                "provide additional protection."
+            )
+
+    def _filter_pre_count_off_targets(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Remove hits that should not count towards a probe's off-targets."""
         if self.no_alternative_loci:
             df = df[~df["rname"].str.contains("_alt")]
 
@@ -353,33 +375,35 @@ class AlignProbeCandidates(luigi.Task):
         if self.has_pseudogene_filter:
             df = self.filter_pseudogene_off_targets(df)
 
-        # Snapshot before count-based filtering (for thermodynamic rescue)
-        df_pre_count = df.copy()
+        return df
 
-        # Filter to remove off-target rates
-        if self.is_endogenous:
-            if self.has_transcriptome and self.max_off_targets == 0:
-                # When a transcriptome is available and max_off_targets is
-                # at the default (0), skip the genome count-based filter.
-                # The downstream BLAST checks for expressed off-targets
-                # directly, which is more accurate for RNA-FISH than raw
-                # genome hit counts. Genome hits to pseudogenes and other
-                # non-expressed regions inflate the count without reflecting
-                # real off-target binding risk (e.g. ACTB has 100+ genomic
-                # hits due to pseudogenes but only a handful of expressed
-                # off-targets).
-                self.logger.debug(
-                    "Skipping genome count-based off-target filter "
-                    "(transcriptome BLAST will handle off-target detection)"
-                )
-            else:
-                group_sizes = df.groupby("qname").size()
-                df = df[
-                    df["qname"].isin(
-                        group_sizes[group_sizes <= self.max_off_targets + 1].index
-                    )
-                ]
-        return df, df_pre_count
+    def _filter_by_off_target_count(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Remove endogenous probes with more genomic hits than allowed."""
+        if not self.is_endogenous:
+            return df
+
+        if self.has_transcriptome and self.max_off_targets == 0:
+            # When a transcriptome is available and max_off_targets is
+            # at the default (0), skip the genome count-based filter.
+            # The downstream BLAST checks for expressed off-targets
+            # directly, which is more accurate for RNA-FISH than raw
+            # genome hit counts. Genome hits to pseudogenes and other
+            # non-expressed regions inflate the count without reflecting
+            # real off-target binding risk (e.g. ACTB has 100+ genomic
+            # hits due to pseudogenes but only a handful of expressed
+            # off-targets).
+            self.logger.debug(
+                "Skipping genome count-based off-target filter "
+                "(transcriptome BLAST will handle off-target detection)"
+            )
+            return df
+
+        group_sizes = df.groupby("qname").size()
+        return df[
+            df["qname"].isin(
+                group_sizes[group_sizes <= self.max_off_targets + 1].index
+            )
+        ]
 
     def get_most_expressed_genes(self, percentage: float) -> pd.Series:
         """Get gene IDs expressed above percentile threshold."""
@@ -481,12 +505,13 @@ class AlignProbeCandidates(luigi.Task):
         )
         return df_sam
 
-    def filter_rrna_off_targets(self, df_sam: pd.DataFrame) -> pd.DataFrame:
-        """Remove probes with off-target hits on ribosomal RNA genes.
+    def _gene_loci_with_biotype(
+        self, biotypes: set[str], filter_name: str, loci_name: str
+    ) -> pd.DataFrame | None:
+        """Get unique gene loci (seqname, start, end) annotated with any of biotypes.
 
-        rRNA is ~80% of cellular RNA — even weak binding causes intense
-        background. Checks gene_biotype/gene_type for rRNA and Mt_rRNA.
-        Any probe with at least one rRNA hit is vetoed entirely.
+        Returns None (and logs why) if the annotation has no biotype column or
+        no gene matches, in which case the calling filter should be skipped.
         """
         self.fname_gtf = self.input()["annotation"].path
         gtf_full = read_annotation(
@@ -494,28 +519,62 @@ class AlignProbeCandidates(luigi.Task):
             ["seqname", "start", "end", "feature", "gene_biotype", "gene_type"],
         )
 
-        # Find the biotype column (differs between Ensembl/GENCODE)
-        biotype_col = None
-        for col in ["gene_biotype", "gene_type"]:
-            if col in gtf_full.columns:
-                biotype_col = col
-                break
-
+        # Find the biotype column (Ensembl: gene_biotype, GENCODE: gene_type)
+        biotype_col = next(
+            (col for col in ["gene_biotype", "gene_type"] if col in gtf_full.columns),
+            None,
+        )
         if biotype_col is None:
             self.logger.debug(
-                "No gene_biotype/gene_type column in GTF — skipping rRNA filter"
+                f"No gene_biotype/gene_type column in GTF — skipping {filter_name} filter"
             )
-            return df_sam
+            return None
 
-        # Get rRNA gene regions
-        rrna_types = {"rRNA", "Mt_rRNA", "rRNA_pseudogene"}
-        rrna_genes = gtf_full[
-            (gtf_full[biotype_col].isin(rrna_types))
+        loci = gtf_full[
+            (gtf_full[biotype_col].isin(biotypes))
             & (gtf_full["feature"] == "gene")
         ][["seqname", "start", "end"]].drop_duplicates()
 
-        if rrna_genes.empty:
-            self.logger.debug("No rRNA genes found in GTF annotation")
+        if loci.empty:
+            self.logger.debug(f"No {loci_name} found in GTF annotation")
+            return None
+        return loci
+
+    @staticmethod
+    def _sorted_intervals_by_chrom(loci: pd.DataFrame) -> dict:
+        """Build a bisect-ready interval lookup from gene loci.
+
+        Returns dict of {chrom: (sorted_starts, ends)} with intervals sorted by
+        (start, end).
+        """
+        by_chrom = {}
+        for _, gene in loci.iterrows():
+            chrom = str(gene["seqname"])
+            if chrom not in by_chrom:
+                by_chrom[chrom] = ([], [])
+            by_chrom[chrom][0].append(int(gene["start"]))
+            by_chrom[chrom][1].append(int(gene["end"]))
+
+        for chrom, (starts, ends) in by_chrom.items():
+            paired = sorted(zip(starts, ends))
+            by_chrom[chrom] = (
+                [s for s, _ in paired],
+                [e for _, e in paired],
+            )
+        return by_chrom
+
+    def filter_rrna_off_targets(self, df_sam: pd.DataFrame) -> pd.DataFrame:
+        """Remove probes with off-target hits on ribosomal RNA genes.
+
+        rRNA is ~80% of cellular RNA — even weak binding causes intense
+        background. Checks gene_biotype/gene_type for rRNA and Mt_rRNA.
+        Any probe with at least one rRNA hit is vetoed entirely.
+        """
+        rrna_types = {"rRNA", "Mt_rRNA", "rRNA_pseudogene"}
+        rrna_genes = self._gene_loci_with_biotype(
+            rrna_types, filter_name="rRNA", loci_name="rRNA genes"
+        )
+        if rrna_genes is None:
             return df_sam
 
         self.logger.debug(f"Found {len(rrna_genes)} rRNA gene regions in GTF")
@@ -586,25 +645,6 @@ class AlignProbeCandidates(luigi.Task):
         meaningful off-targets for RNA-FISH probes. Removing them prevents
         pseudogene-rich genes (e.g. ACTB, GAPDH) from losing all probes.
         """
-        self.fname_gtf = self.input()["annotation"].path
-        gtf_full = read_annotation(
-            self.fname_gtf,
-            ["seqname", "start", "end", "feature", "gene_biotype", "gene_type"],
-        )
-
-        # Find the biotype column (Ensembl: gene_biotype, GENCODE: gene_type)
-        biotype_col = None
-        for col in ["gene_biotype", "gene_type"]:
-            if col in gtf_full.columns:
-                biotype_col = col
-                break
-
-        if biotype_col is None:
-            self.logger.debug(
-                "No gene_biotype/gene_type column in GTF — skipping pseudogene filter"
-            )
-            return df_sam
-
         pseudogene_types = {
             "processed_pseudogene", "unprocessed_pseudogene", "pseudogene",
             "transcribed_processed_pseudogene", "transcribed_unprocessed_pseudogene",
@@ -614,37 +654,17 @@ class AlignProbeCandidates(luigi.Task):
             "IG_C_pseudogene", "IG_J_pseudogene", "IG_V_pseudogene",
             "TR_J_pseudogene", "TR_V_pseudogene",
         }
-
-        pseudogenes = gtf_full[
-            (gtf_full[biotype_col].isin(pseudogene_types))
-            & (gtf_full["feature"] == "gene")
-        ][["seqname", "start", "end"]].drop_duplicates()
-
-        if pseudogenes.empty:
-            self.logger.debug("No pseudogene regions found in GTF annotation")
+        pseudogenes = self._gene_loci_with_biotype(
+            pseudogene_types, filter_name="pseudogene", loci_name="pseudogene regions"
+        )
+        if pseudogenes is None:
             return df_sam
 
         self.logger.debug(
             f"Found {len(pseudogenes)} pseudogene regions in GTF"
         )
 
-        # Build sorted interval lookup per chromosome
-        pseudo_by_chrom = {}
-        for _, gene in pseudogenes.iterrows():
-            chrom = str(gene["seqname"])
-            if chrom not in pseudo_by_chrom:
-                pseudo_by_chrom[chrom] = ([], [])
-            pseudo_by_chrom[chrom][0].append(int(gene["start"]))
-            pseudo_by_chrom[chrom][1].append(int(gene["end"]))
-
-        # Sort intervals for bisect-based lookup
-        for chrom in pseudo_by_chrom:
-            starts, ends = pseudo_by_chrom[chrom]
-            paired = sorted(zip(starts, ends))
-            pseudo_by_chrom[chrom] = (
-                [s for s, _ in paired],
-                [e for _, e in paired],
-            )
+        pseudo_by_chrom = self._sorted_intervals_by_chrom(pseudogenes)
 
         def _hits_pseudogene(row):
             chrom = row["rname"]
@@ -653,10 +673,10 @@ class AlignProbeCandidates(luigi.Task):
             pos = int(row["pos"])
             starts, ends = pseudo_by_chrom[chrom]
             idx = bisect.bisect_right(starts, pos) - 1
-            for i in range(max(0, idx), min(len(starts), idx + 2)):
-                if starts[i] <= pos <= ends[i]:
-                    return True
-            return False
+            return any(
+                starts[i] <= pos <= ends[i]
+                for i in range(max(0, idx), min(len(starts), idx + 2))
+            )
 
         total_before = len(df_sam)
         is_pseudo = df_sam.apply(_hits_pseudogene, axis=1)
@@ -666,6 +686,34 @@ class AlignProbeCandidates(luigi.Task):
             f"Removed {removed} alignments overlapping pseudogene loci"
         )
         return df_sam
+
+    def _is_significant_off_target(
+        self,
+        genome: pysam.FastaFile,
+        hit: pd.Series,
+        probe_seq: str,
+        na: float,
+        formamide: float,
+    ) -> bool:
+        """Check if an off-target hit is stable enough to count (Tm >= off_target_min_tm).
+
+        Hits whose genomic target sequence cannot be fetched count as significant.
+        """
+        chrom = hit["rname"]
+        pos = int(hit["pos"]) - 1  # SAM is 1-based, pysam is 0-based
+        hit_len = len(hit["seq"])
+        is_reverse = hit["flag"] == constants.SAM_FLAG_REVERSE
+
+        try:
+            target_seq = genome.fetch(chrom, pos, pos + hit_len).upper()
+        except (ValueError, KeyError):
+            return True
+
+        if is_reverse:
+            target_seq = str(Bio.Seq.Seq(target_seq).reverse_complement())
+
+        tm = compute_off_target_tm(probe_seq, target_seq, na, formamide)
+        return tm >= self.off_target_min_tm
 
     def filter_thermodynamic_off_targets(
         self, df_sam: pd.DataFrame, df_pre_count: pd.DataFrame
@@ -705,6 +753,7 @@ class AlignProbeCandidates(luigi.Task):
 
         na = ProbeConfig().na_concentration
         formamide = ProbeConfig().formamide_concentration
+        max_allowed = self.max_off_targets + (1 if self.is_endogenous else 0)
         rescued = []
 
         for probe_name in removed_probes:
@@ -712,27 +761,10 @@ class AlignProbeCandidates(luigi.Task):
             probe_seq = hits.iloc[0]["seq"]
 
             # Evaluate each off-target hit (skip self-hit for endogenous)
-            significant_count = 0
-            for _, hit in hits.iterrows():
-                chrom = hit["rname"]
-                pos = int(hit["pos"]) - 1  # SAM is 1-based, pysam is 0-based
-                hit_len = len(hit["seq"])
-                is_reverse = hit["flag"] == constants.SAM_FLAG_REVERSE
-
-                try:
-                    target_seq = genome.fetch(chrom, pos, pos + hit_len).upper()
-                except (ValueError, KeyError):
-                    significant_count += 1
-                    continue
-
-                if is_reverse:
-                    target_seq = str(Bio.Seq.Seq(target_seq).reverse_complement())
-
-                tm = compute_off_target_tm(probe_seq, target_seq, na, formamide)
-                if tm >= self.off_target_min_tm:
-                    significant_count += 1
-
-            max_allowed = self.max_off_targets + (1 if self.is_endogenous else 0)
+            significant_count = sum(
+                self._is_significant_off_target(genome, hit, probe_seq, na, formamide)
+                for _, hit in hits.iterrows()
+            )
             if significant_count <= max_allowed:
                 rescued.append(probe_name)
 

@@ -2,7 +2,7 @@
 
 import logging
 import os
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 
 import Bio.SeqIO
 import Bio.SeqRecord
@@ -43,6 +43,48 @@ def _preferred_length(gc_fraction: float, min_length: int, max_length: int) -> i
         return min_length + length_range // 2
 
 
+def _lengths_around_preferred(
+    gc_fraction: float, min_length: int, max_length: int
+) -> list[int]:
+    """Get the GC-preferred probe length and its in-range neighbours, sorted."""
+    preferred = _preferred_length(gc_fraction, min_length, max_length)
+    lengths_to_try = {preferred}
+    if preferred > min_length:
+        lengths_to_try.add(preferred - 1)
+    if preferred < max_length:
+        lengths_to_try.add(preferred + 1)
+    return sorted(lengths_to_try)
+
+
+def _adaptive_windows(
+    seq_str: str, min_length: int, max_length: int
+) -> Iterator[tuple[int, int]]:
+    """Yield (start, length) probe windows biased toward GC-optimal lengths.
+
+    For each position, yields the preferred length ±1 to give the optimizer
+    choices while biasing toward the GC-optimal length.
+    """
+    seq_length = len(seq_str)
+    for start_pos in range(0, seq_length - min_length + 1):
+        # Compute local GC in a window centered at this position
+        window_start = max(0, start_pos - 10)
+        window_end = min(seq_length, start_pos + max_length + 10)
+        local_gc = _compute_gc(seq_str[window_start:window_end])
+
+        for length in _lengths_around_preferred(local_gc, min_length, max_length):
+            if start_pos + length <= seq_length:
+                yield start_pos, length
+
+
+def _all_windows(
+    seq_length: int, min_length: int, max_length: int
+) -> Iterator[tuple[int, int]]:
+    """Yield (start, length) probe windows for all lengths at all positions."""
+    for length in range(min_length, max_length + 1):
+        for start_pos in range(0, seq_length - length + 1):
+            yield start_pos, length
+
+
 def create_candidate_probes_generator(
     sequence: Bio.SeqRecord.SeqRecord,
     min_length: int,
@@ -74,46 +116,16 @@ def create_candidate_probes_generator(
             f"{min_length} >= {len(sequence)}!"
         )
 
-    seq_str = str(sequence.seq).upper()
-    idx = 1
-
     if adaptive and max_length > min_length:
-        # Adaptive mode: for each position, generate probes at the preferred
-        # length ±1 to give the optimizer choices while biasing toward the
-        # GC-optimal length
-        for start_pos in range(0, len(sequence) - min_length + 1):
-            # Compute local GC in a window centered at this position
-            window_start = max(0, start_pos - 10)
-            window_end = min(len(sequence), start_pos + max_length + 10)
-            local_gc = _compute_gc(seq_str[window_start:window_end])
-
-            preferred = _preferred_length(local_gc, min_length, max_length)
-
-            # Generate the preferred length and adjacent lengths
-            lengths_to_try = set()
-            lengths_to_try.add(preferred)
-            if preferred > min_length:
-                lengths_to_try.add(preferred - 1)
-            if preferred < max_length:
-                lengths_to_try.add(preferred + 1)
-
-            for length in sorted(lengths_to_try):
-                if start_pos + length > len(sequence):
-                    continue
-                yield Bio.SeqRecord.SeqRecord(
-                    sequence.seq[start_pos : start_pos + length],
-                    id=f"candidate-{idx}-{start_pos}",
-                )
-                idx += 1
+        windows = _adaptive_windows(str(sequence.seq).upper(), min_length, max_length)
     else:
-        # Standard mode: generate all lengths at all positions
-        for length in range(min_length, max_length + 1):
-            for start_pos in range(0, len(sequence) - length + 1):
-                yield Bio.SeqRecord.SeqRecord(
-                    sequence.seq[start_pos : start_pos + length],
-                    id=f"candidate-{idx}-{start_pos}",
-                )
-                idx += 1
+        windows = _all_windows(len(sequence), min_length, max_length)
+
+    for idx, (start_pos, length) in enumerate(windows, start=1):
+        yield Bio.SeqRecord.SeqRecord(
+            sequence.seq[start_pos : start_pos + length],
+            id=f"candidate-{idx}-{start_pos}",
+        )
 
 
 class GenerateAllProbes(luigi.Task):

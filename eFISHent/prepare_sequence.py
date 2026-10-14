@@ -308,6 +308,29 @@ class PrepareSequence(luigi.Task):
         if target_regions == "exon":
             return sequence  # Default: transcript sequence is exon-only
 
+        exons = self._region_selection_exons(target_regions, gene_name)
+        if exons is None:
+            return sequence
+
+        if target_regions == "intron":
+            return self._extract_intronic_sequence(sequence, exons, gene_name)
+
+        if target_regions == "both":
+            # Full pre-mRNA: the sequence is already the full gene
+            self.logger.info(
+                f"Using full pre-mRNA sequence ({len(str(sequence.seq)):,} nt)"
+            )
+        return sequence
+
+    def _region_selection_exons(
+        self, target_regions: str, gene_name: str
+    ) -> list[tuple[int, int]] | None:
+        """Get exon boundaries needed for region selection.
+
+        Returns None (with a warning) if the required genome/annotation is
+        missing or no exons were found, in which case selection falls back
+        to exon-only.
+        """
         annotation = GeneralConfig().reference_annotation
         genome = GeneralConfig().reference_genome
 
@@ -316,7 +339,7 @@ class PrepareSequence(luigi.Task):
                 f"--target-regions {target_regions} requires --reference-annotation "
                 f"and --reference-genome. Falling back to exon-only."
             )
-            return sequence
+            return None
 
         exons = self._extract_exon_boundaries(gene_name, annotation)
         if exons is None:
@@ -324,47 +347,44 @@ class PrepareSequence(luigi.Task):
                 f"Could not find exon boundaries for {gene_name}. "
                 f"Falling back to exon-only."
             )
-            return sequence
+        return exons
 
+    def _extract_intronic_sequence(
+        self,
+        sequence: Bio.SeqRecord.SeqRecord,
+        exons: list[tuple[int, int]],
+        gene_name: str,
+    ) -> Bio.SeqRecord.SeqRecord:
+        """Concatenate the intronic regions (gaps between exons) of a sequence.
+
+        Returns the sequence unchanged if there are no gaps between exons.
+        """
         seq_str = str(sequence.seq)
-        gene_length = len(seq_str)
+        intronic_parts = []
+        prev_end = 0
+        for exon_start, exon_end in exons:
+            if exon_start > prev_end:
+                intronic_parts.append(seq_str[prev_end:exon_start])
+            prev_end = exon_end
 
-        if target_regions == "intron":
-            # Extract intronic regions (gaps between exons)
-            intronic_parts = []
-            prev_end = 0
-            for exon_start, exon_end in exons:
-                if exon_start > prev_end:
-                    intronic_parts.append(seq_str[prev_end:exon_start])
-                prev_end = exon_end
-
-            if not intronic_parts:
-                self.logger.warning(
-                    f"No intronic regions found for {gene_name}. "
-                    f"Gene may be single-exon."
-                )
-                return sequence
-
-            intronic_seq = "".join(intronic_parts)
-            self.logger.info(
-                f"Extracted {len(intronic_parts)} intronic regions "
-                f"({len(intronic_seq):,} nt) from {gene_length:,} nt gene"
-            )
-            return Bio.SeqRecord.SeqRecord(
-                Bio.Seq.Seq(intronic_seq),
-                id=f"{sequence.id}_introns",
-                name=sequence.name,
-                description=f"intronic regions of {sequence.id}",
-            )
-
-        elif target_regions == "both":
-            # Full pre-mRNA: the sequence is already the full gene
-            self.logger.info(
-                f"Using full pre-mRNA sequence ({gene_length:,} nt)"
+        if not intronic_parts:
+            self.logger.warning(
+                f"No intronic regions found for {gene_name}. "
+                f"Gene may be single-exon."
             )
             return sequence
 
-        return sequence
+        intronic_seq = "".join(intronic_parts)
+        self.logger.info(
+            f"Extracted {len(intronic_parts)} intronic regions "
+            f"({len(intronic_seq):,} nt) from {len(seq_str):,} nt gene"
+        )
+        return Bio.SeqRecord.SeqRecord(
+            Bio.Seq.Seq(intronic_seq),
+            id=f"{sequence.id}_introns",
+            name=sequence.name,
+            description=f"intronic regions of {sequence.id}",
+        )
 
     def run(self):
         util.log_stage_start(self.logger, "PrepareSequence")

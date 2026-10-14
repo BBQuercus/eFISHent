@@ -129,26 +129,9 @@ class FilterRibosomalRNA(luigi.Task):
 
         return dangerous
 
-    def run(self):
-        from .config import GeneralConfig
-        from .console import spinner
-
-        util.log_stage_start(self.logger, "FilterRibosomalRNA")
-        probe_fasta = self.input().path
-        sequences = list(Bio.SeqIO.parse(probe_fasta, "fasta"))
-
-        if not shutil.which("blastn") or not shutil.which("makeblastdb"):
-            self.logger.warning(
-                "BLAST+ not found — skipping rDNA/satellite filter. "
-                "Install BLAST+ to enable this safety check."
-            )
-            Bio.SeqIO.write(sequences, self.output().path, format="fasta")
-            return
-
-        threads = GeneralConfig().threads
-        all_dangerous = set()
-
-        # Collect reference FASTAs to screen against
+    @staticmethod
+    def _collect_references() -> list[tuple[str, str]]:
+        """Collect (name, path) of the reference FASTAs to screen against."""
         custom_rdna = ProbeConfig().custom_rdna_fasta
         references = []
 
@@ -163,11 +146,15 @@ class FilterRibosomalRNA(luigi.Task):
         if os.path.isfile(IMAGING_RISK_FASTA):
             references.append(("imaging-risk RNAs (tRNA/snRNA/7SL/7SK/mt-rRNA)", IMAGING_RISK_FASTA))
 
-        if not references:
-            self.logger.warning("No rDNA/satellite reference files found — skipping filter")
-            Bio.SeqIO.write(sequences, self.output().path, format="fasta")
-            return
+        return references
 
+    def _screen_references(
+        self, probe_fasta: str, references: list[tuple[str, str]], threads: int
+    ) -> set:
+        """BLAST probes against each reference and collect dangerous probe IDs."""
+        from .console import spinner
+
+        all_dangerous = set()
         with tempfile.TemporaryDirectory() as tmpdir:
             for ref_name, ref_fasta in references:
                 db_path = os.path.join(tmpdir, os.path.basename(ref_fasta))
@@ -186,6 +173,32 @@ class FilterRibosomalRNA(luigi.Task):
                         f"to {ref_name}"
                     )
                 all_dangerous |= dangerous
+        return all_dangerous
+
+    def run(self):
+        from .config import GeneralConfig
+
+        util.log_stage_start(self.logger, "FilterRibosomalRNA")
+        probe_fasta = self.input().path
+        sequences = list(Bio.SeqIO.parse(probe_fasta, "fasta"))
+
+        if not shutil.which("blastn") or not shutil.which("makeblastdb"):
+            self.logger.warning(
+                "BLAST+ not found — skipping rDNA/satellite filter. "
+                "Install BLAST+ to enable this safety check."
+            )
+            Bio.SeqIO.write(sequences, self.output().path, format="fasta")
+            return
+
+        threads = GeneralConfig().threads
+        references = self._collect_references()
+
+        if not references:
+            self.logger.warning("No rDNA/satellite reference files found — skipping filter")
+            Bio.SeqIO.write(sequences, self.output().path, format="fasta")
+            return
+
+        all_dangerous = self._screen_references(probe_fasta, references, threads)
 
         if all_dangerous:
             self.logger.debug(
