@@ -841,7 +841,7 @@ def test_burden_written_per_probe(monkeypatch):
         try:
             task.run()
             burden = pd.read_csv(os.path.join(tmpdir, "burden.csv")).set_index("name")["burden"]
-            assert burden["clean"] == 0.0
+            assert burden["clean"] == pytest.approx(0.0)
             # Two off-target genes, each at most 1
             assert 0.0 < burden["dirty"] <= 2.0
         finally:
