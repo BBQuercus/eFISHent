@@ -144,9 +144,9 @@ def test_blast_output_parsing():
     from io import StringIO
 
     sample = (
-        "candidate-0-100\tGENE1\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
-        "candidate-0-100\tGENE2\t80.0\t18\t3\t1\t1\t18\t200\t217\t0.01\t25\n"
-        "candidate-1-200\tGENE1\t95.0\t22\t1\t0\t1\t22\t300\t321\t0.0001\t35\n"
+        "candidate-0-100\tGENE1\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
+        "candidate-0-100\tGENE2\t80.0\t18\t3\t1\t1\t18\t217\t200\t0.01\t25\n"
+        "candidate-1-200\tGENE1\t95.0\t22\t1\t0\t1\t22\t321\t300\t0.0001\t35\n"
     )
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     assert len(df) == 3
@@ -167,7 +167,7 @@ def test_blast_output_single_row():
     """Single BLAST hit parses correctly."""
     from io import StringIO
 
-    sample = "probe1\tGENE1\t99.5\t25\t0\t0\t1\t25\t1\t25\t1e-10\t50\n"
+    sample = "probe1\tGENE1\t99.5\t25\t0\t0\t1\t25\t25\t1\t1e-10\t50\n"
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     assert len(df) == 1
     assert df.iloc[0]["bitscore"] == pytest.approx(50.0)
@@ -183,8 +183,8 @@ def test_identity_threshold_filtering():
     from io import StringIO
 
     sample = (
-        "probe1\tGENE1\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
-        "probe1\tGENE2\t60.0\t18\t7\t1\t1\t18\t200\t217\t0.5\t10\n"
+        "probe1\tGENE1\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
+        "probe1\tGENE2\t60.0\t18\t7\t1\t1\t18\t217\t200\t0.5\t10\n"
     )
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     threshold = 75.0
@@ -202,8 +202,8 @@ def test_effective_length_filter():
     from io import StringIO
 
     sample = (
-        "probe1\tGENE1\t90.0\t20\t2\t3\t1\t20\t100\t119\t0.001\t30\n"  # effective length 17
-        "probe1\tGENE2\t90.0\t22\t1\t0\t1\t22\t200\t221\t0.001\t30\n"  # effective length 22
+        "probe1\tGENE1\t90.0\t20\t2\t3\t1\t20\t119\t100\t0.001\t30\n"  # effective length 17
+        "probe1\tGENE2\t90.0\t22\t1\t0\t1\t22\t221\t200\t0.001\t30\n"  # effective length 22
     )
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     df["effective_len"] = df["length"] - df["gapopen"]
@@ -225,8 +225,8 @@ def test_target_gene_excluded():
     from io import StringIO
 
     sample = (
-        "probe1\trenilla_transcript\t100.0\t25\t0\t0\t1\t25\t1\t25\t0.0\t50\n"
-        "probe1\tother_gene\t85.0\t20\t3\t0\t1\t20\t100\t119\t0.01\t30\n"
+        "probe1\trenilla_transcript\t100.0\t25\t0\t0\t1\t25\t25\t1\t0.0\t50\n"
+        "probe1\tother_gene\t85.0\t20\t3\t0\t1\t20\t119\t100\t0.01\t30\n"
     )
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     gene_name = "renilla"
@@ -258,7 +258,7 @@ def test_probe_no_blast_hits_passes(monkeypatch):
 def test_probe_self_hit_passes(monkeypatch):
     """Probe with hit only to self-gene passes filter."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
-    blast = "probe1\ttargetgene_transcript\t100.0\t21\t0\t0\t1\t21\t1\t21\t0.0\t50\n"
+    blast = "probe1\ttargetgene_transcript\t100.0\t21\t0\t0\t1\t21\t21\t1\t0.0\t50\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast
@@ -275,7 +275,7 @@ def test_probe_off_target_above_threshold_filtered(monkeypatch):
     """Probe with off-target hit above threshold is filtered out."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # Hit to other gene: 90% identity, length 20, no gaps → passes both filters
-    blast = "probe1\tother_gene\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
+    blast = "probe1\tother_gene\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -293,7 +293,7 @@ def test_probe_hit_below_identity_passes(monkeypatch):
     """Probe with hit below identity threshold passes filter."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # 60% identity is below threshold of 75%
-    blast = "probe1\tother_gene\t60.0\t20\t8\t0\t1\t20\t100\t119\t1.0\t10\n"
+    blast = "probe1\tother_gene\t60.0\t20\t8\t0\t1\t20\t119\t100\t1.0\t10\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -314,8 +314,8 @@ def test_cross_hybridization_probe_removed(monkeypatch):
     )
     # 18nt match on 21nt probe = 86% > 85% threshold -> rejected
     blast = (
-        "cross-hyb\tother_gene\t95.0\t18\t0\t0\t1\t18\t100\t117\t1e-5\t40\n"
-        "safe-probe\ttargetgene_transcript\t100.0\t21\t0\t0\t1\t21\t1\t21\t0.0\t50\n"
+        "cross-hyb\tother_gene\t95.0\t18\t0\t0\t1\t18\t117\t100\t1e-5\t40\n"
+        "safe-probe\ttargetgene_transcript\t100.0\t21\t0\t0\t1\t21\t21\t1\t0.0\t50\n"
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
@@ -334,7 +334,7 @@ def test_cross_hybridization_warning_only(monkeypatch):
     records = _make_records(
         ("cross-hyb", "ATGCGTACGTAGCTAGCTAGC"),
     )
-    blast = "cross-hyb\tother_gene\t96.0\t18\t0\t0\t1\t18\t100\t117\t1e-6\t45\n"
+    blast = "cross-hyb\tother_gene\t96.0\t18\t0\t0\t1\t18\t117\t100\t1e-6\t45\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -360,8 +360,8 @@ def test_cross_hybridization_24mer_uses_length_scaled_threshold(monkeypatch):
     )
     # 19nt on a 24nt probe stays below the current auto-threshold (20nt) -> kept
     blast = (
-        "probe24\tother_gene\t96.0\t19\t0\t0\t1\t19\t100\t118\t1e-6\t45\n"
-        "safe-probe\ttargetgene_transcript\t100.0\t24\t0\t0\t1\t24\t1\t24\t0.0\t50\n"
+        "probe24\tother_gene\t96.0\t19\t0\t0\t1\t19\t118\t100\t1e-6\t45\n"
+        "safe-probe\ttargetgene_transcript\t100.0\t24\t0\t0\t1\t24\t24\t1\t0.0\t50\n"
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
@@ -385,7 +385,7 @@ def test_cross_hybridization_override_applies_explicit_length(monkeypatch):
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # 17nt match would fail the auto threshold on a 21nt probe (auto=17 after int floor),
     # so use an explicit 18nt override to prove the config is honored.
-    blast = "probe1\tother_gene\t97.0\t17\t0\t0\t1\t17\t100\t116\t1e-6\t45\n"
+    blast = "probe1\tother_gene\t97.0\t17\t0\t0\t1\t17\t116\t100\t1e-6\t45\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -421,8 +421,8 @@ def test_all_probes_filtered(monkeypatch):
         ("probe2", "CCCCAAAATTTTGGGGCCCCA"),
     )
     blast = (
-        "probe1\toff_target_A\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
-        "probe2\toff_target_B\t88.0\t21\t3\t0\t1\t21\t200\t220\t0.002\t28\n"
+        "probe1\toff_target_A\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
+        "probe2\toff_target_B\t88.0\t21\t3\t0\t1\t21\t220\t200\t0.002\t28\n"
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
@@ -457,8 +457,8 @@ def test_multiple_off_targets_counted(monkeypatch):
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # Two distinct off-target genes
     blast = (
-        "probe1\toff_A\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
-        "probe1\toff_B\t85.0\t21\t3\t0\t1\t21\t200\t220\t0.01\t25\n"
+        "probe1\toff_A\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
+        "probe1\toff_B\t85.0\t21\t3\t0\t1\t21\t220\t200\t0.01\t25\n"
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         # Allow 1 off-target, but probe has 2 → filtered
@@ -477,7 +477,7 @@ def test_multiple_off_targets_counted(monkeypatch):
 def test_off_targets_within_limit_passes(monkeypatch):
     """Probe with off-targets within the allowed limit passes."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
-    blast = "probe1\toff_A\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
+    blast = "probe1\toff_A\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         # Allow 1 off-target, probe has exactly 1 → passes
         task, out_fa, _, old, cfg = _setup_task(
@@ -501,7 +501,7 @@ def test_cleaned_gene_name_self_hit(monkeypatch):
     """Gene name with suffix (e.g. 'EIF2B1_cds') is stripped for self-hit matching."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # Subject ID contains cleaned gene name "eif2b1" (gene_name = "eif2b1_cds")
-    blast = "probe1\tENST00000|eif2b1_variant\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
+    blast = "probe1\tENST00000|eif2b1_variant\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -525,7 +525,7 @@ def test_gtf_transcript_mapping_self_hit(monkeypatch):
     """Self-hit detection via GTF transcript-to-gene mapping."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # Use an Ensembl-style subject ID not containing the gene name
-    blast = "probe1\tENST00000123456.5\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
+    blast = "probe1\tENST00000123456.5\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Provide a fake GTF path to trigger the mapping branch
@@ -555,7 +555,7 @@ def test_gtf_transcript_mapping_self_hit(monkeypatch):
 def test_gtf_mapping_off_target_detected(monkeypatch):
     """GTF mapping: hit to transcript of different gene is off-target."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
-    blast = "probe1\tENST00000999999\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
+    blast = "probe1\tENST00000999999\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         fake_gtf = os.path.join(tmpdir, "fake.gtf")
@@ -586,7 +586,7 @@ def test_gtf_mapping_failure_falls_back(monkeypatch):
     """When GTF mapping raises, fall back to name-based exclusion."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # Subject contains gene name → name-based self-hit detection works
-    blast = "probe1\tmygene_transcript\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
+    blast = "probe1\tmygene_transcript\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         fake_gtf = os.path.join(tmpdir, "fake.gtf")
@@ -677,7 +677,7 @@ def test_min_blast_match_length_auto(monkeypatch):
     """When min_blast_match_length=0, it auto-calculates from min_length."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # Hit with effective length 15 (below auto-threshold of max(18, 0.8*20)=18)
-    blast = "probe1\toff_target\t90.0\t15\t1\t0\t1\t15\t100\t114\t0.01\t20\n"
+    blast = "probe1\toff_target\t90.0\t15\t1\t0\t1\t15\t114\t100\t0.01\t20\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -696,7 +696,7 @@ def test_min_blast_match_length_explicit(monkeypatch):
     """Explicit min_blast_match_length is used when set."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     # Hit with effective length 15, explicit threshold 14 → hit counts
-    blast = "probe1\toff_target\t90.0\t15\t1\t0\t1\t15\t100\t114\t0.01\t20\n"
+    blast = "probe1\toff_target\t90.0\t15\t1\t0\t1\t15\t114\t100\t0.01\t20\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, out_fa, _, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -722,7 +722,7 @@ def test_min_blast_match_length_explicit(monkeypatch):
 def test_hits_table_saved(monkeypatch):
     """The hits CSV is written with the right columns."""
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
-    blast = "probe1\toff_target\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
+    blast = "probe1\toff_target\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
     with tempfile.TemporaryDirectory() as tmpdir:
         task, _, out_csv, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
@@ -751,10 +751,10 @@ def test_mixed_probes_partial_filtering(monkeypatch):
         ("ok", "GGGGTTTTAAAACCCCGGGGT"),
     )
     blast = (
-        "good\ttargetgene_tx\t100.0\t21\t0\t0\t1\t21\t1\t21\t0.0\t50\n"
-        "bad\toff_A\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
-        "bad\toff_B\t88.0\t21\t3\t0\t1\t21\t200\t220\t0.002\t28\n"
-        "ok\toff_C\t85.0\t20\t3\t0\t1\t20\t300\t319\t0.01\t25\n"
+        "good\ttargetgene_tx\t100.0\t21\t0\t0\t1\t21\t21\t1\t0.0\t50\n"
+        "bad\toff_A\t90.0\t20\t2\t0\t1\t20\t119\t100\t0.001\t30\n"
+        "bad\toff_B\t88.0\t21\t3\t0\t1\t21\t220\t200\t0.002\t28\n"
+        "ok\toff_C\t85.0\t20\t3\t0\t1\t20\t319\t300\t0.01\t25\n"
     )
     with tempfile.TemporaryDirectory() as tmpdir:
         # Allow 1 off-target: good(0)→pass, bad(2)→fail, ok(1)→pass
@@ -766,5 +766,26 @@ def test_mixed_probes_partial_filtering(monkeypatch):
             task.run()
             kept = [r.id for r in Bio.SeqIO.parse(out_fa, "fasta")]
             assert kept == ["good", "ok"]
+        finally:
+            _luigi_config_restore(old, cfg)
+
+
+def test_same_strand_hits_are_not_off_targets(monkeypatch):
+    """A plus/plus hit means the probe equals the transcript and cannot bind it."""
+    records = _make_records(
+        ("sense_only", "ATGCGTACGTAGCTAGCTAGC"),
+        ("antisense", "GCGCGTACGTAGCTAGCGCGC"),
+    )
+    blast = (
+        # One mismatch each, so they aren't auto-promoted to self-hits
+        "sense_only\toff_A\t95.2\t21\t1\t0\t1\t21\t100\t120\t0.001\t38\n"
+        "antisense\toff_B\t95.2\t21\t1\t0\t1\t21\t120\t100\t0.001\t38\n"
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        task, out_fa, out_csv, old, cfg = _setup_task(monkeypatch, tmpdir, records, blast_lines=blast)
+        try:
+            task.run()
+            assert [r.id for r in Bio.SeqIO.parse(out_fa, "fasta")] == ["sense_only"]
+            assert pd.read_csv(out_csv)["qseqid"].tolist() == ["antisense"]
         finally:
             _luigi_config_restore(old, cfg)

@@ -31,6 +31,18 @@ BLAST_EVALUE = "1000"
 BLAST_MAX_TARGETS = "1000"
 
 
+def antisense_hits(df_blast: pd.DataFrame) -> pd.DataFrame:
+    """Keep hits where the probe is complementary to the transcript.
+
+    The transcriptome FASTA is in transcript (sense) orientation and probes are
+    reverse complements of their target, so a probe can only hybridize to a
+    transcript it aligns to plus/minus (sstart > send). A plus/plus hit means
+    the probe has the transcript's own sequence (e.g. an antisense RNA
+    overlapping the target) and binds only its absent complement.
+    """
+    return df_blast[df_blast["sstart"] > df_blast["send"]]
+
+
 def _run_blast_chunk(args):
     """Run a single BLAST process (top-level function for pickling)."""
     subprocess.check_call(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -208,6 +220,7 @@ class TranscriptomeFiltering(luigi.Task):
             df_blast = pd.read_csv(blast_out, sep="\t", header=None, names=columns)
         else:
             df_blast = pd.DataFrame(columns=columns)
+        df_blast = antisense_hits(df_blast)
 
         # Post-BLAST filtering (per TrueProbes approach):
         # effective match length = alignment length - gaps
