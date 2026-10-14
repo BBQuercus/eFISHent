@@ -348,7 +348,7 @@ class TestPrintSummary:
         gene = _make_seq("A" * 100, "gene")
         type(task).gene = PropertyMock(return_value=gene)
 
-        with patch("eFISHent.analyze.is_binding", return_value=False):
+        with patch("eFISHent.analyze_report.is_binding", return_value=False):
             task._print_summary(sample_df)
 
     def test_with_off_targets(self, task, sample_df):
@@ -356,7 +356,7 @@ class TestPrintSummary:
         type(task).gene = PropertyMock(return_value=gene)
         sample_df["off_targets"] = [0, 1, 2]
 
-        with patch("eFISHent.analyze.is_binding", return_value=False):
+        with patch("eFISHent.analyze_report.is_binding", return_value=False):
             task._print_summary(sample_df)
 
     def test_with_quality(self, task, sample_df):
@@ -364,7 +364,7 @@ class TestPrintSummary:
         type(task).gene = PropertyMock(return_value=gene)
         sample_df["quality"] = [80.0, 75.0, 60.0]
 
-        with patch("eFISHent.analyze.is_binding", return_value=False):
+        with patch("eFISHent.analyze_report.is_binding", return_value=False):
             task._print_summary(sample_df)
 
     def test_flags_g_quadruplex(self, task, sample_df):
@@ -372,7 +372,7 @@ class TestPrintSummary:
         type(task).gene = PropertyMock(return_value=gene)
         sample_df["g_quadruplex"] = [True, False, False]
 
-        with patch("eFISHent.analyze.is_binding", return_value=False):
+        with patch("eFISHent.analyze_report.is_binding", return_value=False):
             task._print_summary(sample_df)
 
     def test_flags_high_gc(self, task, sample_df):
@@ -380,7 +380,7 @@ class TestPrintSummary:
         type(task).gene = PropertyMock(return_value=gene)
         sample_df["GC"] = [60.0, 70.0, 50.0]
 
-        with patch("eFISHent.analyze.is_binding", return_value=False):
+        with patch("eFISHent.analyze_report.is_binding", return_value=False):
             task._print_summary(sample_df)
 
     def test_no_mapped_probes(self, task, sample_df):
@@ -389,7 +389,7 @@ class TestPrintSummary:
         sample_df["start"] = [-1, -1, -1]
         sample_df["end"] = [-1, -1, -1]
 
-        with patch("eFISHent.analyze.is_binding", return_value=False):
+        with patch("eFISHent.analyze_report.is_binding", return_value=False):
             task._print_summary(sample_df)
 
 
