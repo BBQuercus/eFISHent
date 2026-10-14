@@ -429,7 +429,7 @@ class TestExtractExonBoundaries:
             "transcript_id": ["ENST00001"],
         })
         with patch("os.path.isfile", return_value=True), \
-             patch("pandas.read_parquet", return_value=df):
+             patch("eFISHent.indexing.read_annotation", return_value=df):
             result = task._extract_exon_boundaries("TP53", "/fake/annotation.gtf")
             assert result is None
 
@@ -445,7 +445,7 @@ class TestExtractExonBoundaries:
             "transcript_id": ["ENST001", "ENST001", "ENST001"],
         })
         with patch("os.path.isfile", return_value=True), \
-             patch("pandas.read_parquet", return_value=df):
+             patch("eFISHent.indexing.read_annotation", return_value=df):
             result = task._extract_exon_boundaries("TP53", "/fake/annotation.gtf")
             assert result is not None
             assert len(result) == 2
@@ -464,7 +464,7 @@ class TestExtractExonBoundaries:
             "transcript_id": ["ENST001"],
         })
         with patch("os.path.isfile", return_value=True), \
-             patch("pandas.read_parquet", return_value=df):
+             patch("eFISHent.indexing.read_annotation", return_value=df):
             result = task._extract_exon_boundaries("TP53", "/fake/annotation.gtf")
             assert result is not None
             assert len(result) == 1

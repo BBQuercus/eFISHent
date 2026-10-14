@@ -59,7 +59,9 @@ def build_transcript_gene_map(gtf_path: str) -> dict[str, str]:
 
 def _parse_parquet_gtf(parquet_path: str) -> dict[str, str]:
     """Parse a parquet-formatted GTF file for transcript->gene mapping."""
-    df = pd.read_parquet(parquet_path)
+    from .indexing import read_annotation
+
+    df = read_annotation(parquet_path, ["transcript_id", "gene_id", "gene_name"])
     mapping: dict[str, str] = {}
 
     # Check which columns are available

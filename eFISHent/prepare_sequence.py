@@ -240,16 +240,15 @@ class PrepareSequence(luigi.Task):
         sorted by start position. Returns None if no exons found.
         """
         try:
-            import pandas as pd
-
-            from .indexing import PrepareAnnotationFile
+            from .indexing import PrepareAnnotationFile, read_annotation
             parq_path = annotation_path + ".parq"
-            if os.path.isfile(parq_path):
-                df = pd.read_parquet(parq_path)
-            else:
+            if not os.path.isfile(parq_path):
                 task = PrepareAnnotationFile()
                 task.prepare_gtf_file(annotation_path, parq_path)
-                df = pd.read_parquet(parq_path)
+            df = read_annotation(
+                parq_path,
+                ["feature", "gene_name", "gene_id", "transcript_id", "start", "end"],
+            )
         except Exception as e:
             self.logger.debug(f"Could not parse GTF for region selection: {e}")
             return None
