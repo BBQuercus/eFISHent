@@ -104,7 +104,7 @@ class TestComputeGC:
         assert _compute_gc("GGCCGGCC") == pytest.approx(1.0)
 
     def test_mixed(self):
-        assert _compute_gc("ATGC") == 0.5
+        assert _compute_gc("ATGC") == pytest.approx(0.5)
 
     def test_empty_string(self):
         assert _compute_gc("") == pytest.approx(0.0)
@@ -207,7 +207,7 @@ class TestEdgeCases:
 
     def test_sequence_one_longer_than_min_length(self):
         """When sequence is min_length + 1, exactly one probe of min_length fits."""
-        seq = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATGCATGCA"), id="exact")  # len=9
+        seq = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATGCATGCA"), id="exact")  # 9 nt
         probes = list(create_candidate_probes_generator(seq, 8, 10))
         # length 8: 2 probes, length 9: 1 probe, length 10: 0 probes
         assert len(probes) == 3
@@ -216,7 +216,7 @@ class TestEdgeCases:
 
     def test_sequence_exactly_min_length_raises(self):
         """When sequence length == min_length, a ValueError is raised."""
-        seq = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATGCATGC"), id="exact")  # len=8
+        seq = Bio.SeqRecord.SeqRecord(Bio.Seq.Seq("ATGCATGC"), id="exact")  # 8 nt
         with pytest.raises(ValueError):
             list(create_candidate_probes_generator(seq, 8, 10))
 

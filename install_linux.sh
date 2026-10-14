@@ -61,7 +61,7 @@ if [ ! -f "${BIN_DIR}/jellyfish" ]; then
     tar -xzf jellyfish-2.3.1.tar.gz
     cd jellyfish-2.3.1
     ./configure --prefix="${INSTALL_DIR}" >/dev/null 2>&1
-    make -j$(nproc) >/dev/null 2>&1
+    make -j"$(nproc)" >/dev/null 2>&1
     make install >/dev/null 2>&1
     cd "${INSTALL_DIR}"
     rm -rf jellyfish-2.3.1.tar.gz jellyfish-2.3.1
@@ -79,7 +79,7 @@ if [ ! -f "${BIN_DIR}/glpsol" ]; then
     tar -xzf glpk-5.0.tar.gz
     cd glpk-5.0
     ./configure --prefix="${INSTALL_DIR}" >/dev/null 2>&1
-    make -j$(nproc) >/dev/null 2>&1
+    make -j"$(nproc)" >/dev/null 2>&1
     make install >/dev/null 2>&1
     cd "${INSTALL_DIR}"
     rm -rf glpk-5.0.tar.gz glpk-5.0

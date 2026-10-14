@@ -7,6 +7,7 @@ import Bio.SeqIO
 import Bio.SeqRecord
 import luigi
 import pandas as pd
+import pytest
 
 from eFISHent.transcriptome_filter import (
     BuildTranscriptomeBlastDB,
@@ -150,7 +151,7 @@ def test_blast_output_parsing():
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     assert len(df) == 3
     assert df.iloc[0]["qseqid"] == "candidate-0-100"
-    assert df.iloc[0]["pident"] == 90.0
+    assert df.iloc[0]["pident"] == pytest.approx(90.0)
 
 
 def test_blast_output_empty_results():
@@ -169,7 +170,7 @@ def test_blast_output_single_row():
     sample = "probe1\tGENE1\t99.5\t25\t0\t0\t1\t25\t1\t25\t1e-10\t50\n"
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     assert len(df) == 1
-    assert df.iloc[0]["bitscore"] == 50.0
+    assert df.iloc[0]["bitscore"] == pytest.approx(50.0)
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +202,8 @@ def test_effective_length_filter():
     from io import StringIO
 
     sample = (
-        "probe1\tGENE1\t90.0\t20\t2\t3\t1\t20\t100\t119\t0.001\t30\n"  # eff=17
-        "probe1\tGENE2\t90.0\t22\t1\t0\t1\t22\t200\t221\t0.001\t30\n"  # eff=22
+        "probe1\tGENE1\t90.0\t20\t2\t3\t1\t20\t100\t119\t0.001\t30\n"  # effective length 17
+        "probe1\tGENE2\t90.0\t22\t1\t0\t1\t22\t200\t221\t0.001\t30\n"  # effective length 22
     )
     df = pd.read_csv(StringIO(sample), sep="\t", header=None, names=BLAST_COLUMNS)
     df["effective_len"] = df["length"] - df["gapopen"]
@@ -723,7 +724,7 @@ def test_hits_table_saved(monkeypatch):
     records = _make_records(("probe1", "ATGCGTACGTAGCTAGCTAGC"))
     blast = "probe1\toff_target\t90.0\t20\t2\t0\t1\t20\t100\t119\t0.001\t30\n"
     with tempfile.TemporaryDirectory() as tmpdir:
-        task, out_fa, out_csv, old, cfg = _setup_task(
+        task, _, out_csv, old, cfg = _setup_task(
             monkeypatch, tmpdir, records, blast_lines=blast,
             extra_config={("ProbeConfig", "max_transcriptome_off_targets"): "10"},
         )

@@ -98,13 +98,15 @@ name = "trufflehog"
 name = "zizmor"
 
 # pytest is built on plain asserts, and the tests write scratch files to /tmp.
-[[ignore]]
-rules = ["bandit:B101", "bandit:B108"]
-file_patterns = ["tests/**"]
+[[triage]]
+match.rules = ["bandit:B101", "bandit:B108"]
+match.file_patterns = ["tests/**"]
+set.ignored = true
 
 # eFISHent drives external bioinformatics tools (bowtie/bowtie2, BLAST+,
 # jellyfish, Fold, gffread) by design. Every call passes an argument list,
 # never shell=True, and the tools are resolved from PATH, which the installer
 # sets up. These three subprocess checks therefore flag the tool's purpose.
-[[ignore]]
-rules = ["bandit:B404", "bandit:B603", "bandit:B607"]
+[[triage]]
+match.rules = ["bandit:B404", "bandit:B603", "bandit:B607"]
+set.ignored = true
