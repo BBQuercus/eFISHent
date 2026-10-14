@@ -1,18 +1,17 @@
 """Utility and getter functions."""
 
-from typing import Any, List
 import hashlib
 import logging
 import os
 import re
 import unicodedata
+from typing import Any
 
 import Bio.SeqRecord
 import luigi
 import pandas as pd
 
-from .config import GeneralConfig
-from .config import SequenceConfig
+from .config import GeneralConfig, SequenceConfig
 from .constants import FASTA_EXT
 
 
@@ -265,10 +264,10 @@ def log_and_check_candidates(
             logger.warning(f"{UniCode.warn} {msg}")
 
 
-def create_data_table(sequences: List[Bio.SeqRecord.SeqRecord]) -> pd.DataFrame:
+def create_data_table(sequences: list[Bio.SeqRecord.SeqRecord]) -> pd.DataFrame:
     """Create a data table from a list of sequences."""
     df = pd.DataFrame(
-        list(map(lambda x: (x.id, len(x)), sequences)), columns=["name", "length"]
+        [(x.id, len(x)) for x in sequences], columns=["name", "length"]
     )
     df.insert(1, "sequence", [str(seq.seq) for seq in sequences])
     df["start"] = (

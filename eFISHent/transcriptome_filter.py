@@ -19,8 +19,7 @@ import luigi
 import pandas as pd
 
 from . import util
-from .config import GeneralConfig
-from .config import ProbeConfig
+from .config import GeneralConfig, ProbeConfig
 
 
 def _run_blast_chunk(args):

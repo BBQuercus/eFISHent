@@ -1,6 +1,5 @@
 """Find the optimal probeset with the highest coverage (fast or optimal)."""
 
-from typing import List, Optional, Tuple
 import functools
 import logging
 import multiprocessing
@@ -17,9 +16,7 @@ import pandas as pd
 import pyomo.environ as pe
 
 from . import util
-from .config import GeneralConfig
-from .config import ProbeConfig
-from .config import RunConfig
+from .config import GeneralConfig, ProbeConfig, RunConfig
 from .secondary_structure import SecondaryStructureFiltering
 
 
@@ -67,7 +64,7 @@ class OptimizeProbeCoverage(luigi.Task):
         assigned = functools.reduce(lambda x, y: x + y, _assigned)
         return assigned
 
-    def run_optimal_block(self, block: int) -> List[str]:
+    def run_optimal_block(self, block: int) -> list[str]:
         """Run a single non-overlapping block."""
         df = self.df[self.df["block"] == block]
         return optimal_model(df, self.time_limit)
@@ -77,8 +74,8 @@ class OptimizeProbeCoverage(luigi.Task):
         return greedy_model(self.df)
 
     def filter_binding_probes(
-        self, assigned: List[str], match_percentage: float
-    ) -> List[str]:
+        self, assigned: list[str], match_percentage: float
+    ) -> list[str]:
         """Remove probes of too high rev/comp sequence similarity.
 
         Uses k-mer overlap (O(n²) comparisons but each is O(L) instead of
@@ -153,7 +150,7 @@ class OptimizeProbeCoverage(luigi.Task):
         )
         Bio.SeqIO.write(candidates, self.output()["probes"].path, format="fasta")
 
-    def _load_target_sequence(self) -> Optional[str]:
+    def _load_target_sequence(self) -> str | None:
         """Load the target gene sequence for accessibility scoring."""
         from .config import SequenceConfig
 
@@ -175,9 +172,9 @@ class OptimizeProbeCoverage(luigi.Task):
 
     def refine_tm_uniformity(
         self,
-        assigned: List[str],
-        sequences: List[Bio.SeqRecord.SeqRecord],
-    ) -> List[str]:
+        assigned: list[str],
+        sequences: list[Bio.SeqRecord.SeqRecord],
+    ) -> list[str]:
         """Refine probe selection for Tm uniformity.
 
         For each probe whose Tm deviates > 5°C from the set median, check
@@ -254,7 +251,7 @@ class OptimizeProbeCoverage(luigi.Task):
 def _overlaps_other_assigned(
     alt_start: int,
     alt_end: int,
-    new_assigned: List[str],
+    new_assigned: list[str],
     skip_idx: int,
     df: pd.DataFrame,
 ) -> bool:
@@ -300,7 +297,7 @@ def _find_best_tm_alternative(
     return best_alt, best_alt_deviation
 
 
-def is_overlapping(x: Tuple[int, int], y: Tuple[int, int]) -> bool:
+def is_overlapping(x: tuple[int, int], y: tuple[int, int]) -> bool:
     """Check if two ranges overlap. O(1) complexity."""
     return x[0] <= y[1] and y[0] <= x[1]
 
@@ -343,7 +340,7 @@ def is_binding(seq1: str, seq2: str, match_percentage: float = 0.75) -> bool:
     return False
 
 
-def fold_sequence(sequence: str) -> Optional[str]:
+def fold_sequence(sequence: str) -> str | None:
     """Fold a sequence and return the dot-bracket notation.
 
     Uses the bundled Fold binary (RNAstructure). Returns None if
@@ -434,7 +431,7 @@ def compute_pre_optimization_quality(df: pd.DataFrame) -> pd.Series:
     GC content, CpG fraction, and optionally accessibility.
     Data-driven from n=84 probe set analysis. Returns scores in [0, 1].
     """
-    from .basic_filtering import get_gc_content, get_cpg_fraction
+    from .basic_filtering import get_cpg_fraction, get_gc_content
 
     # GC score: optimal 45-52%, steep penalty above 55%
     gc_vals = df["sequence"].apply(lambda s: get_gc_content(Bio.Seq.Seq(s)))
@@ -474,7 +471,7 @@ def compute_pre_optimization_quality(df: pd.DataFrame) -> pd.Series:
     return scores
 
 
-def greedy_model(df: pd.DataFrame) -> List[str]:
+def greedy_model(df: pd.DataFrame) -> list[str]:
     """Run the greedy/fast model.
 
     Probes are sorted by start position, then by quality (highest first).
@@ -507,7 +504,7 @@ def greedy_model(df: pd.DataFrame) -> List[str]:
     return assigned
 
 
-def optimal_model(df: pd.DataFrame, time_limit: int) -> List[str]:
+def optimal_model(df: pd.DataFrame, time_limit: int) -> list[str]:
     """Run the quality-weighted optimal mathematical model.
 
     Maximizes coverage weighted by probe quality: max Σ quality[p] * covered[p,s].
@@ -570,8 +567,8 @@ def optimal_model(df: pd.DataFrame, time_limit: int) -> List[str]:
 
 
 def fill_coverage_gaps(
-    df: pd.DataFrame, assigned: List[str], spacing: int
-) -> List[str]:
+    df: pd.DataFrame, assigned: list[str], spacing: int
+) -> list[str]:
     """Fill large coverage gaps with unassigned probes.
 
     After greedy/optimal assignment, there may be uncovered regions where no
@@ -631,7 +628,7 @@ def fill_coverage_gaps(
     return new_assigned
 
 
-def visualize_assignment(df: pd.DataFrame, assigned: List[str], filename: str) -> None:
+def visualize_assignment(df: pd.DataFrame, assigned: list[str], filename: str) -> None:
     """Visualize the assignment as overlap matrix."""
     start = df["start"].min()
     end = df["end"].max()

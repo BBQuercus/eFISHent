@@ -1,13 +1,10 @@
 """Common constants used in other methods."""
-from typing import List, Tuple, Dict
+
 import luigi
 
-from .config import GeneralConfig
-from .config import ProbeConfig
-from .config import RunConfig
-from .config import SequenceConfig
+from .config import GeneralConfig, ProbeConfig, RunConfig, SequenceConfig
 
-SAMFILE_COLUMNS: List[str] = [
+SAMFILE_COLUMNS: list[str] = [
     "qname",
     "flag",
     "rname",
@@ -24,7 +21,7 @@ SAMFILE_COLUMNS: List[str] = [
     "NM",
 ]
 
-BLAST_COLUMNS: List[str] = [
+BLAST_COLUMNS: list[str] = [
     "qseqid",
     "sseqid",
     "pident",
@@ -39,7 +36,7 @@ BLAST_COLUMNS: List[str] = [
     "bitscore",
 ]
 
-GTF_COLUMNS: List[str] = [
+GTF_COLUMNS: list[str] = [
     "gene_id",
     "seqname",
     "start",
@@ -49,18 +46,18 @@ GTF_COLUMNS: List[str] = [
     "feature",
 ]
 
-CONFIG_CLASSES: List[luigi.Config] = [
+CONFIG_CLASSES: list[luigi.Config] = [
     GeneralConfig,
     RunConfig,
     SequenceConfig,
     ProbeConfig,
 ]
 
-FASTA_EXT: Tuple[str] = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
+FASTA_EXT: tuple[str] = (".fasta", ".fna", ".ffn", ".faa", ".frn", ".fa")
 
 SAM_FLAG_REVERSE: str = "16"
 
-CLI_SHORTFORM: Dict[str, str] = {
+CLI_SHORTFORM: dict[str, str] = {
     "aligner": "al",
     "analyze_probeset": "ap",
     "blast_identity_threshold": "bit",

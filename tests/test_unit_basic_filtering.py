@@ -3,17 +3,19 @@ import Bio.SeqRecord
 import luigi
 import pytest
 
-from eFISHent.basic_filtering import BasicFiltering
-from eFISHent.basic_filtering import compute_duplex_dg
-from eFISHent.basic_filtering import compute_off_target_tm
-from eFISHent.basic_filtering import get_cpg_fraction
-from eFISHent.basic_filtering import has_g_quadruplex
-from eFISHent.basic_filtering import get_dinucleotide_repeat_count
-from eFISHent.basic_filtering import get_g_quadruplet_count
-from eFISHent.basic_filtering import get_gc_content
-from eFISHent.basic_filtering import get_max_homopolymer_run
-from eFISHent.basic_filtering import get_melting_temp
-from eFISHent.basic_filtering import has_low_complexity
+from eFISHent.basic_filtering import (
+    BasicFiltering,
+    compute_duplex_dg,
+    compute_off_target_tm,
+    get_cpg_fraction,
+    get_dinucleotide_repeat_count,
+    get_g_quadruplet_count,
+    get_gc_content,
+    get_max_homopolymer_run,
+    get_melting_temp,
+    has_g_quadruplex,
+    has_low_complexity,
+)
 
 
 @pytest.mark.parametrize(

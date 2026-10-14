@@ -4,16 +4,16 @@ import os
 import shutil
 import tempfile
 
+import Bio.Seq
 import Bio.SeqIO
 import Bio.SeqRecord
-import Bio.Seq
 import pytest
 
 from eFISHent.rdna_filter import (
-    FilterRibosomalRNA,
-    RDNA_45S_FASTA,
     ALPHA_SAT_FASTA,
     IMAGING_RISK_FASTA,
+    RDNA_45S_FASTA,
+    FilterRibosomalRNA,
 )
 
 BLAST_AVAILABLE = shutil.which("blastn") is not None and shutil.which("makeblastdb") is not None
@@ -371,7 +371,7 @@ def test_filter_rdna_45s_default_enabled():
 
 def test_run_no_blast_installed():
     """run() should skip filtering and write all probes when BLAST is not installed."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     task = FilterRibosomalRNA()
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -408,7 +408,7 @@ def test_run_no_blast_installed():
 
 def test_run_no_references():
     """run() should skip filtering when no reference FASTAs exist."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     task = FilterRibosomalRNA()
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -447,7 +447,7 @@ def test_run_no_references():
 @pytest.mark.skipif(not BLAST_AVAILABLE, reason="BLAST+ not installed")
 def test_run_filters_dangerous_probes():
     """run() should remove probes that match rDNA sequences."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     task = FilterRibosomalRNA()
     with tempfile.TemporaryDirectory() as tmpdir:

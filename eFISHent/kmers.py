@@ -7,7 +7,6 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import List
 
 import Bio.SeqIO
 import Bio.SeqRecord
@@ -15,8 +14,7 @@ import luigi
 
 from . import util
 from .alignment import AlignProbeCandidates
-from .config import GeneralConfig
-from .config import ProbeConfig
+from .config import GeneralConfig, ProbeConfig
 
 
 def get_max_kmer_count(sequence: Bio.SeqRecord.SeqRecord, jellyfish_path: str) -> int:
@@ -64,8 +62,8 @@ def get_max_kmer_count(sequence: Bio.SeqRecord.SeqRecord, jellyfish_path: str) -
 
 
 def get_max_kmer_counts_batch(
-    sequences: List[Bio.SeqRecord.SeqRecord], jellyfish_path: str
-) -> List[int]:
+    sequences: list[Bio.SeqRecord.SeqRecord], jellyfish_path: str
+) -> list[int]:
     """Count kmers for multiple sequences in a single jellyfish query.
 
     This is more efficient than calling get_max_kmer_count for each sequence

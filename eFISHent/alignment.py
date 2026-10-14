@@ -12,16 +12,11 @@ import luigi
 import pandas as pd
 import pysam
 
-from . import constants
-from . import util
-from .basic_filtering import BasicFiltering
-from .basic_filtering import compute_off_target_tm
+from . import constants, util
+from .basic_filtering import BasicFiltering, compute_off_target_tm
+from .config import GeneralConfig, ProbeConfig, SequenceConfig
+from .indexing import BuildBowtie2Index, BuildBowtieIndex
 from .rdna_filter import FilterRibosomalRNA
-from .config import GeneralConfig
-from .config import ProbeConfig
-from .config import SequenceConfig
-from .indexing import BuildBowtieIndex
-from .indexing import BuildBowtie2Index
 
 
 class AlignProbeCandidates(luigi.Task):
@@ -117,11 +112,11 @@ class AlignProbeCandidates(luigi.Task):
         df.columns = ["gene_id", "count"]
         try:
             df = df.astype({"gene_id": str, "count": float})
-        except ValueError:
+        except ValueError as e:
             raise ValueError(
                 "Could not convert count table columns to the right type. "
                 "Please ensure the first two colums are of type string and number/float/int, respectively. "
-            )
+            ) from e
 
         # Remove potential version numbers
         df["gene_id"] = df["gene_id"].apply(lambda x: x.split(".")[0])
@@ -149,7 +144,7 @@ class AlignProbeCandidates(luigi.Task):
         """
         # Convert fasta to fastq - bowtie only allows uses fastq inputs
         fname_fastq = self.fname_fasta.rstrip("a") + "q"
-        with open(self.fname_fasta, "r") as fasta, open(fname_fastq, "w") as fastq:
+        with open(self.fname_fasta) as fasta, open(fname_fastq, "w") as fastq:
             for record in Bio.SeqIO.parse(fasta, "fasta"):
                 record.letter_annotations["phred_quality"] = [40] * len(record)
                 Bio.SeqIO.write(record, fastq, format="fastq")

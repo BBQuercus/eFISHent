@@ -1,11 +1,9 @@
 """Analyze a probe set and produce a detailed report with plots and metrics."""
 
-from typing import List, Union
 import logging
 import multiprocessing
 import os
 
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import Bio.Seq
 import Bio.SeqIO
 import luigi
@@ -13,25 +11,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pysam
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from . import util
-from .basic_filtering import compute_duplex_dg
-from .basic_filtering import get_cpg_fraction
-from .basic_filtering import get_gc_content
-from .basic_filtering import get_g_quadruplet_count
-from .basic_filtering import get_max_homopolymer_run
-from .basic_filtering import get_melting_temp
-from .basic_filtering import has_g_quadruplex
+from .basic_filtering import (
+    compute_duplex_dg,
+    get_cpg_fraction,
+    get_g_quadruplet_count,
+    get_gc_content,
+    get_max_homopolymer_run,
+    get_melting_temp,
+    has_g_quadruplex,
+)
 from .cleanup import CleanUpOutput
-from .config import GeneralConfig
-from .config import ProbeConfig
-from .config import RunConfig
-from .config import SequenceConfig
+from .config import GeneralConfig, ProbeConfig, RunConfig, SequenceConfig
 from .console import print_analysis_stage
-from .indexing import BuildBowtieIndex
-from .indexing import BuildBowtie2Index
-from .kmers import BuildJellyfishIndex
-from .kmers import get_max_kmer_counts_batch
+from .indexing import BuildBowtie2Index, BuildBowtieIndex
+from .kmers import BuildJellyfishIndex, get_max_kmer_counts_batch
 from .optimization import is_binding
 from .prepare_sequence import PrepareSequence
 from .secondary_structure import get_free_energy
@@ -69,7 +65,7 @@ class AnalyzeProbeset(luigi.Task):
     # ── Plot helpers ──
 
     @staticmethod
-    def histplot(ax: plt.Axes, data: List[int], title: str, min_value: int):
+    def histplot(ax: plt.Axes, data: list[int], title: str, min_value: int):
         """Basic narrow count based histogram."""
         ax.set_title(title)
         if not data or all(v == data[0] for v in data):
@@ -81,7 +77,7 @@ class AnalyzeProbeset(luigi.Task):
         ax.set(ylabel="Count")
 
     @staticmethod
-    def boxplot(ax: plt.Axes, data: List[Union[int, float]], title: str, ylabel: str):
+    def boxplot(ax: plt.Axes, data: list[int | float], title: str, ylabel: str):
         """Boxplot with kde-esque lines next to it."""
         ax.set_title(title)
         ax.boxplot(data)

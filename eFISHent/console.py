@@ -1,16 +1,15 @@
 """Rich console utilities for eFISHent CLI."""
 
-from contextlib import contextmanager
-from typing import Dict, List, Optional, Tuple
 import logging
 import time
+from contextlib import contextmanager
 
 import pandas as pd
 from rich.console import Console
 from rich.live import Live
-from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 from rich.theme import Theme
 
 # Custom theme for eFISHent
@@ -36,13 +35,13 @@ _current_stage: int = 0
 _total_stages: int = 8
 
 # Live display state
-_live: Optional[Live] = None
-_steps: List[Dict] = []  # Each: {name, status, result, elapsed, start_time}
+_live: Live | None = None
+_steps: list[dict] = []  # Each: {name, status, result, elapsed, start_time}
 _step_status: str = ""  # Transient status line for current step
 _pipeline_mode: str = "pipeline"
 
 # Filtering funnel data: list of (stage_name, candidate_count) tuples
-_funnel_data: List[Tuple[str, int]] = []
+_funnel_data: list[tuple[str, int]] = []
 
 
 def record_funnel_stage(stage_name: str, count: int) -> None:
@@ -50,7 +49,7 @@ def record_funnel_stage(stage_name: str, count: int) -> None:
     _funnel_data.append((stage_name, count))
 
 
-def get_funnel_data() -> List[Tuple[str, int]]:
+def get_funnel_data() -> list[tuple[str, int]]:
     """Get the accumulated funnel data."""
     return list(_funnel_data)
 
@@ -236,10 +235,10 @@ def print_header(version: str) -> None:
 
 def print_completion(
     duration: str,
-    output_files: Optional[List[str]] = None,
-    summary: Optional[Dict] = None,
-    probe_df: Optional[pd.DataFrame] = None,
-    verification: Optional[Dict] = None,
+    output_files: list[str] | None = None,
+    summary: dict | None = None,
+    probe_df: pd.DataFrame | None = None,
+    verification: dict | None = None,
 ) -> None:
     """Print the completion panel with funnel, coverage map, probe table, and summary.
 
@@ -396,7 +395,7 @@ def _get_stage_color(drop_pct: float) -> str:
     return "green"
 
 
-def _build_funnel_table() -> Optional[Table]:
+def _build_funnel_table() -> Table | None:
     """Build a Rich Table for the filtering funnel. Returns None if no data."""
     stages = [
         (name, count)
@@ -450,7 +449,7 @@ def _build_coverage_map(
     probe_df: pd.DataFrame,
     gene_length: int,
     coverage_pct: float,
-) -> Optional[Text]:
+) -> Text | None:
     """Build an ASCII coverage map showing probe binding positions on the gene.
 
     Returns a Rich Text renderable with a horizontal bar where filled blocks
@@ -511,7 +510,7 @@ def _build_coverage_map(
     return text
 
 
-def _build_verification_summary(verification: Dict) -> Text:
+def _build_verification_summary(verification: dict) -> Text:
     """Build a Rich Text summary of BLAST verification results."""
     total = verification["total"]
     clean = verification["clean"]
@@ -635,7 +634,7 @@ def print_candidate_count(_name: str, count: int, count_prev: int = 0) -> None:
     _refresh_live()
 
 
-def print_parameter_warnings(warnings: List[str]) -> None:
+def print_parameter_warnings(warnings: list[str]) -> None:
     """Print parameter validation warnings in a panel."""
     if _silent_mode or not warnings:
         return
@@ -671,7 +670,7 @@ def print_warning(message: str) -> None:
         console.print(f"[warning]Warning:[/warning] {message}")
 
 
-def print_error_panel(title: str, message: str, hint: Optional[str] = None) -> None:
+def print_error_panel(title: str, message: str, hint: str | None = None) -> None:
     """Display an error in a formatted panel."""
     # Stop live display before showing error so it doesn't interfere
     if _live is not None:
@@ -842,7 +841,7 @@ def print_analysis_stage(step: int, total: int, description: str) -> None:
     _refresh_live()
 
 
-def print_dependency_check(results: Dict[str, dict]) -> None:
+def print_dependency_check(results: dict[str, dict]) -> None:
     """Print dependency check results as a table."""
     table = Table(
         title="Dependency Check",
@@ -882,7 +881,7 @@ def print_dependency_check(results: Dict[str, dict]) -> None:
     console.print()
 
 
-def print_missing_deps_error(missing: List[str]) -> None:
+def print_missing_deps_error(missing: list[str]) -> None:
     """Print a concise error for missing dependencies during pipeline run."""
     deps = ", ".join(f"[bold]{d}[/bold]" for d in missing)
     console.print(

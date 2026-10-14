@@ -1,6 +1,5 @@
 """Predict secondary structure of probes and filter them based on deltaG."""
 
-from pathlib import Path
 import logging
 import multiprocessing
 import os
@@ -8,14 +7,14 @@ import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import Bio.SeqIO
 import Bio.SeqRecord
 import luigi
 
 from . import util
-from .config import GeneralConfig
-from .config import ProbeConfig
+from .config import GeneralConfig, ProbeConfig
 from .kmers import KMerFiltering
 
 # Cached Fold binary path and whether to set DATAPATH

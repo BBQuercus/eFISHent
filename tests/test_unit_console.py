@@ -381,6 +381,7 @@ class TestBuildProbeTable:
             }
         )
         from io import StringIO
+
         from rich.console import Console as RichConsole
 
         buf = StringIO()
@@ -394,6 +395,7 @@ class TestBuildProbeTable:
 
     def test_short_sequence_not_truncated(self, basic_df):
         from io import StringIO
+
         from rich.console import Console as RichConsole
 
         buf = StringIO()

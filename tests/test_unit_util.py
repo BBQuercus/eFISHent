@@ -7,13 +7,15 @@ import Bio.SeqIO
 import luigi
 import pytest
 
-from eFISHent.util import create_config_hash
-from eFISHent.util import create_data_table
-from eFISHent.util import get_gene_name
-from eFISHent.util import get_genome_name
-from eFISHent.util import get_output_dir
-from eFISHent.util import log_and_check_candidates
-from eFISHent.util import secure_filename
+from eFISHent.util import (
+    create_config_hash,
+    create_data_table,
+    get_gene_name,
+    get_genome_name,
+    get_output_dir,
+    log_and_check_candidates,
+    secure_filename,
+)
 
 
 def test_create_config_hash():
@@ -342,6 +344,7 @@ class TestLogStageStart:
         """A known stage with order>0 should call print_stage."""
         import logging
         from unittest.mock import patch
+
         from eFISHent.util import log_stage_start
 
         logger = logging.getLogger("test-log-stage")

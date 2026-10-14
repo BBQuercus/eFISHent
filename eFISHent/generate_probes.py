@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Generator, List
+from collections.abc import Generator
 
 import Bio.SeqIO
 import Bio.SeqRecord
@@ -131,7 +131,7 @@ class GenerateAllProbes(luigi.Task):
 
     def create_candidate_probes(
         self, sequence: Bio.SeqRecord.SeqRecord, min_length: int, max_length: int
-    ) -> List[Bio.SeqRecord.SeqRecord]:
+    ) -> list[Bio.SeqRecord.SeqRecord]:
         """Create a set of all subsequences of sequence with the right lengths."""
         if min_length > max_length:
             raise ValueError(
