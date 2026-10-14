@@ -46,6 +46,19 @@ GTF_COLUMNS: list[str] = [
     "feature",
 ]
 
+# GTF rows and attributes kept in the prepared parquet annotation. Downstream
+# code only reads gene, transcript and exon rows; CDS/UTR/codon rows would
+# double the row count for nothing.
+GTF_FEATURES: list[str] = ["gene", "transcript", "exon"]
+GTF_ATTRIBUTES: list[str] = [
+    "gene_id",
+    "gene_name",
+    "gene_biotype",  # Ensembl
+    "gene_type",  # GENCODE
+    "transcript_id",
+    "exon_number",
+]
+
 CONFIG_CLASSES: list[luigi.Config] = [
     GeneralConfig,
     RunConfig,

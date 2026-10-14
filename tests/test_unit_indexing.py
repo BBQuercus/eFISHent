@@ -1,4 +1,3 @@
-import os
 from unittest.mock import MagicMock, patch
 
 import luigi
@@ -9,6 +8,7 @@ from eFISHent.indexing import (
     BuildBowtie2Index,
     BuildBowtieIndex,
     PrepareAnnotationFile,
+    read_annotation,
 )
 
 
@@ -17,17 +17,82 @@ def task_prepare():
     return PrepareAnnotationFile()
 
 
-@pytest.mark.skip(reason="gtfparse uses deprecated polars API (toggle_string_cache)")
-def test_prepare_annotations(task_prepare):
-    fname_output = "./mylittle.gtf.parq"
+def test_prepare_annotations(task_prepare, tmp_path):
+    fname_output = str(tmp_path / "sacCer3.gtf.parq")
     task_prepare.prepare_gtf_file("./tests/data/sacCer3.gtf", fname_output)
 
-    assert os.path.isfile(fname_output)
-
     df = pd.read_parquet(fname_output)
-    for col in ["seqname", "source", "feature", "start", "end"]:
+    for col in ["seqname", "feature", "start", "end", "frame", "exon_number"]:
         assert col in df.columns
-    os.remove(fname_output)
+    assert set(df["feature"]) == {"gene", "transcript", "exon"}
+    assert len(df) == 7127 + 7127 + 7507
+    assert df["start"].dtype == "int64"
+    assert isinstance(df["seqname"].dtype, pd.CategoricalDtype)
+    # Only attributes downstream code reads; gene_type is absent from this GTF
+    assert "gene_biotype" in df.columns
+    assert "gene_type" not in df.columns
+    assert "gene_source" not in df.columns
+    assert "source" not in df.columns
+
+
+GTF_LINES = [
+    "#!genome-build test",
+    'chr1\tsrc\tgene\t100\t500\t.\t+\t.\tgene_id "G1"; gene_name "ONE"; gene_type "rRNA";',
+    'chr1\tsrc\ttranscript\t100\t500\t.\t+\t.\tgene_id "G1"; transcript_id "T1"; gene_name "ONE";',
+    'chr1\tsrc\texon\t100\t200\t.\t+\t.\tgene_id "G1"; transcript_id "T1"; exon_number "1";',
+    'chr1\tsrc\tCDS\t120\t200\t.\t+\t0\tgene_id "G1"; transcript_id "T1";',
+    'chr2\tsrc\tgene\t10\t50\t.\t-\t.\tgene_id "G2"; gene_type "lncRNA";',
+    "malformed line",
+]
+
+
+def _write_gtf(tmp_path):
+    path = tmp_path / "small.gtf"
+    path.write_text("\n".join(GTF_LINES) + "\n")
+    return str(path)
+
+
+def test_prepare_annotations_keeps_features_and_attributes(task_prepare, tmp_path):
+    out = str(tmp_path / "small.gtf.parq")
+    task_prepare.prepare_gtf_file(_write_gtf(tmp_path), out)
+    df = pd.read_parquet(out)
+
+    assert list(df["feature"]) == ["gene", "transcript", "exon", "gene"]
+    assert list(df["start"]) == [100, 100, 100, 10]
+    assert df["gene_type"].tolist()[::3] == ["rRNA", "lncRNA"]
+    assert df["gene_type"].isna().tolist() == [False, True, True, False]
+    assert df["gene_name"].isna().tolist() == [False, False, True, True]
+    assert df.loc[2, "exon_number"] == "1"
+    # gene_biotype never appears, so the column is dropped like a full parse would
+    assert "gene_biotype" not in df.columns
+
+
+def test_prepare_annotations_chunking_is_transparent(task_prepare, tmp_path):
+    gtf = _write_gtf(tmp_path)
+    whole = str(tmp_path / "whole.parq")
+    chunked = str(tmp_path / "chunked.parq")
+    task_prepare.prepare_gtf_file(gtf, whole)
+    task_prepare.prepare_gtf_file(gtf, chunked, chunk_size=1)
+    pd.testing.assert_frame_equal(pd.read_parquet(whole), pd.read_parquet(chunked))
+
+
+def test_prepare_annotations_empty_gtf(task_prepare, tmp_path):
+    gtf = tmp_path / "empty.gtf"
+    gtf.write_text("#!only a header\n")
+    out = str(tmp_path / "empty.parq")
+    task_prepare.prepare_gtf_file(str(gtf), out)
+    df = pd.read_parquet(out)
+    assert df.empty
+    assert "feature" in df.columns
+
+
+def test_read_annotation_skips_missing_columns(tmp_path):
+    path = str(tmp_path / "a.parq")
+    pd.DataFrame({"feature": ["gene"], "gene_biotype": ["rRNA"], "extra": [1]}).to_parquet(path)
+
+    df = read_annotation(path, ["feature", "gene_biotype", "gene_type"])
+    assert list(df.columns) == ["feature", "gene_biotype"]
+    assert list(read_annotation(path).columns) == ["feature", "gene_biotype", "extra"]
 
 
 class TestBuildBowtieIndexOutput:

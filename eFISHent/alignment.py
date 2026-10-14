@@ -15,7 +15,7 @@ import pysam
 from . import constants, util
 from .basic_filtering import BasicFiltering, compute_off_target_tm
 from .config import GeneralConfig, ProbeConfig, SequenceConfig
-from .indexing import BuildBowtie2Index, BuildBowtieIndex
+from .indexing import BuildBowtie2Index, BuildBowtieIndex, read_annotation
 from .rdna_filter import FilterRibosomalRNA
 
 
@@ -125,7 +125,7 @@ class AlignProbeCandidates(luigi.Task):
     @property
     def gtf_table(self) -> pd.DataFrame:
         """Parse prepared parquet-formatted gtf file."""
-        return pd.read_parquet(self.fname_gtf)[constants.GTF_COLUMNS]
+        return read_annotation(self.fname_gtf, constants.GTF_COLUMNS)[constants.GTF_COLUMNS]
 
     @property
     def norm_table(self) -> pd.DataFrame:
@@ -489,7 +489,10 @@ class AlignProbeCandidates(luigi.Task):
         Any probe with at least one rRNA hit is vetoed entirely.
         """
         self.fname_gtf = self.input()["annotation"].path
-        gtf_full = pd.read_parquet(self.fname_gtf)
+        gtf_full = read_annotation(
+            self.fname_gtf,
+            ["seqname", "start", "end", "feature", "gene_biotype", "gene_type"],
+        )
 
         # Find the biotype column (differs between Ensembl/GENCODE)
         biotype_col = None
@@ -584,7 +587,10 @@ class AlignProbeCandidates(luigi.Task):
         pseudogene-rich genes (e.g. ACTB, GAPDH) from losing all probes.
         """
         self.fname_gtf = self.input()["annotation"].path
-        gtf_full = pd.read_parquet(self.fname_gtf)
+        gtf_full = read_annotation(
+            self.fname_gtf,
+            ["seqname", "start", "end", "feature", "gene_biotype", "gene_type"],
+        )
 
         # Find the biotype column (Ensembl: gene_biotype, GENCODE: gene_type)
         biotype_col = None
