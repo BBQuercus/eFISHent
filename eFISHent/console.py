@@ -85,6 +85,61 @@ def _format_elapsed(seconds: float) -> str:
 _SPINNER_FRAMES = "\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f"
 
 
+def _step_row_style(step: dict, spinner_char: str) -> tuple[str, str, str, str]:
+    """Return (icon, elapsed, name_style, result_style) for a pipeline step."""
+    status = step["status"]
+    if status == "done":
+        return "[green]\u2714[/green]", step.get("elapsed", ""), "dim", "dim"
+    if status == "running":
+        # Compute elapsed live
+        elapsed = _format_elapsed(time.time() - step["start_time"])
+        return f"[cyan]{spinner_char}[/cyan]", elapsed, "bold", "cyan"
+    return " ", "", "dim", "dim"
+
+
+def _add_step_rows(table: Table, step: dict, spinner_char: str) -> None:
+    """Add a pipeline step (and its transient status, if running) to the table."""
+    name = step["name"]
+    result = step.get("result", "")
+    icon, elapsed, name_style, result_style = _step_row_style(step, spinner_char)
+
+    table.add_row(
+        icon,
+        f"[{name_style}]{name}[/{name_style}]",
+        "",
+        f"[{result_style}]{result}[/{result_style}]" if result else "",
+        f"[dim]{elapsed}[/dim]" if elapsed else "",
+    )
+
+    # Show transient status under the running step
+    if step["status"] == "running" and _step_status:
+        table.add_row(
+            "",
+            f"  [cyan]{spinner_char}[/cyan] [dim]{_step_status}[/dim]",
+            "",
+            "",
+            "",
+        )
+
+
+def _add_total_elapsed_rows(table: Table) -> None:
+    """Add the total elapsed time since the first step to the bottom of the table."""
+    if not _steps:
+        return
+    first_start = _steps[0].get("start_time")
+    if first_start is None:
+        return
+    total = _format_elapsed(time.time() - first_start)
+    table.add_row("", "", "", "", "")
+    table.add_row(
+        "",
+        "",
+        "",
+        f"[dim]{total} elapsed[/dim]",
+        "",
+    )
+
+
 class _PipelineDisplay:
     """Dynamic renderable that rebuilds on every Rich render cycle.
 
@@ -114,45 +169,8 @@ class _PipelineDisplay:
 
         has_running = False
         for step in _steps:
-            status = step["status"]
-            name = step["name"]
-            result = step.get("result", "")
-
-            if status == "done":
-                icon = "[green]\u2714[/green]"
-                elapsed = step.get("elapsed", "")
-                name_style = "dim"
-                result_style = "dim"
-            elif status == "running":
-                has_running = True
-                icon = f"[cyan]{spinner_char}[/cyan]"
-                # Compute elapsed live
-                elapsed = _format_elapsed(time.time() - step["start_time"])
-                name_style = "bold"
-                result_style = "cyan"
-            else:
-                icon = " "
-                elapsed = ""
-                name_style = "dim"
-                result_style = "dim"
-
-            table.add_row(
-                icon,
-                f"[{name_style}]{name}[/{name_style}]",
-                "",
-                f"[{result_style}]{result}[/{result_style}]" if result else "",
-                f"[dim]{elapsed}[/dim]" if elapsed else "",
-            )
-
-            # Show transient status under the running step
-            if status == "running" and _step_status:
-                table.add_row(
-                    "",
-                    f"  [cyan]{spinner_char}[/cyan] [dim]{_step_status}[/dim]",
-                    "",
-                    "",
-                    "",
-                )
+            has_running = has_running or step["status"] == "running"
+            _add_step_rows(table, step, spinner_char)
 
         # Show status line when no step is running (e.g. dependency tasks)
         if not has_running and _step_status:
@@ -164,19 +182,7 @@ class _PipelineDisplay:
                 "",
             )
 
-        # Total elapsed at the bottom
-        if _steps:
-            first_start = _steps[0].get("start_time")
-            if first_start is not None:
-                total = _format_elapsed(time.time() - first_start)
-                table.add_row("", "", "", "", "")
-                table.add_row(
-                    "",
-                    "",
-                    "",
-                    f"[dim]{total} elapsed[/dim]",
-                    "",
-                )
+        _add_total_elapsed_rows(table)
 
         yield table
 
@@ -254,100 +260,29 @@ def print_completion(
     if _silent_mode:
         return
 
-
     from rich.rule import Rule
 
     console.print()
     console.print(Rule("[success]Design Complete[/success]", style="green"))
 
     # 1. Filtering funnel
-    funnel_table = _build_funnel_table()
-    if funnel_table is not None:
-        console.print()
-        console.print("  [bold]Filtering Funnel[/bold]")
-        console.print(funnel_table)
+    _print_funnel_section()
+
+    has_probes = probe_df is not None and len(probe_df) > 0
 
     # 2. Coverage map
-    if probe_df is not None and summary and len(probe_df) > 0:
-        gene_length = summary.get("gene_length", 0)
-        coverage_pct = summary.get("coverage_pct", 0.0)
-        coverage_map = _build_coverage_map(probe_df, gene_length, coverage_pct)
-        if coverage_map is not None:
-            console.print()
-            console.print(coverage_map)
+    if has_probes and summary:
+        _print_coverage_section(probe_df, summary)
 
     # 3. Probe table
-    if probe_df is not None and len(probe_df) > 0:
-        probe_table = _build_probe_table(probe_df, show_title=False)
+    if has_probes:
         console.print()
-        console.print(probe_table)
+        console.print(_build_probe_table(probe_df, show_title=False))
 
     # 4. Summary stats
     if summary:
         console.print()
-        stats_table = Table(
-            show_header=False, box=None, padding=(0, 1), show_edge=False
-        )
-        stats_table.add_column("Label", style="bold", no_wrap=True)
-        stats_table.add_column("Value")
-
-        if summary.get("gene_name"):
-            stats_table.add_row("Gene:", summary["gene_name"])
-        if summary.get("probe_count") is not None:
-            count_str = f"{summary['probe_count']}"
-            if summary.get("initial_count"):
-                count_str += f" selected from {summary['initial_count']:,} candidates"
-            stats_table.add_row("Probes:", count_str)
-        if summary.get("coverage_pct") is not None:
-            gene_len = summary.get("gene_length", 0)
-            cov_str = f"{summary['coverage_pct']:.1f}%"
-            if gene_len:
-                cov_str += f" of {gene_len:,} nt"
-            stats_table.add_row("Coverage:", cov_str)
-        if summary.get("length_range"):
-            lo, hi = summary["length_range"]
-            med = summary.get("length_median", "")
-            med_str = f" (median {med})" if med else ""
-            stats_table.add_row("Length:", f"{lo}-{hi} nt{med_str}")
-        if summary.get("tm_range"):
-            lo, hi = summary["tm_range"]
-            med = summary.get("tm_median", "")
-            med_str = f" (median {med:.1f}\u00b0C)" if med else ""
-            tm_std = summary.get("tm_std")
-            if tm_std is not None:
-                med_str += f", \u03c3 {tm_std:.1f}\u00b0C"
-            stats_table.add_row("TM range:", f"{lo:.1f}-{hi:.1f}\u00b0C{med_str}")
-        if summary.get("gc_range"):
-            lo, hi = summary["gc_range"]
-            med = summary.get("gc_median", "")
-            med_str = f" (median {med:.1f}%)" if med else ""
-            stats_table.add_row("GC range:", f"{lo:.1f}-{hi:.1f}%{med_str}")
-
-        # Recommendation breakdown from probe data
-        if probe_df is not None and "recommendation" in probe_df.columns:
-            counts = probe_df["recommendation"].value_counts()
-            parts = []
-            for label in ("PASS", "FLAG", "FAIL"):
-                n = counts.get(label, 0)
-                if n > 0:
-                    style = {"PASS": "green", "FLAG": "yellow", "FAIL": "red"}[label]
-                    parts.append(f"[{style}]{n} {label}[/{style}]")
-            if parts:
-                stats_table.add_row("Quality:", ", ".join(parts))
-
-        # Off-target summary from probe data
-        if probe_df is not None and "txome_off_targets" in probe_df.columns:
-            total_ot = int(probe_df["txome_off_targets"].sum())
-            probes_with_ot = int((probe_df["txome_off_targets"] > 0).sum())
-            if probes_with_ot > 0:
-                stats_table.add_row(
-                    "Off-targets:",
-                    f"{probes_with_ot}/{len(probe_df)} probes have transcriptome off-targets ({total_ot} total)",
-                )
-            else:
-                stats_table.add_row("Off-targets:", "[green]none detected[/green]")
-
-        console.print(stats_table)
+        console.print(_build_stats_table(summary, probe_df))
 
     # 5. BLAST verification
     if verification:
@@ -356,15 +291,157 @@ def print_completion(
 
     # 6. Output files
     if output_files:
-        console.print()
-        console.print("  [bold]Output[/bold]")
-        for path in output_files:
-            console.print(f"    [dim]\u2192[/dim] {path}")
+        _print_output_files(output_files)
 
     # 7. Duration + closing rule
     console.print()
     console.print(f"  [dim]Completed in {duration}[/dim]")
     console.print(Rule(style="green"))
+
+
+def _print_funnel_section() -> None:
+    """Print the filtering funnel section of the completion panel, if any."""
+    funnel_table = _build_funnel_table()
+    if funnel_table is None:
+        return
+    console.print()
+    console.print("  [bold]Filtering Funnel[/bold]")
+    console.print(funnel_table)
+
+
+def _print_coverage_section(probe_df: pd.DataFrame, summary: dict) -> None:
+    """Print the coverage map section of the completion panel, if any."""
+    gene_length = summary.get("gene_length", 0)
+    coverage_pct = summary.get("coverage_pct", 0.0)
+    coverage_map = _build_coverage_map(probe_df, gene_length, coverage_pct)
+    if coverage_map is None:
+        return
+    console.print()
+    console.print(coverage_map)
+
+
+def _print_output_files(output_files: list[str]) -> None:
+    """Print the list of output files."""
+    console.print()
+    console.print("  [bold]Output[/bold]")
+    for path in output_files:
+        console.print(f"    [dim]\u2192[/dim] {path}")
+
+
+def _format_gene_stat(summary: dict) -> str | None:
+    """Format the gene name summary row."""
+    return summary.get("gene_name") or None
+
+
+def _format_probe_count_stat(summary: dict) -> str | None:
+    """Format the probe count summary row."""
+    if summary.get("probe_count") is None:
+        return None
+    count_str = f"{summary['probe_count']}"
+    if summary.get("initial_count"):
+        count_str += f" selected from {summary['initial_count']:,} candidates"
+    return count_str
+
+
+def _format_coverage_stat(summary: dict) -> str | None:
+    """Format the coverage summary row."""
+    if summary.get("coverage_pct") is None:
+        return None
+    gene_len = summary.get("gene_length", 0)
+    cov_str = f"{summary['coverage_pct']:.1f}%"
+    if gene_len:
+        cov_str += f" of {gene_len:,} nt"
+    return cov_str
+
+
+def _format_length_stat(summary: dict) -> str | None:
+    """Format the probe length summary row."""
+    if not summary.get("length_range"):
+        return None
+    lo, hi = summary["length_range"]
+    med = summary.get("length_median", "")
+    med_str = f" (median {med})" if med else ""
+    return f"{lo}-{hi} nt{med_str}"
+
+
+def _format_tm_stat(summary: dict) -> str | None:
+    """Format the melting temperature summary row."""
+    if not summary.get("tm_range"):
+        return None
+    lo, hi = summary["tm_range"]
+    med = summary.get("tm_median", "")
+    med_str = f" (median {med:.1f}\u00b0C)" if med else ""
+    tm_std = summary.get("tm_std")
+    if tm_std is not None:
+        med_str += f", \u03c3 {tm_std:.1f}\u00b0C"
+    return f"{lo:.1f}-{hi:.1f}\u00b0C{med_str}"
+
+
+def _format_gc_stat(summary: dict) -> str | None:
+    """Format the GC content summary row."""
+    if not summary.get("gc_range"):
+        return None
+    lo, hi = summary["gc_range"]
+    med = summary.get("gc_median", "")
+    med_str = f" (median {med:.1f}%)" if med else ""
+    return f"{lo:.1f}-{hi:.1f}%{med_str}"
+
+
+# Summary stat rows: (label, formatter returning the value or None to skip)
+_SUMMARY_STAT_ROWS = (
+    ("Gene:", _format_gene_stat),
+    ("Probes:", _format_probe_count_stat),
+    ("Coverage:", _format_coverage_stat),
+    ("Length:", _format_length_stat),
+    ("TM range:", _format_tm_stat),
+    ("GC range:", _format_gc_stat),
+)
+
+_RECOMMENDATION_STYLES = {"PASS": "green", "FLAG": "yellow", "FAIL": "red"}
+
+
+def _format_recommendation_breakdown(probe_df: pd.DataFrame) -> str | None:
+    """Summarize PASS/FLAG/FAIL recommendation counts from probe data."""
+    if "recommendation" not in probe_df.columns:
+        return None
+    counts = probe_df["recommendation"].value_counts()
+    parts = []
+    for label, style in _RECOMMENDATION_STYLES.items():
+        n = counts.get(label, 0)
+        if n > 0:
+            parts.append(f"[{style}]{n} {label}[/{style}]")
+    return ", ".join(parts) if parts else None
+
+
+def _format_off_target_summary(probe_df: pd.DataFrame) -> str | None:
+    """Summarize transcriptome off-targets from probe data."""
+    if "txome_off_targets" not in probe_df.columns:
+        return None
+    total_ot = int(probe_df["txome_off_targets"].sum())
+    probes_with_ot = int((probe_df["txome_off_targets"] > 0).sum())
+    if probes_with_ot > 0:
+        return f"{probes_with_ot}/{len(probe_df)} probes have transcriptome off-targets ({total_ot} total)"
+    return "[green]none detected[/green]"
+
+
+def _build_stats_table(summary: dict, probe_df: pd.DataFrame | None) -> Table:
+    """Build the summary statistics table of the completion panel."""
+    stats_table = Table(
+        show_header=False, box=None, padding=(0, 1), show_edge=False
+    )
+    stats_table.add_column("Label", style="bold", no_wrap=True)
+    stats_table.add_column("Value")
+
+    rows = [(label, formatter(summary)) for label, formatter in _SUMMARY_STAT_ROWS]
+    if probe_df is not None:
+        # Recommendation breakdown and off-target summary from probe data
+        rows.append(("Quality:", _format_recommendation_breakdown(probe_df)))
+        rows.append(("Off-targets:", _format_off_target_summary(probe_df)))
+
+    for label, value in rows:
+        if value is not None:
+            stats_table.add_row(label, value)
+    return stats_table
 
 
 # Short labels for funnel display
