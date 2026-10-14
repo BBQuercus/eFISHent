@@ -110,3 +110,11 @@ set.ignored = true
 [[triage]]
 match.rules = ["bandit:B404", "bandit:B603", "bandit:B607"]
 set.ignored = true
+
+# Pre-built genome indices are versioned on the Hugging Face Hub and follow
+# the dataset's main branch on purpose, so new or rebuilt indices reach users
+# without a code release. bandit only accepts a commit hash as revision.
+[[triage]]
+match.rules = ["bandit:B615"]
+match.file_patterns = ["eFISHent/prebuilt.py"]
+set.ignored = true
