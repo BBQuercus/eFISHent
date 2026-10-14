@@ -14,12 +14,73 @@ import subprocess
 import tempfile
 from concurrent.futures import ProcessPoolExecutor
 
+import Bio.Seq
 import Bio.SeqIO
 import luigi
+import numpy as np
 import pandas as pd
 
 from . import util
 from .config import GeneralConfig, ProbeConfig
+
+# Sensitivity settings shared by the filter and the final-probe report.
+# With fewer reported targets, short perfect matches (e.g. 16 nt, e~1) outrank
+# the 18+ nt one-mismatch hits (e~14) that the off-target rule counts and push
+# them out of the result, so qualifying off-targets go unseen. Values follow
+# TrueProbes (Neuert Lab, 2025): word 7, evalue 1000, 1000 alignments.
+BLAST_EVALUE = "1000"
+BLAST_MAX_TARGETS = "1000"
+
+
+def antisense_hits(df_blast: pd.DataFrame) -> pd.DataFrame:
+    """Keep hits where the probe is complementary to the transcript.
+
+    The transcriptome FASTA is in transcript (sense) orientation and probes are
+    reverse complements of their target, so a probe can only hybridize to a
+    transcript it aligns to plus/minus (sstart > send). A plus/plus hit means
+    the probe has the transcript's own sequence (e.g. an antisense RNA
+    overlapping the target) and binds only its absent complement.
+    """
+    return df_blast[df_blast["sstart"] > df_blast["send"]]
+
+
+# Hybridization temperature the off-target burden is scored against. Probe Tms
+# are formamide-corrected, so this is the actual incubation temperature.
+HYBRIDIZATION_TEMP = 37.0
+# Shortest hit that counts towards the burden (TrueProbes ignores < 15 nt).
+MIN_BURDEN_MATCH_LENGTH = 15
+
+
+def hit_melting_temps(
+    df: pd.DataFrame,
+    probe_seqs: dict[str, str],
+    na_concentration: float,
+    formamide_concentration: float,
+) -> np.ndarray:
+    """Predict the duplex Tm of each BLAST hit.
+
+    Tm of the matched probe segment (qstart..qend) as a perfect RNA/DNA
+    hybrid, minus 2.5 °C per mismatch or gap (as compute_off_target_tm).
+    Segment Tms are cached, since most hits share a few segments.
+    """
+    from .basic_filtering import get_melting_temp
+
+    cache: dict[tuple[str, int, int], float] = {}
+    tms = np.empty(len(df))
+    rows = zip(df["qseqid"], df["qstart"], df["qend"], df["mismatch"], df["gapopen"])
+    for i, (probe, qstart, qend, mismatch, gaps) in enumerate(rows):
+        key = (probe, int(qstart), int(qend))
+        if key not in cache:
+            lo, hi = sorted((key[1], key[2]))
+            segment = Bio.Seq.Seq(probe_seqs[probe][lo - 1 : hi])
+            cache[key] = get_melting_temp(segment, na_concentration, formamide_concentration)
+        tms[i] = cache[key] - 2.5 * (mismatch + gaps)
+    return tms
+
+
+def binding_weight(tm: np.ndarray, temperature: float = HYBRIDIZATION_TEMP) -> np.ndarray:
+    """Logistic estimate (0-1) that a duplex with this Tm is bound at temperature."""
+    return 1.0 / (1.0 + np.exp(-(np.asarray(tm, dtype=float) - temperature) / 2.0))
 
 
 def _run_blast_chunk(args):
@@ -80,6 +141,12 @@ class TranscriptomeFiltering(luigi.Task):
                     f"{util.get_gene_name()}_txome_hits.csv",
                 )
             ),
+            "burden": luigi.LocalTarget(
+                os.path.join(
+                    util.get_output_dir(),
+                    f"{util.get_gene_name()}_txome_burden.csv",
+                )
+            ),
         }
 
     @staticmethod
@@ -90,14 +157,14 @@ class TranscriptomeFiltering(luigi.Task):
             "-task", task,
             "-query", query,
             "-db", db,
-            "-evalue", "100",
+            "-evalue", BLAST_EVALUE,
             "-word_size", "7",
             "-gapopen", "5",
             "-gapextend", "2",
             "-reward", "1",
             "-penalty", "-3",
             "-dust", "no",
-            "-max_target_seqs", "50",
+            "-max_target_seqs", BLAST_MAX_TARGETS,
             "-perc_identity", str(perc_identity),
             "-num_threads", str(threads),
             "-outfmt", "6 qseqid sseqid pident length mismatch gapopen "
@@ -199,6 +266,7 @@ class TranscriptomeFiltering(luigi.Task):
             df_blast = pd.read_csv(blast_out, sep="\t", header=None, names=columns)
         else:
             df_blast = pd.DataFrame(columns=columns)
+        df_blast = antisense_hits(df_blast)
 
         # Post-BLAST filtering (per TrueProbes approach):
         # effective match length = alignment length - gaps
@@ -238,6 +306,7 @@ class TranscriptomeFiltering(luigi.Task):
 
         # Build transcript-to-gene mapping from GTF if available
         self_transcript_ids = set()
+        tx_map: dict[str, str] = {}
         gtf_path = GeneralConfig().reference_annotation
         if gtf_path:
             try:
@@ -315,6 +384,44 @@ class TranscriptomeFiltering(luigi.Task):
                             or sid_lower in self_transcript_ids
                             or base in self_transcript_ids
                         )
+
+        # Off-target hits >= 15 nt with their predicted duplex Tm. Self-hit
+        # status is resolved once per subject, not per BLAST row.
+        self_subjects = {sid: is_self_hit(sid) for sid in df_blast["sseqid"].unique()}
+        df_ot = df_blast[
+            (df_blast["effective_len"] >= MIN_BURDEN_MATCH_LENGTH)
+            & ~df_blast["sseqid"].map(self_subjects).astype(bool)
+        ].copy()
+        probe_seqs = {seq.id: str(seq.seq) for seq in sequences}
+        df_ot["tm"] = hit_melting_temps(
+            df_ot, probe_seqs, config.na_concentration, config.formamide_concentration
+        )
+        df_ot["gene"] = [
+            tx_map.get(sid, tx_map.get(sid.split(".")[0], sid)) for sid in df_ot["sseqid"]
+        ]
+
+        # Burden: per off-target gene, the likeliest-bound hit; summed over genes.
+        df_ot["weight"] = binding_weight(df_ot["tm"].values)
+        burden = (
+            df_ot.groupby(["qseqid", "gene"])["weight"].max().groupby("qseqid").sum()
+        )
+        pd.DataFrame(
+            {"name": [seq.id for seq in sequences]}
+        ).assign(
+            burden=lambda d: d["name"].map(burden).fillna(0.0).round(4)
+        ).to_csv(self.output()["burden"].path, index=False)
+
+        # Thermodynamic gate: with --off-target-min-tm, hits that cannot form
+        # a stable duplex don't count towards max_transcriptome_off_targets.
+        if config.off_target_min_tm > 0:
+            weak = df_ot.index[df_ot["tm"] < config.off_target_min_tm]
+            if len(weak):
+                n_before = df_hits["qseqid"].nunique()
+                df_hits = df_hits.drop(index=df_hits.index.intersection(weak))
+                self.logger.debug(
+                    f"Ignored off-target hits with Tm < {config.off_target_min_tm} °C "
+                    f"({n_before} -> {df_hits['qseqid'].nunique()} probes with counted hits)"
+                )
 
         off_target_counts = {}
         for probe_id, group in df_hits.groupby("qseqid"):

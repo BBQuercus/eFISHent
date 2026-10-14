@@ -297,6 +297,11 @@ class CleanUpOutput(luigi.Task):
             return None
 
         from .console import spinner
+        from .transcriptome_filter import (
+            BLAST_EVALUE,
+            BLAST_MAX_TARGETS,
+            antisense_hits,
+        )
 
         try:
             # Write final probes to temp FASTA
@@ -319,12 +324,12 @@ class CleanUpOutput(luigi.Task):
                 "blastn", "-task", blast_task,
                 "-query", tmp_fasta,
                 "-db", txome_db,
-                "-evalue", "100",
+                "-evalue", BLAST_EVALUE,
                 "-word_size", "7",
                 "-gapopen", "5", "-gapextend", "2",
                 "-reward", "1", "-penalty", "-3",
                 "-dust", "no",
-                "-max_target_seqs", "50",
+                "-max_target_seqs", BLAST_MAX_TARGETS,
                 "-perc_identity", str(perc_identity),
                 "-num_threads", str(GeneralConfig().threads),
                 "-outfmt", "6 qseqid sseqid pident length mismatch gapopen "
@@ -352,7 +357,7 @@ class CleanUpOutput(luigi.Task):
                 df_blast = pd.read_csv(
                     blast_out, sep="\t", header=None, names=columns
                 )
-                df_blast.to_csv(hits_csv, index=False)
+                antisense_hits(df_blast).to_csv(hits_csv, index=False)
             else:
                 pd.DataFrame(columns=columns).to_csv(hits_csv, index=False)
 

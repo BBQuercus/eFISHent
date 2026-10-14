@@ -18,7 +18,7 @@ import pandas as pd
 import pyomo.environ as pe
 
 from . import util
-from .config import GeneralConfig, ProbeConfig, RunConfig
+from .config import GeneralConfig, ProbeConfig, RunConfig, SequenceConfig
 from .secondary_structure import SecondaryStructureFiltering
 
 
@@ -75,6 +75,37 @@ class OptimizeProbeCoverage(luigi.Task):
         """Run sequential greedy model."""
         return greedy_model(self.df)
 
+    def screen_genome_hits(
+        self, sequences: list[Bio.SeqRecord.SeqRecord], fasta_path: str
+    ) -> list[Bio.SeqRecord.SeqRecord]:
+        """Drop exogenous candidates that the final genome BLAST check rejects.
+
+        CleanUpOutput removes final probes with any near-full-length genomic
+        hit. Running that same check on all candidates here lets the optimizer
+        fill those positions with clean probes instead of leaving gaps.
+        """
+        verification = self._genome_verification(fasta_path)
+        if not verification or not verification["flagged"]:
+            return sequences
+        flagged = set(verification["flagged"])
+        if len(flagged) == len(sequences):
+            self.logger.warning(
+                "Every candidate has a genomic BLAST hit; keeping them for optimization."
+            )
+            return sequences
+        self.logger.info(
+            f"Genome BLAST screen removed {len(flagged)}/{len(sequences)} "
+            "candidates with genomic hits"
+        )
+        return [seq for seq in sequences if seq.id not in flagged]
+
+    @staticmethod
+    def _genome_verification(fasta_path: str) -> dict | None:
+        """CleanUpOutput's genome BLAST check on a candidate FASTA."""
+        from .cleanup import CleanUpOutput
+
+        return CleanUpOutput()._run_blast_verification(fasta_path)
+
     def filter_binding_probes(
         self, assigned: list[str], match_percentage: float
     ) -> list[str]:
@@ -105,8 +136,16 @@ class OptimizeProbeCoverage(luigi.Task):
         inp = self.input()
         fasta_path = inp["fasta"].path if isinstance(inp, dict) else inp.path
         sequences = list(Bio.SeqIO.parse(fasta_path, "fasta"))
+        if not SequenceConfig().is_endogenous:
+            sequences = self.screen_genome_hits(sequences, fasta_path)
         self.df = util.create_data_table(sequences)
         self.df["end"] += ProbeConfig().spacing
+
+        # Off-target burden from TranscriptomeFiltering ranks otherwise-equal probes
+        burden_target = inp.get("burden") if isinstance(inp, dict) else None
+        if burden_target is not None and burden_target.exists():
+            burden = pd.read_csv(burden_target.path).set_index("name")["burden"]
+            self.df["_burden"] = self.df["name"].map(burden).fillna(0.0)
 
         # Compute accessibility scores for optimization weighting (not filtering)
         if ProbeConfig().accessibility_scoring:
@@ -498,37 +537,68 @@ def compute_pre_optimization_quality(df: pd.DataFrame) -> pd.Series:
     return scores
 
 
-def greedy_model(df: pd.DataFrame) -> list[str]:
-    """Run the greedy/fast model.
+def cleanliness(df: pd.DataFrame) -> pd.Series:
+    """Off-target cleanliness in [0, 1]: 1 for the lowest burden, 0 for the highest.
 
-    Probes are sorted by start position, then by quality (highest first).
-    At each position, the highest-quality non-overlapping probe is selected.
+    Based on the burden rank among the candidates, because absolute burdens
+    are dominated by chance 15-16 nt matches and differ a lot between genes.
+    1 everywhere when no burden is known.
     """
-    # Add quality scores for ranking
+    if "_burden" not in df or len(df) < 2 or df["_burden"].nunique() < 2:
+        return pd.Series(1.0, index=df.index)
+    rank = df["_burden"].rank(method="average")
+    return 1.0 - (rank - rank.min()) / (rank.max() - rank.min())
+
+
+def selection_weights(df: pd.DataFrame) -> pd.Series:
+    """Per-probe weight for selection: probe count first, then specificity, then quality.
+
+    Every probe is worth 1, plus up to 0.5 for off-target cleanliness and up
+    to 0.25 for sequence quality (``_quality``). Because the bonus never
+    exceeds 0.75, two probes always outweigh one, so the set is never shrunk
+    for cleanliness; among arrangements with the same probe count the
+    cleanest, best-quality one wins (TrueProbes-style: specific probes first).
+    """
+    quality = df["_quality"] if "_quality" in df else compute_pre_optimization_quality(df)
+    return 1.0 + 0.5 * cleanliness(df) + 0.25 * quality
+
+
+def greedy_model(df: pd.DataFrame) -> list[str]:
+    """Select non-overlapping probes with the highest total weight.
+
+    Exact weighted interval scheduling (dynamic programming over probes
+    sorted by end, O(n log n)), using selection_weights(). Despite the name
+    kept for the CLI option, the result is optimal for these weights; the
+    previous left-to-right pass picked whichever probe started first.
+    """
+    if df.empty:
+        return []
     df = df.copy()
     df["_quality"] = compute_pre_optimization_quality(df)
+    weights = selection_weights(df).to_numpy(dtype=float)
 
-    df_sorted = df.sort_values(
-        ["start", "_quality", "length"], ascending=[True, False, False]
-    ).reset_index(drop=True)
-    rec_array = df_sorted[["start", "end"]].to_records(index=False)
-    probes = df_sorted["name"].values
+    order = np.lexsort((df["start"].to_numpy(), df["end"].to_numpy()))
+    starts = df["start"].to_numpy()[order]
+    ends = df["end"].to_numpy()[order]
+    weights = weights[order]
+    names = df["name"].to_numpy()[order]
 
-    # Assign non-overlapping probes greedily
+    # Probes overlap when start <= other end (is_overlapping), so probe i can
+    # follow the first previous[i] probes in end order.
+    previous = np.searchsorted(ends, starts, side="left")
+    best = np.zeros(len(df) + 1)
+    for i in range(len(df)):
+        best[i + 1] = max(best[i], weights[i] + best[previous[i]])
+
     assigned = []
-    assigned_intervals = []
-
-    for idx, probe in enumerate(probes):
-        start, end = rec_array[idx]
-        # Check if probe overlaps with ANY already assigned probe
-        if all(
-            not is_overlapping((start, end), interval)
-            for interval in assigned_intervals
-        ):
-            assigned.append(probe)
-            assigned_intervals.append((start, end))
-
-    return assigned
+    i = len(df)
+    while i > 0:
+        if weights[i - 1] + best[previous[i - 1]] > best[i - 1]:
+            assigned.append(names[i - 1])
+            i = previous[i - 1]
+        else:
+            i -= 1
+    return assigned[::-1]
 
 
 def optimal_model(df: pd.DataFrame, time_limit: int) -> list[str]:
@@ -537,8 +607,9 @@ def optimal_model(df: pd.DataFrame, time_limit: int) -> list[str]:
     Maximizes coverage weighted by probe quality: max Σ quality[p] * covered[p,s].
     This prefers higher-quality probes when coverage is equal.
     """
-    # Compute quality weights
+    # Compute quality weights, discounted by off-target burden if known
     quality_weights = compute_pre_optimization_quality(df)
+    quality_weights = quality_weights * (0.5 + 0.5 * cleanliness(df))
     quality_map = dict(zip(df["name"].values, quality_weights.values))
 
     # Convert dataframe to usable model inputs
