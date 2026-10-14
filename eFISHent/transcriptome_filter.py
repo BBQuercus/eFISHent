@@ -23,7 +23,6 @@ import pandas as pd
 from . import util
 from .config import GeneralConfig, ProbeConfig
 
-
 # Sensitivity settings shared by the filter and the final-probe report.
 # With fewer reported targets, short perfect matches (e.g. 16 nt, e~1) outrank
 # the 18+ nt one-mismatch hits (e~14) that the off-target rule counts and push

@@ -1,7 +1,6 @@
 import os
 import shutil
 import tempfile
-import pytest
 
 import Bio.Seq
 import Bio.SeqIO

@@ -297,7 +297,11 @@ class CleanUpOutput(luigi.Task):
             return None
 
         from .console import spinner
-        from .transcriptome_filter import BLAST_EVALUE, BLAST_MAX_TARGETS, antisense_hits
+        from .transcriptome_filter import (
+            BLAST_EVALUE,
+            BLAST_MAX_TARGETS,
+            antisense_hits,
+        )
 
         try:
             # Write final probes to temp FASTA
