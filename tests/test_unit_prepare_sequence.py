@@ -359,7 +359,7 @@ class TestRegionSelection:
         exons = [(0, 10), (20, 30)]
 
         with patch.object(task, "_extract_exon_boundaries", return_value=exons), \
-             patch("eFISHent.prepare_sequence.GeneralConfig") as mock_gc:
+             patch("eFISHent.region_selection.GeneralConfig") as mock_gc:
             mock_gc.return_value.reference_annotation = "/fake/annotation.gtf"
             mock_gc.return_value.reference_genome = "/fake/genome.fa"
             result = task._apply_region_selection(seq, "intron", "TP53")
@@ -373,7 +373,7 @@ class TestRegionSelection:
         exons = [(0, 16)]  # Single exon covering full length
 
         with patch.object(task, "_extract_exon_boundaries", return_value=exons), \
-             patch("eFISHent.prepare_sequence.GeneralConfig") as mock_gc:
+             patch("eFISHent.region_selection.GeneralConfig") as mock_gc:
             mock_gc.return_value.reference_annotation = "/fake/annotation.gtf"
             mock_gc.return_value.reference_genome = "/fake/genome.fa"
             result = task._apply_region_selection(seq, "intron", "TP53")
@@ -387,7 +387,7 @@ class TestRegionSelection:
         exons = [(0, 4), (8, 12)]
 
         with patch.object(task, "_extract_exon_boundaries", return_value=exons), \
-             patch("eFISHent.prepare_sequence.GeneralConfig") as mock_gc:
+             patch("eFISHent.region_selection.GeneralConfig") as mock_gc:
             mock_gc.return_value.reference_annotation = "/fake/annotation.gtf"
             mock_gc.return_value.reference_genome = "/fake/genome.fa"
             result = task._apply_region_selection(seq, "both", "TP53")
@@ -399,7 +399,7 @@ class TestRegionSelection:
         seq = self._make_seq("ATCGATCG" * 10)
 
         with patch.object(task, "_extract_exon_boundaries", return_value=None), \
-             patch("eFISHent.prepare_sequence.GeneralConfig") as mock_gc:
+             patch("eFISHent.region_selection.GeneralConfig") as mock_gc:
             mock_gc.return_value.reference_annotation = "/fake/annotation.gtf"
             mock_gc.return_value.reference_genome = "/fake/genome.fa"
             result = task._apply_region_selection(seq, "intron", "TP53")
