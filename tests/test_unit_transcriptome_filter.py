@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+import pytest
 
 import Bio.Seq
 import Bio.SeqIO
@@ -106,6 +107,7 @@ def _setup_task(monkeypatch, tmpdir, records, blast_lines, *, gene_name="targetg
         lambda: {
             "fasta": luigi.LocalTarget(output_fasta),
             "table": luigi.LocalTarget(output_csv),
+            "burden": luigi.LocalTarget(os.path.join(tmpdir, "burden.csv")),
         },
     )
     monkeypatch.setattr(
@@ -787,5 +789,81 @@ def test_same_strand_hits_are_not_off_targets(monkeypatch):
             task.run()
             assert [r.id for r in Bio.SeqIO.parse(out_fa, "fasta")] == ["sense_only"]
             assert pd.read_csv(out_csv)["qseqid"].tolist() == ["antisense"]
+        finally:
+            _luigi_config_restore(old, cfg)
+
+
+# ---------------------------------------------------------------------------
+# 11. Off-target burden and thermodynamic gate
+# ---------------------------------------------------------------------------
+
+
+def test_binding_weight_is_logistic_around_hyb_temp():
+    from eFISHent.transcriptome_filter import HYBRIDIZATION_TEMP, binding_weight
+
+    w = binding_weight([HYBRIDIZATION_TEMP - 10, HYBRIDIZATION_TEMP, HYBRIDIZATION_TEMP + 10])
+    assert w[0] < 0.01
+    assert w[1] == pytest.approx(0.5)
+    assert w[2] > 0.99
+
+
+def test_hit_melting_temps_penalizes_mismatches():
+    from eFISHent.transcriptome_filter import hit_melting_temps
+
+    seq = "ATGCGTACGTAGCTAGCTAGC"
+    df = pd.DataFrame({
+        "qseqid": ["p", "p", "p"],
+        "qstart": [1, 1, 21],
+        "qend": [21, 21, 3],  # reversed coordinates are handled
+        "mismatch": [0, 2, 0],
+        "gapopen": [0, 0, 0],
+    })
+    tms = hit_melting_temps(df, {"p": seq}, 330.0, 10.0)
+    assert tms[1] == pytest.approx(tms[0] - 5.0)
+    assert tms[2] < tms[0]  # shorter segment, lower Tm
+
+
+def test_burden_written_per_probe(monkeypatch):
+    """Burden sums the strongest hit per off-target, ignores self and < 15 nt hits."""
+    records = _make_records(
+        ("clean", "ATGCGTACGTAGCTAGCTAGC"),
+        ("dirty", "GCGCGTACGTAGCTAGCGCGC"),
+    )
+    blast = (
+        "clean\ttargetgene_tx\t100.0\t21\t0\t0\t1\t21\t21\t1\t0.0\t50\n"
+        "clean\toff_short\t100.0\t12\t0\t0\t1\t12\t12\t1\t5.0\t24\n"
+        # One mismatch each, so they aren't auto-promoted to self-hits
+        "dirty\toff_A\t93.8\t16\t1\t0\t1\t16\t16\t1\t1.0\t32\n"
+        "dirty\toff_A\t93.3\t15\t1\t0\t2\t16\t23\t9\t2.0\t30\n"
+        "dirty\toff_B\t94.1\t17\t1\t0\t1\t17\t17\t1\t0.9\t34\n"
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        task, _, _, old, cfg = _setup_task(monkeypatch, tmpdir, records, blast_lines=blast)
+        try:
+            task.run()
+            burden = pd.read_csv(os.path.join(tmpdir, "burden.csv")).set_index("name")["burden"]
+            assert burden["clean"] == 0.0
+            # Two off-target genes, each at most 1
+            assert 0.0 < burden["dirty"] <= 2.0
+        finally:
+            _luigi_config_restore(old, cfg)
+
+
+@pytest.mark.parametrize("min_tm, kept", [("0", ["strong"]), ("80", ["weak", "strong"])])
+def test_off_target_min_tm_ignores_weak_hits(monkeypatch, min_tm, kept):
+    """With --off-target-min-tm, hits that can't form a stable duplex don't count."""
+    records = _make_records(
+        ("weak", "ATATATATATATATATATATA"),
+        ("strong", "GCGCGTACGTAGCTAGCGCGC"),
+    )
+    blast = "weak\toff_A\t90.0\t20\t2\t0\t1\t20\t20\t1\t0.1\t30\n"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        task, out_fa, _, old, cfg = _setup_task(
+            monkeypatch, tmpdir, records, blast_lines=blast,
+            extra_config={("ProbeConfig", "off_target_min_tm"): min_tm},
+        )
+        try:
+            task.run()
+            assert [r.id for r in Bio.SeqIO.parse(out_fa, "fasta")] == kept
         finally:
             _luigi_config_restore(old, cfg)
