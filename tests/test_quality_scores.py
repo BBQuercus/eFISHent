@@ -339,7 +339,7 @@ class TestDetectOffTargetClustering:
         """No warnings when probes hit different genes."""
         task = CleanUpOutput()
         df = self._make_df(["TP53(1)", "MYC(1)", "BRCA1(1)", ""])
-        with patch("eFISHent.cleanup.util") as mock_util:
+        with patch("eFISHent.off_target_clustering.util") as mock_util:
             mock_util.get_gene_name.return_value = "GAPDH"
             warnings = task._detect_off_target_clustering(df)
         assert len(warnings) == 0
@@ -348,7 +348,7 @@ class TestDetectOffTargetClustering:
         """Warning when >=5 probes hit the same off-target gene."""
         task = CleanUpOutput()
         df = self._make_df(["TP53(1)"] * 6 + [""])
-        with patch("eFISHent.cleanup.util") as mock_util:
+        with patch("eFISHent.off_target_clustering.util") as mock_util:
             mock_util.get_gene_name.return_value = "BRCA1"
             warnings = task._detect_off_target_clustering(df)
         assert len(warnings) == 1
@@ -359,7 +359,7 @@ class TestDetectOffTargetClustering:
         """Paralog family should trigger undruggable warning."""
         task = CleanUpOutput()
         df = self._make_df(["ACTG1(3)"] * 5)
-        with patch("eFISHent.cleanup.util") as mock_util:
+        with patch("eFISHent.off_target_clustering.util") as mock_util:
             mock_util.get_gene_name.return_value = "ACTB"
             warnings = task._detect_off_target_clustering(df)
         assert len(warnings) == 1
@@ -370,7 +370,7 @@ class TestDetectOffTargetClustering:
         """4 probes hitting same gene should not trigger warning."""
         task = CleanUpOutput()
         df = self._make_df(["TP53(1)"] * 4)
-        with patch("eFISHent.cleanup.util") as mock_util:
+        with patch("eFISHent.off_target_clustering.util") as mock_util:
             mock_util.get_gene_name.return_value = "BRCA1"
             warnings = task._detect_off_target_clustering(df)
         assert len(warnings) == 0
@@ -387,7 +387,7 @@ class TestDetectOffTargetClustering:
         task = CleanUpOutput()
         # 6 out of 10 probes hit TP53 = 60%
         df = self._make_df(["TP53(1)"] * 6 + [""] * 4)
-        with patch("eFISHent.cleanup.util") as mock_util:
+        with patch("eFISHent.off_target_clustering.util") as mock_util:
             mock_util.get_gene_name.return_value = "BRCA1"
             warnings = task._detect_off_target_clustering(df)
         assert len(warnings) == 1
@@ -398,7 +398,7 @@ class TestDetectOffTargetClustering:
         task = CleanUpOutput()
         # All 10 probes hit ACTG1 when targeting ACTB
         df = self._make_df(["ACTG1(3)"] * 10)
-        with patch("eFISHent.cleanup.util") as mock_util:
+        with patch("eFISHent.off_target_clustering.util") as mock_util:
             mock_util.get_gene_name.return_value = "ACTB"
             warnings = task._detect_off_target_clustering(df)
         assert len(warnings) == 1
@@ -412,7 +412,7 @@ class TestDetectOffTargetClustering:
         # 4 out of 10 probes hit TP53 = 40% (below 50% but above cluster_threshold=5)
         # Actually 4 is below cluster_threshold=5, so no warning at all
         df = self._make_df(["TP53(1)"] * 4 + [""] * 6)
-        with patch("eFISHent.cleanup.util") as mock_util:
+        with patch("eFISHent.off_target_clustering.util") as mock_util:
             mock_util.get_gene_name.return_value = "BRCA1"
             warnings = task._detect_off_target_clustering(df)
         undruggable = [w for w in warnings if "UNDRUGGABLE" in w]
@@ -456,7 +456,7 @@ class TestApplyOffTargetCap:
             ["TP53(1)", "TP53(1)", "TP53(1)"],
             [80.0, 60.0, 70.0],
         )
-        with patch("eFISHent.cleanup.ProbeConfig", return_value=self._mock_probe_config(0)):
+        with patch("eFISHent.off_target_clustering.ProbeConfig", return_value=self._mock_probe_config(0)):
             result = task._apply_off_target_cap(df)
             assert len(result) == 3
 
@@ -468,7 +468,7 @@ class TestApplyOffTargetCap:
             ["TP53(1)", "TP53(1)", "TP53(1)"],
             [80.0, 50.0, 70.0],
         )
-        with patch("eFISHent.cleanup.ProbeConfig", return_value=self._mock_probe_config(2)):
+        with patch("eFISHent.off_target_clustering.ProbeConfig", return_value=self._mock_probe_config(2)):
             result = task._apply_off_target_cap(df)
             assert len(result) == 2
             # probe-2 (quality=50) should have been removed
@@ -483,7 +483,7 @@ class TestApplyOffTargetCap:
             ["TP53(1)", "TP53(1)", ""],
             [80.0, 70.0, 90.0],
         )
-        with patch("eFISHent.cleanup.ProbeConfig", return_value=self._mock_probe_config(3)):
+        with patch("eFISHent.off_target_clustering.ProbeConfig", return_value=self._mock_probe_config(3)):
             result = task._apply_off_target_cap(df)
             assert len(result) == 3
 
@@ -496,6 +496,6 @@ class TestApplyOffTargetCap:
                 "quality": [80.0],
             }
         )
-        with patch("eFISHent.cleanup.ProbeConfig", return_value=self._mock_probe_config(2)):
+        with patch("eFISHent.off_target_clustering.ProbeConfig", return_value=self._mock_probe_config(2)):
             result = task._apply_off_target_cap(df)
             assert len(result) == 1

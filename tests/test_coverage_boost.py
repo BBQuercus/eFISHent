@@ -281,8 +281,8 @@ class TestComputeSummary:
             "GC": [50.0, 45.0, 55.0],
             "TM": [55.0, 52.0, 58.0],
         })
-        with patch("eFISHent.cleanup.util") as mock_util, \
-             patch("eFISHent.cleanup.SequenceConfig") as mock_seq:
+        with patch("eFISHent.probe_summary.util") as mock_util, \
+             patch("eFISHent.probe_summary.SequenceConfig") as mock_seq:
             mock_util.get_gene_name.return_value = "TEST"
             mock_util.get_output_dir.return_value = "/tmp"
             mock_seq.return_value.sequence_file = ""
@@ -298,8 +298,8 @@ class TestComputeSummary:
             "name": [], "length": [], "start": [], "end": [],
             "GC": [], "TM": [],
         })
-        with patch("eFISHent.cleanup.util") as mock_util, \
-             patch("eFISHent.cleanup.SequenceConfig") as mock_seq:
+        with patch("eFISHent.probe_summary.util") as mock_util, \
+             patch("eFISHent.probe_summary.SequenceConfig") as mock_seq:
             mock_util.get_gene_name.return_value = "TEST"
             mock_util.get_output_dir.return_value = "/tmp"
             mock_seq.return_value.sequence_file = ""
