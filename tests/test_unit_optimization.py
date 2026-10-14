@@ -805,3 +805,43 @@ def test_screen_genome_hits(verification, kept):
     with patch.object(OptimizeProbeCoverage, "_genome_verification", return_value=verification):
         result = task.screen_genome_hits(_records("a", "b", "c"), "unused.fasta")
     assert [r.id for r in result] == kept
+
+
+def _intervals(rows, burden=None):
+    df = pd.DataFrame(rows, columns=["name", "start", "end"])
+    df["sequence"] = "ATGCATGCATGCATGCATGC"
+    df["length"] = df["end"] - df["start"]
+    if burden is not None:
+        df["_burden"] = burden
+    return df
+
+
+def test_greedy_model_maximizes_probe_count():
+    """A long early probe must not block two probes that fit in its place."""
+    df = _intervals([("long", 0, 30), ("left", 5, 14), ("right", 16, 28)])
+    assert greedy_model(df) == ["left", "right"]
+
+
+def test_greedy_model_prefers_low_burden_at_equal_count():
+    df = _intervals([("dirty", 0, 20), ("clean", 2, 22)], burden=[1.0, 0.0])
+    assert greedy_model(df) == ["clean"]
+
+
+def test_greedy_model_never_trades_probes_for_cleanliness():
+    """Two burdened probes still beat one clean probe covering the same span."""
+    df = _intervals(
+        [("clean", 0, 30), ("dirty1", 0, 12), ("dirty2", 14, 30)], burden=[0.0, 1.0, 1.0]
+    )
+    assert greedy_model(df) == ["dirty1", "dirty2"]
+
+
+def test_greedy_model_empty():
+    assert greedy_model(_intervals([])) == []
+
+
+def test_cleanliness_is_rank_based():
+    from eFISHent.optimization import cleanliness
+
+    df = _intervals([("a", 0, 1), ("b", 2, 3), ("c", 4, 5)], burden=[0.0, 50.0, 7.0])
+    assert cleanliness(df).tolist() == [1.0, 0.0, 0.5]
+    assert cleanliness(_intervals([("a", 0, 1)], burden=[3.0])).tolist() == [1.0]
