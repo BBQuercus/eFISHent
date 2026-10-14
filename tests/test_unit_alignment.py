@@ -781,7 +781,7 @@ class TestFilterMaskedOffTargets:
                  AlignProbeCandidates, "_load_masked_intervals",
                  return_value={"chrI": ([100], [200])}
              ), \
-             patch("eFISHent.alignment.shutil.which", return_value="/usr/bin/dustmasker"):
+             patch("eFISHent.off_target_genome.shutil.which", return_value="/usr/bin/dustmasker"):
             result = task.filter_masked_off_targets(df)
 
         assert len(result) == 1
@@ -794,7 +794,7 @@ class TestFilterMaskedOffTargets:
             {"qname": "probe1", "rname": "chrI", "pos": "150", "seq": "ATGC"},
         ])
 
-        with patch("eFISHent.alignment.shutil.which", return_value=None):
+        with patch("eFISHent.off_target_genome.shutil.which", return_value=None):
             result = task.filter_masked_off_targets(df)
 
         assert len(result) == 1
@@ -826,7 +826,7 @@ class TestFilterIntergenicOffTargets:
             {"qname": "probe2", "rname": "chrI", "pos": "5000"},   # intergenic
         ])
 
-        with patch("eFISHent.alignment.read_annotation", return_value=gtf_df):
+        with patch("eFISHent.off_target_annotation.read_annotation", return_value=gtf_df):
             result = task.filter_intergenic_off_targets(df_sam)
 
         assert len(result) == 1
@@ -848,7 +848,7 @@ class TestFilterIntergenicOffTargets:
             {"qname": "probe1", "rname": "chrI", "pos": "1500"},
         ])
 
-        with patch("eFISHent.alignment.read_annotation", return_value=gtf_df):
+        with patch("eFISHent.off_target_annotation.read_annotation", return_value=gtf_df):
             result = task.filter_intergenic_off_targets(df_sam)
 
         assert len(result) == 0
@@ -884,7 +884,7 @@ class TestFilterRrnaOffTargets:
             {"qname": "probe2", "rname": "chrII", "pos": "5500"},  # safe
         ])
 
-        with patch("eFISHent.alignment.read_annotation", return_value=gtf_df):
+        with patch("eFISHent.off_target_annotation.read_annotation", return_value=gtf_df):
             result = task.filter_rrna_off_targets(df_sam)
 
         # probe1 entirely removed (both rows), probe2 kept
@@ -909,7 +909,7 @@ class TestFilterRrnaOffTargets:
             {"qname": "probe1", "rname": "chrI", "pos": "200"},
         ])
 
-        with patch("eFISHent.alignment.read_annotation", return_value=gtf_df):
+        with patch("eFISHent.off_target_annotation.read_annotation", return_value=gtf_df):
             result = task.filter_rrna_off_targets(df_sam)
 
         assert len(result) == 1
@@ -936,7 +936,7 @@ class TestFilterRrnaOffTargets:
             {"qname": "probe1", "rname": "chrI", "pos": "200"},
         ])
 
-        with patch("eFISHent.alignment.read_annotation", return_value=gtf_df):
+        with patch("eFISHent.off_target_annotation.read_annotation", return_value=gtf_df):
             result = task.filter_rrna_off_targets(df_sam)
 
         assert len(result) == 1

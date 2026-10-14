@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pysam
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from . import util
+from . import analyze_plots, util
+from .analyze_report import KCAL_PER_MOL, compute_quality_scores, print_summary
 from .basic_filtering import (
     compute_duplex_dg,
     get_cpg_fraction,
@@ -28,24 +28,9 @@ from .config import GeneralConfig, ProbeConfig, RunConfig, SequenceConfig
 from .console import print_analysis_stage
 from .indexing import BuildBowtie2Index, BuildBowtieIndex
 from .kmers import BuildJellyfishIndex, get_max_kmer_counts_batch
-from .optimization import is_binding
 from .prepare_sequence import PrepareSequence
 from .secondary_structure import get_free_energy
 
-KCAL_PER_MOL = "kcal/mol"
-
-# Per-metric summary rows: (label, column, unit, decimals)
-SUMMARY_METRICS = [
-    ("Length", "length", "nt", 0),
-    ("Tm", "TM", "°C", 1),
-    ("GC", "GC", "%", 1),
-    ("CpG fraction", "cpg_fraction", "", 3),
-    ("ΔG (secondary)", "deltaG", KCAL_PER_MOL, 1),
-    ("ΔG (binding)", "on_target_dg", KCAL_PER_MOL, 1),
-    ("K-mer max", "kmers", "", 0),
-    ("Homopolymer", "homopolymer_run", "nt", 0),
-    ("Low complexity", "low_complexity", "", 3),
-]
 
 class AnalyzeProbeset(luigi.Task):
     """Analysis of a probe set with summary stats, plots, and CSV output."""
@@ -78,40 +63,9 @@ class AnalyzeProbeset(luigi.Task):
 
     # ── Plot helpers ──
 
-    @staticmethod
-    def histplot(ax: plt.Axes, data: list[int], title: str, min_value: int):
-        """Basic narrow count based histogram."""
-        ax.set_title(title)
-        if not data or all(v == data[0] for v in data):
-            ax.hist(data, bins=10)
-        else:
-            bins = np.arange(min_value, max(data) + 4) + 0.5
-            ax.hist(data, bins=bins)
-            ax.set(xticks=bins[1:] - 0.5)
-        ax.set(ylabel="Count")
-
-    @staticmethod
-    def boxplot(ax: plt.Axes, data: list[int | float], title: str, ylabel: str):
-        """Boxplot with kde-esque lines next to it."""
-        ax.set_title(title)
-        ax.boxplot(data)
-        ax.eventplot(
-            data,
-            orientation="vertical",
-            linewidths=0.2,
-            lineoffsets=0.8,
-            linelengths=0.1,
-        )
-        ax.set(xticks=[], ylabel=ylabel)
-
-    @staticmethod
-    def matrix(ax: plt.Axes, data: np.ndarray, title: str, fig):
-        """Image with colorbar in same axis."""
-        ax.set_title(title)
-        image = ax.imshow(data, vmin=0, vmax=1, cmap="coolwarm")
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        fig.colorbar(image, cax=cax, orientation="vertical")
+    histplot = staticmethod(analyze_plots.histplot)
+    boxplot = staticmethod(analyze_plots.boxplot)
+    matrix = staticmethod(analyze_plots.matrix)
 
     # ── Compute metrics ──
 
@@ -245,181 +199,13 @@ class AnalyzeProbeset(luigi.Task):
 
     def _compute_quality_scores(self, df: pd.DataFrame) -> pd.Series:
         """Compute composite quality scores matching the main pipeline."""
-        scores = pd.DataFrame(index=df.index)
-
-        cfg = ProbeConfig()
-
-        # Tm score: distance from median (narrower spread = better)
-        if len(df) > 1:
-            median_tm = df["TM"].median()
-            tm_range = (cfg.max_tm - cfg.min_tm) / 2 if cfg.max_tm > cfg.min_tm else 5.0
-            scores["tm"] = 1.0 - (df["TM"] - median_tm).abs().clip(upper=tm_range) / tm_range
-        else:
-            scores["tm"] = 1.0
-
-        # GC score
-        def _gc_score(gc: float) -> float:
-            if 45.0 <= gc <= 52.0:
-                return 1.0
-            elif gc < 45.0:
-                return max(0.0, (gc - 20.0) / 25.0)
-            elif gc <= 55.0:
-                return 1.0 - (gc - 52.0) / 10.0
-            else:
-                return max(0.0, 0.7 - (gc - 55.0) / 15.0)
-
-        scores["gc"] = df["GC"].apply(_gc_score)
-
-        # CpG score
-        scores["cpg"] = (1.0 - df["cpg_fraction"].clip(upper=0.10) / 0.10).clip(lower=0.0)
-
-        # deltaG score (secondary structure)
-        dg_max = abs(cfg.max_deltag) if cfg.max_deltag < 0 else 10.0
-        scores["dg"] = 1.0 - df["deltaG"].abs().clip(upper=dg_max) / dg_max
-
-        # K-mer score
-        kmer_max = max(cfg.max_kmers, 1)
-        scores["kmer"] = 1.0 - df["kmers"].clip(upper=kmer_max) / kmer_max
-
-        # Off-target score
-        if "off_targets" in df.columns:
-            ot_max = max(cfg.max_off_targets + 1, 1)
-            scores["ot"] = 1.0 - df["off_targets"].clip(upper=ot_max) / ot_max
-        else:
-            scores["ot"] = 1.0
-
-        # Low-complexity score
-        scores["lc"] = 1.0 - df["low_complexity"].clip(upper=0.3) / 0.3
-
-        # Binding ΔG score
-        dg_floor = -60.0
-        scores["binding"] = (df["on_target_dg"].clip(upper=0.0) / dg_floor).clip(
-            lower=0.0, upper=1.0
-        )
-
-        # Clip all to [0, 1]
-        for col in scores.columns:
-            scores[col] = scores[col].clip(lower=0.0, upper=1.0)
-
-        # Weighted composite
-        quality = (
-            scores["tm"] * 0.18
-            + scores["gc"] * 0.13
-            + scores["cpg"] * 0.05
-            + scores["dg"] * 0.13
-            + scores["ot"] * 0.23
-            + scores["kmer"] * 0.09
-            + scores["lc"] * 0.09
-            + scores["binding"] * 0.10
-        )
-        return (quality * 100).round(1)
+        return compute_quality_scores(df, ProbeConfig())
 
     # ── Summary output ──
 
     def _print_summary(self, df: pd.DataFrame):
         """Print a text summary to the terminal."""
-        from .console import console
-
-        self._print_overview(df)
-        self._print_metrics(df)
-        flags = self._collect_flags(df)
-
-        if flags:
-            console.print()
-            console.print("  [bold yellow]Flags:[/bold yellow]")
-            for f in flags:
-                console.print(f"    [yellow]![/yellow] {f}")
-        else:
-            console.print()
-            console.print("  [green]No issues detected[/green]")
-
-        console.print()
-
-    def _print_overview(self, df: pd.DataFrame):
-        """Print the probe count, gene length, and gene coverage."""
-        from .console import console
-
-        n = len(df)
-        gene_len = len(self.gene)
-        mapped = df[df["start"] >= 0]
-
-        console.print()
-        console.print(f"  [bold]Probe Set Analysis[/bold] — {n} probes")
-        console.print(f"  Gene length: {gene_len:,} nt")
-        if len(mapped) > 0:
-            coverage = mapped.apply(
-                lambda r: r["end"] - r["start"], axis=1
-            ).sum() / gene_len * 100
-            console.print(f"  Gene coverage: {coverage:.1f}%")
-            console.print(
-                f"  Probes mapped to gene: {len(mapped)}/{n}"
-            )
-        console.print()
-
-    @staticmethod
-    def _print_metrics(df: pd.DataFrame):
-        """Print the per-metric median and range table."""
-        from .console import console
-
-        console.print("  [dim]Metric              Median     Range[/dim]")
-        for label, col, unit, dec in SUMMARY_METRICS:
-            if col not in df.columns:
-                continue
-            vals = df[col]
-            fmt = f".{dec}f"
-            med = f"{vals.median():{fmt}}"
-            lo = f"{vals.min():{fmt}}"
-            hi = f"{vals.max():{fmt}}"
-            suffix = f" {unit}" if unit else ""
-            console.print(
-                f"  {label:<20s} {med:>8s}   {lo} – {hi}{suffix}"
-            )
-
-        if "off_targets" in df.columns:
-            ot = df["off_targets"]
-            console.print(
-                f"  {'Off-targets':<20s} {ot.median():>8.0f}   {ot.min():.0f} – {ot.max():.0f}"
-            )
-
-        if "quality" in df.columns:
-            q = df["quality"]
-            console.print(
-                f"  {'Quality score':<20s} {q.median():>8.1f}   {q.min():.1f} – {q.max():.1f}"
-            )
-
-    @staticmethod
-    def _collect_flags(df: pd.DataFrame) -> list[str]:
-        """Collect warnings about potentially problematic probes."""
-        flags = []
-        g4_count = df["g_quadruplex"].sum()
-        if g4_count > 0:
-            flags.append(f"{g4_count} probe(s) contain G-quadruplex motifs")
-        high_gc = (df["GC"] > 55).sum()
-        if high_gc > 0:
-            flags.append(f"{high_gc} probe(s) have GC > 55% (risk of non-specific binding)")
-        high_lc = (df["low_complexity"] > 0.1).sum()
-        if high_lc > 0:
-            flags.append(f"{high_lc} probe(s) have elevated low-complexity score")
-        if "off_targets" in df.columns:
-            multi_ot = (df["off_targets"] > 0).sum()
-            if multi_ot > 0:
-                flags.append(f"{multi_ot} probe(s) have genome off-target hits")
-
-        # Cross-hybridization
-        binding_pairs = AnalyzeProbeset._count_binding_pairs(df["sequence"].values)
-        if binding_pairs > 0:
-            flags.append(f"{binding_pairs} probe pair(s) may cross-hybridize (≥75% k-mer overlap)")
-        return flags
-
-    @staticmethod
-    def _count_binding_pairs(seqs) -> int:
-        """Count probe pairs that may cross-hybridize (≥75% k-mer overlap)."""
-        binding_pairs = 0
-        for i in range(len(seqs)):
-            for j in range(i + 1, len(seqs)):
-                if is_binding(seqs[i], seqs[j], 0.75):
-                    binding_pairs += 1
-        return binding_pairs
+        print_summary(df, len(self.gene))
 
     def _save_csv(self, df: pd.DataFrame):
         """Save per-probe metrics as CSV alongside the PDF."""
@@ -492,42 +278,7 @@ class AnalyzeProbeset(luigi.Task):
         self.matrix(ax, matrix, "Binding affinity", fig)
 
     def _add_probe_coverage(self, ax: plt.Axes, df: pd.DataFrame):
-        gene_len = len(self.gene)
-        coverage = np.zeros(gene_len)
-        mapped = df[df["start"] >= 0]
-
-        for _, row in mapped.iterrows():
-            s, e = int(row["start"]), int(row["end"])
-            coverage[s:e] = 1
-
-        ax.set_title("Gene coverage")
-        ax.fill_between(range(gene_len), coverage, alpha=0.6, color="steelblue")
-
-        # Mark probe positions
-        for _, row in mapped.iterrows():
-            mid = (row["start"] + row["end"]) / 2
-            ax.axvline(mid, color="steelblue", alpha=0.3, linewidth=0.5)
-
-        ax.set(ylabel="Coverage", xlabel="Position (nt)", ylim=(-0.1, 1.5))
-        ax.set_yticks([0, 1])
-        ax.set_yticklabels(["No", "Yes"])
-
-        # Add gap annotations
-        if len(mapped) > 1:
-            sorted_mapped = mapped.sort_values("start")
-            prev_end = 0
-            gaps = []
-            for _, row in sorted_mapped.iterrows():
-                gap = row["start"] - prev_end
-                if gap > 100:
-                    gaps.append((prev_end, int(row["start"]), gap))
-                prev_end = max(prev_end, int(row["end"]))
-            for gs, ge, size in gaps[:5]:  # Show max 5 largest gaps
-                mid = (gs + ge) / 2
-                ax.annotate(
-                    f"{size}nt gap",
-                    xy=(mid, 1.1), fontsize=6, ha="center", color="red", alpha=0.7,
-                )
+        analyze_plots.plot_probe_coverage(ax, df, len(self.gene))
 
     def _add_quality_scores(self, ax: plt.Axes, df: pd.DataFrame):
         if "quality" not in df.columns:

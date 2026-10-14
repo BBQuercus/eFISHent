@@ -207,7 +207,7 @@ class TestLogAndCheckCandidates:
 
     def test_count_with_previous(self, logger):
         """Previous count should be included in live display state."""
-        from eFISHent.console import _steps
+        from eFISHent.pipeline_display import _steps
         _steps.clear()
         # Add a running step so print_candidate_count has something to update
         _steps.append({"name": "Test", "status": "running", "result": "", "elapsed": "", "start_time": 0})

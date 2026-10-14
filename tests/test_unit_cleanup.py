@@ -207,7 +207,7 @@ def _make_quality_df(**overrides):
     return pd.DataFrame(base)
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_perfect_probe(mock_cfg):
     """A near-ideal probe should score close to 100."""
     df = _make_quality_df()
@@ -216,7 +216,7 @@ def test_quality_score_perfect_probe(mock_cfg):
     assert scores.iloc[0] > 80
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_high_gc_penalty(mock_cfg):
     """GC > 55% should reduce the quality score."""
     df_good = _make_quality_df(GC=[48.0])
@@ -226,7 +226,7 @@ def test_quality_score_high_gc_penalty(mock_cfg):
     assert q_good > q_bad
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_low_gc_penalty(mock_cfg):
     """GC < 45% should also reduce the quality score."""
     df_good = _make_quality_df(GC=[48.0])
@@ -236,7 +236,7 @@ def test_quality_score_low_gc_penalty(mock_cfg):
     assert q_good > q_low
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_high_off_targets(mock_cfg):
     """Many off-targets should reduce quality."""
     df_good = _make_quality_df(count=[0])
@@ -246,7 +246,7 @@ def test_quality_score_high_off_targets(mock_cfg):
     assert q_good > q_bad
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_high_kmers_penalty(mock_cfg):
     """High k-mer counts should reduce quality."""
     df_good = _make_quality_df(kmers=[0])
@@ -256,7 +256,7 @@ def test_quality_score_high_kmers_penalty(mock_cfg):
     assert q_good > q_bad
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_missing_optional_columns(mock_cfg):
     """Score should still work when optional columns are absent."""
     df = pd.DataFrame({
@@ -271,7 +271,7 @@ def test_quality_score_missing_optional_columns(mock_cfg):
     assert 0 <= scores.iloc[0] <= 100
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_multiple_probes(mock_cfg):
     """Score computation works for multiple probes at once."""
     df = pd.DataFrame({
@@ -292,7 +292,7 @@ def test_quality_score_multiple_probes(mock_cfg):
     assert scores.iloc[0] > scores.iloc[1]
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_low_complexity_penalty(mock_cfg):
     """High low-complexity fraction should reduce quality."""
     df_good = _make_quality_df(low_complexity=[0.0])
@@ -302,7 +302,7 @@ def test_quality_score_low_complexity_penalty(mock_cfg):
     assert q_good > q_bad
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_cpg_penalty(mock_cfg):
     """High CpG fraction should reduce quality."""
     df_good = _make_quality_df(cpg_fraction=[0.0])
@@ -312,7 +312,7 @@ def test_quality_score_cpg_penalty(mock_cfg):
     assert q_good > q_bad
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_empty_dataframe(mock_cfg):
     """Empty DataFrame should return empty Series without error."""
     df = pd.DataFrame({
@@ -415,14 +415,14 @@ def test_low_complexity_returns_fraction():
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.off_target_clustering.util.get_gene_name", return_value="ACTB")
 def test_off_target_clustering_no_column(mock_gene, task_cleanup):
     """No off_target_genes column -> no warnings."""
     df = pd.DataFrame({"name": ["p1"], "quality": [90]})
     assert task_cleanup._detect_off_target_clustering(df) == []
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.off_target_clustering.util.get_gene_name", return_value="ACTB")
 def test_off_target_clustering_no_hits(mock_gene, task_cleanup):
     """Empty off_target_genes -> no warnings."""
     df = pd.DataFrame({
@@ -433,7 +433,7 @@ def test_off_target_clustering_no_hits(mock_gene, task_cleanup):
     assert task_cleanup._detect_off_target_clustering(df) == []
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.off_target_clustering.util.get_gene_name", return_value="ACTB")
 def test_off_target_clustering_below_threshold(mock_gene, task_cleanup):
     """Fewer than 5 probes hitting the same gene -> no warnings."""
     df = pd.DataFrame({
@@ -444,7 +444,7 @@ def test_off_target_clustering_below_threshold(mock_gene, task_cleanup):
     assert task_cleanup._detect_off_target_clustering(df) == []
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.off_target_clustering.util.get_gene_name", return_value="ACTB")
 def test_off_target_clustering_detected(mock_gene, task_cleanup):
     """5+ probes hitting the same gene triggers a warning."""
     df = pd.DataFrame({
@@ -457,7 +457,7 @@ def test_off_target_clustering_detected(mock_gene, task_cleanup):
     assert "GAPDH" in warnings[0]
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.off_target_clustering.util.get_gene_name", return_value="ACTB")
 def test_off_target_clustering_paralog(mock_gene, task_cleanup):
     """Paralog detection when target and off-target share a family prefix."""
     df = pd.DataFrame({
@@ -470,7 +470,7 @@ def test_off_target_clustering_paralog(mock_gene, task_cleanup):
     assert "paralog" in warnings[0].lower()
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.off_target_clustering.util.get_gene_name", return_value="ACTB")
 def test_off_target_undruggable(mock_gene, task_cleanup):
     """>=50% of probes hitting the same off-target triggers UNDRUGGABLE."""
     n_probes = 10
@@ -485,7 +485,7 @@ def test_off_target_undruggable(mock_gene, task_cleanup):
     assert "paralog" in warnings[0].lower()
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="MYH1")
+@patch("eFISHent.off_target_clustering.util.get_gene_name", return_value="MYH1")
 def test_off_target_undruggable_non_paralog(mock_gene, task_cleanup):
     """>=50% of probes hitting a non-paralog off-target."""
     n_probes = 10
@@ -505,7 +505,7 @@ def test_off_target_undruggable_non_paralog(mock_gene, task_cleanup):
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.ProbeConfig")
+@patch("eFISHent.off_target_clustering.ProbeConfig")
 def test_off_target_cap_disabled(mock_cfg, task_cleanup):
     """Cap <= 0 should return the dataframe unchanged."""
     mock_cfg.return_value.max_probes_per_off_target = 0
@@ -518,7 +518,7 @@ def test_off_target_cap_disabled(mock_cfg, task_cleanup):
     assert len(result) == 2
 
 
-@patch("eFISHent.cleanup.ProbeConfig")
+@patch("eFISHent.off_target_clustering.ProbeConfig")
 def test_off_target_cap_removes_lowest_quality(mock_cfg, task_cleanup):
     """When cap=1, should keep the higher quality probe."""
     mock_cfg.return_value.max_probes_per_off_target = 1
@@ -534,7 +534,7 @@ def test_off_target_cap_removes_lowest_quality(mock_cfg, task_cleanup):
     assert "p3" in result["name"].values
 
 
-@patch("eFISHent.cleanup.ProbeConfig")
+@patch("eFISHent.off_target_clustering.ProbeConfig")
 def test_off_target_cap_no_off_target_column(mock_cfg, task_cleanup):
     """Missing off_target_genes column returns unchanged."""
     mock_cfg.return_value.max_probes_per_off_target = 1
@@ -627,8 +627,8 @@ def test_remove_intermediates_no_entrez(mock_gene, mock_outdir, task_cleanup):
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.GeneralConfig")
-@patch("eFISHent.cleanup.ProbeConfig")
+@patch("eFISHent.off_target_report.GeneralConfig")
+@patch("eFISHent.off_target_report.ProbeConfig")
 def test_annotate_expression_risk_no_annotation(mock_pcfg, mock_gcfg, task_cleanup):
     """Without annotation, expression_risk column should be empty strings."""
     mock_gcfg.return_value.reference_annotation = ""
@@ -640,11 +640,11 @@ def test_annotate_expression_risk_no_annotation(mock_pcfg, mock_gcfg, task_clean
     assert df["expression_risk"].iloc[0] == ""
 
 
-@patch("eFISHent.cleanup.GeneralConfig")
-@patch("eFISHent.cleanup.ProbeConfig")
-@patch("eFISHent.cleanup.util.get_output_dir", return_value="/fake")
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="TEST")
-@patch("eFISHent.cleanup.build_transcript_gene_map", return_value={"ENS001": "GAPDH"})
+@patch("eFISHent.off_target_report.GeneralConfig")
+@patch("eFISHent.off_target_report.ProbeConfig")
+@patch("eFISHent.off_target_report.util.get_output_dir", return_value="/fake")
+@patch("eFISHent.off_target_report.util.get_gene_name", return_value="TEST")
+@patch("eFISHent.off_target_report.build_transcript_gene_map", return_value={"ENS001": "GAPDH"})
 def test_annotate_expression_risk_with_count_table(
     mock_map, mock_gene, mock_outdir, mock_pcfg, mock_gcfg, task_cleanup
 ):
@@ -669,11 +669,11 @@ def test_annotate_expression_risk_with_count_table(
         os.unlink(count_table)
 
 
-@patch("eFISHent.cleanup.GeneralConfig")
-@patch("eFISHent.cleanup.ProbeConfig")
-@patch("eFISHent.cleanup.util.get_output_dir", return_value="/fake")
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="TEST")
-@patch("eFISHent.cleanup.build_transcript_gene_map", return_value={"ENS001": "GAPDH"})
+@patch("eFISHent.off_target_report.GeneralConfig")
+@patch("eFISHent.off_target_report.ProbeConfig")
+@patch("eFISHent.off_target_report.util.get_output_dir", return_value="/fake")
+@patch("eFISHent.off_target_report.util.get_gene_name", return_value="TEST")
+@patch("eFISHent.off_target_report.build_transcript_gene_map", return_value={"ENS001": "GAPDH"})
 def test_annotate_expression_risk_moderate(
     mock_map, mock_gene, mock_outdir, mock_pcfg, mock_gcfg, task_cleanup
 ):
@@ -697,11 +697,11 @@ def test_annotate_expression_risk_moderate(
         os.unlink(count_table)
 
 
-@patch("eFISHent.cleanup.GeneralConfig")
-@patch("eFISHent.cleanup.ProbeConfig")
-@patch("eFISHent.cleanup.util.get_output_dir", return_value="/fake")
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="TEST")
-@patch("eFISHent.cleanup.build_transcript_gene_map", return_value={"ENS001": "GAPDH"})
+@patch("eFISHent.off_target_report.GeneralConfig")
+@patch("eFISHent.off_target_report.ProbeConfig")
+@patch("eFISHent.off_target_report.util.get_output_dir", return_value="/fake")
+@patch("eFISHent.off_target_report.util.get_gene_name", return_value="TEST")
+@patch("eFISHent.off_target_report.build_transcript_gene_map", return_value={"ENS001": "GAPDH"})
 def test_annotate_expression_risk_low(
     mock_map, mock_gene, mock_outdir, mock_pcfg, mock_gcfg, task_cleanup
 ):
@@ -725,8 +725,8 @@ def test_annotate_expression_risk_low(
         os.unlink(count_table)
 
 
-@patch("eFISHent.cleanup.GeneralConfig")
-@patch("eFISHent.cleanup.ProbeConfig")
+@patch("eFISHent.off_target_report.GeneralConfig")
+@patch("eFISHent.off_target_report.ProbeConfig")
 def test_annotate_expression_risk_no_off_target_column(mock_pcfg, mock_gcfg, task_cleanup):
     """Missing off_target_genes column should still work (early return)."""
     mock_gcfg.return_value.reference_annotation = "/fake/annotation.gtf"
@@ -741,8 +741,8 @@ def test_annotate_expression_risk_no_off_target_column(mock_pcfg, mock_gcfg, tas
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
-@patch("eFISHent.cleanup.util.get_output_dir", return_value="/fake")
+@patch("eFISHent.probe_summary.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.probe_summary.util.get_output_dir", return_value="/fake")
 def test_compute_summary_basic(mock_outdir, mock_gene, task_cleanup):
     """Basic summary computation with a probe DataFrame."""
     with patch.object(task_cleanup, "_get_gene_length", return_value=5000):
@@ -764,8 +764,8 @@ def test_compute_summary_basic(mock_outdir, mock_gene, task_cleanup):
             assert summary["tm_median"] == pytest.approx(50.0)
 
 
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="ACTB")
-@patch("eFISHent.cleanup.util.get_output_dir", return_value="/fake")
+@patch("eFISHent.probe_summary.util.get_gene_name", return_value="ACTB")
+@patch("eFISHent.probe_summary.util.get_output_dir", return_value="/fake")
 def test_compute_summary_overlapping_intervals(mock_outdir, mock_gene, task_cleanup):
     """Coverage computation should correctly merge overlapping intervals."""
     with patch.object(task_cleanup, "_get_gene_length", return_value=1000):
@@ -788,7 +788,7 @@ def test_compute_summary_overlapping_intervals(mock_outdir, mock_gene, task_clea
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.GeneralConfig")
+@patch("eFISHent.off_target_report.GeneralConfig")
 def test_add_transcriptome_details_no_txome(mock_gcfg, task_cleanup):
     """Without a reference transcriptome, columns should be initialized to defaults."""
     mock_gcfg.return_value.reference_transcriptome = ""
@@ -830,9 +830,9 @@ def test_blast_verification_no_tools(mock_which, task_cleanup):
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.util.get_output_dir", return_value="/fake")
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="test")
-@patch("eFISHent.cleanup.SequenceConfig")
+@patch("eFISHent.probe_summary.util.get_output_dir", return_value="/fake")
+@patch("eFISHent.probe_summary.util.get_gene_name", return_value="test")
+@patch("eFISHent.probe_summary.SequenceConfig")
 def test_get_gene_length_no_files(mock_seqcfg, mock_gene, mock_outdir, task_cleanup):
     """Should return 0 when no sequence files exist."""
     mock_seqcfg.return_value.sequence_file = ""
@@ -840,8 +840,8 @@ def test_get_gene_length_no_files(mock_seqcfg, mock_gene, mock_outdir, task_clea
     assert result == 0
 
 
-@patch("eFISHent.cleanup.util.get_output_dir")
-@patch("eFISHent.cleanup.util.get_gene_name", return_value="test")
+@patch("eFISHent.probe_summary.util.get_output_dir")
+@patch("eFISHent.probe_summary.util.get_gene_name", return_value="test")
 def test_get_gene_length_from_sequence_file(mock_gene, mock_outdir, task_cleanup):
     """Should read gene length from sequence fasta."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -861,7 +861,7 @@ def test_get_gene_length_from_sequence_file(mock_gene, mock_outdir, task_cleanup
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_gc_score_optimal_range(mock_cfg):
     """GC in 45-52% should get full GC component score."""
     df_45 = _make_quality_df(GC=[45.0])
@@ -872,7 +872,7 @@ def test_gc_score_optimal_range(mock_cfg):
     assert abs(q_45 - q_52) < 2.0
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_gc_score_gentle_penalty_range(mock_cfg):
     """GC 52-55% should have gentle penalty, less than >55%."""
     df_53 = _make_quality_df(GC=[53.0])
@@ -887,7 +887,7 @@ def test_gc_score_gentle_penalty_range(mock_cfg):
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_with_accessibility_active(mock_cfg):
     """When accessibility varies (< 1.0), accessibility weight branch is used."""
     df = pd.DataFrame({
@@ -907,7 +907,7 @@ def test_quality_score_with_accessibility_active(mock_cfg):
     assert scores.iloc[0] > scores.iloc[1]
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_with_binding_active(mock_cfg):
     """When on_target_dg varies (some < 0), binding weight branch is used."""
     df = pd.DataFrame({
@@ -927,7 +927,7 @@ def test_quality_score_with_binding_active(mock_cfg):
     assert scores.iloc[0] > scores.iloc[1]
 
 
-@patch("eFISHent.cleanup.ProbeConfig", return_value=_FakeProbeConfig())
+@patch("eFISHent.quality.ProbeConfig", return_value=_FakeProbeConfig())
 def test_quality_score_both_accessibility_and_binding(mock_cfg):
     """When both accessibility and binding are active."""
     df = pd.DataFrame({

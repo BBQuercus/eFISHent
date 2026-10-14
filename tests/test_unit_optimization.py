@@ -633,8 +633,8 @@ def test_is_overlapping_commutativity():
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.optimization.subprocess.run")
-@patch("eFISHent.optimization.os.path.isfile", return_value=True)
+@patch("eFISHent.accessibility.subprocess.run")
+@patch("eFISHent.accessibility.os.path.isfile", return_value=True)
 def test_fold_sequence_known_output(mock_isfile, mock_run):
     """Mock subprocess to return known dot-bracket, verify parsing."""
     mock_result = MagicMock()
@@ -644,15 +644,15 @@ def test_fold_sequence_known_output(mock_isfile, mock_run):
     assert result == "...((...))"
 
 
-@patch("eFISHent.optimization.subprocess.run", side_effect=Exception("fail"))
-@patch("eFISHent.optimization.os.path.isfile", return_value=True)
+@patch("eFISHent.accessibility.subprocess.run", side_effect=Exception("fail"))
+@patch("eFISHent.accessibility.os.path.isfile", return_value=True)
 def test_fold_sequence_failure_returns_none(mock_isfile, mock_run):
     """Subprocess failure should return None."""
     result = fold_sequence("ATGCATGC")
     assert result is None
 
 
-@patch("eFISHent.optimization.sys")
+@patch("eFISHent.accessibility.sys")
 def test_fold_sequence_unsupported_platform(mock_sys):
     """Unsupported platform should return None."""
     mock_sys.platform = "win32"
@@ -665,7 +665,7 @@ def test_fold_sequence_unsupported_platform(mock_sys):
 # ---------------------------------------------------------------------------
 
 
-@patch("eFISHent.optimization.fold_sequence")
+@patch("eFISHent.accessibility.fold_sequence")
 def test_accessibility_all_unpaired(mock_fold):
     """All dots (unpaired) should give score 1.0."""
     target_seq = "A" * 300
@@ -684,7 +684,7 @@ def test_accessibility_all_unpaired(mock_fold):
     assert scores.iloc[0] == pytest.approx(1.0)
 
 
-@patch("eFISHent.optimization.fold_sequence")
+@patch("eFISHent.accessibility.fold_sequence")
 def test_accessibility_all_paired(mock_fold):
     """All parens (paired) should give score 0.0."""
     target_seq = "A" * 300
@@ -703,7 +703,7 @@ def test_accessibility_all_paired(mock_fold):
     assert scores.iloc[0] == pytest.approx(0.0)
 
 
-@patch("eFISHent.optimization.fold_sequence")
+@patch("eFISHent.accessibility.fold_sequence")
 def test_accessibility_mixed_structure(mock_fold):
     """Mixed structure should give score between 0 and 1."""
     target_seq = "A" * 300
@@ -723,7 +723,7 @@ def test_accessibility_mixed_structure(mock_fold):
     assert 0.0 < scores.iloc[0] < 1.0
 
 
-@patch("eFISHent.optimization.fold_sequence")
+@patch("eFISHent.accessibility.fold_sequence")
 def test_accessibility_short_sequence_fallback(mock_fold):
     """Short target sequence (< 10nt in window) should give score 1.0."""
     target_seq = "ATGCA"
@@ -742,7 +742,7 @@ def test_accessibility_short_sequence_fallback(mock_fold):
     mock_fold.assert_not_called()
 
 
-@patch("eFISHent.optimization.fold_sequence", return_value=None)
+@patch("eFISHent.accessibility.fold_sequence", return_value=None)
 def test_accessibility_folding_failure(mock_fold):
     """Folding failure (returns None) should give score 1.0."""
     target_seq = "A" * 300

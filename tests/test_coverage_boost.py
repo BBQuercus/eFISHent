@@ -78,20 +78,20 @@ class TestConsolePrintFunctions:
         assert capsys.readouterr().out == ""
 
     def test_print_stage(self):
-        from eFISHent.console import _steps
+        from eFISHent.pipeline_display import _steps
         _steps.clear()
         print_stage(1, 8, "Preparing sequence")
         assert any("Preparing sequence" in s["name"] for s in _steps)
 
     def test_print_stage_silent(self):
-        from eFISHent.console import _steps
+        from eFISHent.pipeline_display import _steps
         _steps.clear()
         set_silent_mode(True)
         print_stage(1, 8, "Preparing sequence")
         assert len(_steps) == 0
 
     def test_print_candidate_count(self):
-        from eFISHent.console import _steps
+        from eFISHent.pipeline_display import _steps
         _steps.clear()
         # Add a running step first
         _steps.append({"name": "Test", "status": "running", "result": "", "elapsed": "", "start_time": 0})
@@ -99,7 +99,7 @@ class TestConsolePrintFunctions:
         assert "500" in _steps[0]["result"]
 
     def test_print_candidate_count_silent(self):
-        from eFISHent.console import _steps
+        from eFISHent.pipeline_display import _steps
         _steps.clear()
         set_silent_mode(True)
         print_candidate_count("BasicFiltering", 500, 1000)
@@ -281,8 +281,8 @@ class TestComputeSummary:
             "GC": [50.0, 45.0, 55.0],
             "TM": [55.0, 52.0, 58.0],
         })
-        with patch("eFISHent.cleanup.util") as mock_util, \
-             patch("eFISHent.cleanup.SequenceConfig") as mock_seq:
+        with patch("eFISHent.probe_summary.util") as mock_util, \
+             patch("eFISHent.probe_summary.SequenceConfig") as mock_seq:
             mock_util.get_gene_name.return_value = "TEST"
             mock_util.get_output_dir.return_value = "/tmp"
             mock_seq.return_value.sequence_file = ""
@@ -298,8 +298,8 @@ class TestComputeSummary:
             "name": [], "length": [], "start": [], "end": [],
             "GC": [], "TM": [],
         })
-        with patch("eFISHent.cleanup.util") as mock_util, \
-             patch("eFISHent.cleanup.SequenceConfig") as mock_seq:
+        with patch("eFISHent.probe_summary.util") as mock_util, \
+             patch("eFISHent.probe_summary.SequenceConfig") as mock_seq:
             mock_util.get_gene_name.return_value = "TEST"
             mock_util.get_output_dir.return_value = "/tmp"
             mock_seq.return_value.sequence_file = ""
