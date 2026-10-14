@@ -1,216 +1,52 @@
 """Rich console utilities for eFISHent CLI."""
 
 import logging
-import time
 from contextlib import contextmanager
 
-import pandas as pd
-from rich.console import Console
-from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
-from rich.theme import Theme
 
-# Custom theme for eFISHent
-THEME = Theme(
-    {
-        "info": "cyan",
-        "warning": "yellow",
-        "error": "red bold",
-        "success": "green bold",
-        "stage": "blue bold",
-        "count": "magenta",
-        "done": "green",
-        "current": "cyan bold",
-    }
+from . import pipeline_display
+from .completion_report import (
+    _build_verification_summary as _build_verification_summary,
 )
-
-# Global console instance
-console = Console(theme=THEME)
-
-# Module-level state for progress tracking
-_silent_mode: bool = False
-_current_stage: int = 0
-_total_stages: int = 8
-
-# Live display state
-_live: Live | None = None
-_steps: list[dict] = []  # Each: {name, status, result, elapsed, start_time}
-_step_status: str = ""  # Transient status line for current step
-_pipeline_mode: str = "pipeline"
-
-# Filtering funnel data: list of (stage_name, candidate_count) tuples
-_funnel_data: list[tuple[str, int]] = []
-
-
-def record_funnel_stage(stage_name: str, count: int) -> None:
-    """Record a filtering stage result for the funnel visualization."""
-    _funnel_data.append((stage_name, count))
-
-
-def get_funnel_data() -> list[tuple[str, int]]:
-    """Get the accumulated funnel data."""
-    return list(_funnel_data)
-
-
-def reset_funnel_data() -> None:
-    """Reset the funnel data (e.g. between runs)."""
-    _funnel_data.clear()
-
-
-def set_silent_mode(silent: bool) -> None:
-    """Set silent mode to disable Rich output."""
-    global _silent_mode
-    _silent_mode = silent
-
-
-def is_silent() -> bool:
-    """Check if silent mode is enabled."""
-    return _silent_mode
-
-
-def _format_elapsed(seconds: float) -> str:
-    """Format elapsed seconds into a compact string."""
-    if seconds < 1:
-        return "<1s"
-    if seconds < 60:
-        return f"{seconds:.0f}s"
-    minutes = int(seconds // 60)
-    secs = int(seconds % 60)
-    return f"{minutes}m {secs:02d}s"
-
-
-# Braille spinner frames
-_SPINNER_FRAMES = "\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f"
-
-
-def _step_row_style(step: dict, spinner_char: str) -> tuple[str, str, str, str]:
-    """Return (icon, elapsed, name_style, result_style) for a pipeline step."""
-    status = step["status"]
-    if status == "done":
-        return "[green]\u2714[/green]", step.get("elapsed", ""), "dim", "dim"
-    if status == "running":
-        # Compute elapsed live
-        elapsed = _format_elapsed(time.time() - step["start_time"])
-        return f"[cyan]{spinner_char}[/cyan]", elapsed, "bold", "cyan"
-    return " ", "", "dim", "dim"
-
-
-def _add_step_rows(table: Table, step: dict, spinner_char: str) -> None:
-    """Add a pipeline step (and its transient status, if running) to the table."""
-    name = step["name"]
-    result = step.get("result", "")
-    icon, elapsed, name_style, result_style = _step_row_style(step, spinner_char)
-
-    table.add_row(
-        icon,
-        f"[{name_style}]{name}[/{name_style}]",
-        "",
-        f"[{result_style}]{result}[/{result_style}]" if result else "",
-        f"[dim]{elapsed}[/dim]" if elapsed else "",
-    )
-
-    # Show transient status under the running step
-    if step["status"] == "running" and _step_status:
-        table.add_row(
-            "",
-            f"  [cyan]{spinner_char}[/cyan] [dim]{_step_status}[/dim]",
-            "",
-            "",
-            "",
-        )
-
-
-def _add_total_elapsed_rows(table: Table) -> None:
-    """Add the total elapsed time since the first step to the bottom of the table."""
-    if not _steps:
-        return
-    first_start = _steps[0].get("start_time")
-    if first_start is None:
-        return
-    total = _format_elapsed(time.time() - first_start)
-    table.add_row("", "", "", "", "")
-    table.add_row(
-        "",
-        "",
-        "",
-        f"[dim]{total} elapsed[/dim]",
-        "",
-    )
-
-
-class _PipelineDisplay:
-    """Dynamic renderable that rebuilds on every Rich render cycle.
-
-    This ensures elapsed times tick and the spinner animates without
-    needing explicit refresh calls.
-    """
-
-    def __init__(self) -> None:
-        self._frame: int = 0
-
-    def __rich_console__(self, console: Console, options: object):  # type: ignore[override]
-        self._frame += 1
-        spinner_char = _SPINNER_FRAMES[self._frame % len(_SPINNER_FRAMES)]
-
-        table = Table(
-            show_header=False,
-            box=None,
-            padding=(0, 1),
-            show_edge=False,
-            expand=True,
-        )
-        table.add_column("Icon", width=2, no_wrap=True)
-        table.add_column("Step", no_wrap=True)
-        table.add_column("Spacer", ratio=1)  # Absorbs remaining width
-        table.add_column("Result", no_wrap=True, justify="right")
-        table.add_column("Time", justify="right", width=8, no_wrap=True)
-
-        has_running = False
-        for step in _steps:
-            has_running = has_running or step["status"] == "running"
-            _add_step_rows(table, step, spinner_char)
-
-        # Show status line when no step is running (e.g. dependency tasks)
-        if not has_running and _step_status:
-            table.add_row(
-                f"[cyan]{spinner_char}[/cyan]",
-                f"[dim]{_step_status}[/dim]",
-                "",
-                "",
-                "",
-            )
-
-        _add_total_elapsed_rows(table)
-
-        yield table
-
-
-# Singleton display instance — reused across pipeline runs
-_pipeline_display = _PipelineDisplay()
-
-
-def _refresh_live() -> None:
-    """Force a refresh of the live display if active."""
-    if _live is not None:
-        _live.refresh()
+from .completion_report import print_completion as print_completion
+from .console_base import THEME as THEME
+from .console_base import console as console
+from .console_base import is_silent as is_silent
+from .console_base import set_silent_mode as set_silent_mode
+from .filtering_funnel import _build_funnel_table as _build_funnel_table
+from .filtering_funnel import _get_drop_pct as _get_drop_pct
+from .filtering_funnel import _get_stage_color as _get_stage_color
+from .filtering_funnel import get_funnel_data as get_funnel_data
+from .filtering_funnel import print_filtering_funnel as print_filtering_funnel
+from .filtering_funnel import record_funnel_stage as record_funnel_stage
+from .filtering_funnel import reset_funnel_data as reset_funnel_data
+from .pipeline_display import _refresh_live
+from .pipeline_display import add_cached_step as add_cached_step
+from .pipeline_display import pipeline_progress as pipeline_progress
+from .pipeline_display import print_analysis_stage as print_analysis_stage
+from .pipeline_display import print_candidate_count as print_candidate_count
+from .pipeline_display import print_stage as print_stage
+from .probe_display import _build_coverage_map as _build_coverage_map
+from .probe_display import _build_probe_table as _build_probe_table
+from .probe_display import _compute_probe_quality as _compute_probe_quality
+from .probe_display import print_probe_table as print_probe_table
 
 
 class LiveLogHandler(logging.Handler):
     """Logging handler that routes messages to the live step display."""
 
     def emit(self, record: logging.LogRecord) -> None:
-        global _step_status
-        if _live is not None and not _silent_mode:
+        if pipeline_display._live is not None and not is_silent():
             # Show the message as transient status under current step
             msg = record.getMessage()
             # Strip leading whitespace for indented messages (like transcript list)
             msg = msg.strip()
             if msg:
-                _step_status = msg
+                pipeline_display._step_status = msg
                 _refresh_live()
-        elif not _silent_mode:
+        elif not is_silent():
             # Outside live display, print directly
             console.print(f"  [dim]{record.getMessage()}[/dim]")
 
@@ -230,7 +66,7 @@ def get_rich_handler() -> logging.Handler:
 
 def print_header(version: str) -> None:
     """Print the application header banner."""
-    if _silent_mode:
+    if is_silent():
         return
     from rich.rule import Rule
 
@@ -239,481 +75,9 @@ def print_header(version: str) -> None:
     console.print(Rule(style="blue"))
 
 
-def print_completion(
-    duration: str,
-    output_files: list[str] | None = None,
-    summary: dict | None = None,
-    probe_df: pd.DataFrame | None = None,
-    verification: dict | None = None,
-) -> None:
-    """Print the completion panel with funnel, coverage map, probe table, and summary.
-
-    Args:
-        duration: Human-readable duration string.
-        output_files: List of output file paths.
-        summary: Optional dict with keys: gene_name, probe_count, initial_count,
-                 coverage_pct, gene_length, length_range, length_median,
-                 tm_range, tm_median, gc_range, gc_median.
-        probe_df: Optional DataFrame with probe data to show in the table.
-        verification: Optional dict with BLAST verification results.
-    """
-    if _silent_mode:
-        return
-
-    from rich.rule import Rule
-
-    console.print()
-    console.print(Rule("[success]Design Complete[/success]", style="green"))
-
-    # 1. Filtering funnel
-    _print_funnel_section()
-
-    has_probes = probe_df is not None and len(probe_df) > 0
-
-    # 2. Coverage map
-    if has_probes and summary:
-        _print_coverage_section(probe_df, summary)
-
-    # 3. Probe table
-    if has_probes:
-        console.print()
-        console.print(_build_probe_table(probe_df, show_title=False))
-
-    # 4. Summary stats
-    if summary:
-        console.print()
-        console.print(_build_stats_table(summary, probe_df))
-
-    # 5. BLAST verification
-    if verification:
-        console.print()
-        console.print(_build_verification_summary(verification))
-
-    # 6. Output files
-    if output_files:
-        _print_output_files(output_files)
-
-    # 7. Duration + closing rule
-    console.print()
-    console.print(f"  [dim]Completed in {duration}[/dim]")
-    console.print(Rule(style="green"))
-
-
-def _print_funnel_section() -> None:
-    """Print the filtering funnel section of the completion panel, if any."""
-    funnel_table = _build_funnel_table()
-    if funnel_table is None:
-        return
-    console.print()
-    console.print("  [bold]Filtering Funnel[/bold]")
-    console.print(funnel_table)
-
-
-def _print_coverage_section(probe_df: pd.DataFrame, summary: dict) -> None:
-    """Print the coverage map section of the completion panel, if any."""
-    gene_length = summary.get("gene_length", 0)
-    coverage_pct = summary.get("coverage_pct", 0.0)
-    coverage_map = _build_coverage_map(probe_df, gene_length, coverage_pct)
-    if coverage_map is None:
-        return
-    console.print()
-    console.print(coverage_map)
-
-
-def _print_output_files(output_files: list[str]) -> None:
-    """Print the list of output files."""
-    console.print()
-    console.print("  [bold]Output[/bold]")
-    for path in output_files:
-        console.print(f"    [dim]\u2192[/dim] {path}")
-
-
-def _format_gene_stat(summary: dict) -> str | None:
-    """Format the gene name summary row."""
-    return summary.get("gene_name") or None
-
-
-def _format_probe_count_stat(summary: dict) -> str | None:
-    """Format the probe count summary row."""
-    if summary.get("probe_count") is None:
-        return None
-    count_str = f"{summary['probe_count']}"
-    if summary.get("initial_count"):
-        count_str += f" selected from {summary['initial_count']:,} candidates"
-    return count_str
-
-
-def _format_coverage_stat(summary: dict) -> str | None:
-    """Format the coverage summary row."""
-    if summary.get("coverage_pct") is None:
-        return None
-    gene_len = summary.get("gene_length", 0)
-    cov_str = f"{summary['coverage_pct']:.1f}%"
-    if gene_len:
-        cov_str += f" of {gene_len:,} nt"
-    return cov_str
-
-
-def _format_length_stat(summary: dict) -> str | None:
-    """Format the probe length summary row."""
-    if not summary.get("length_range"):
-        return None
-    lo, hi = summary["length_range"]
-    med = summary.get("length_median", "")
-    med_str = f" (median {med})" if med else ""
-    return f"{lo}-{hi} nt{med_str}"
-
-
-def _format_tm_stat(summary: dict) -> str | None:
-    """Format the melting temperature summary row."""
-    if not summary.get("tm_range"):
-        return None
-    lo, hi = summary["tm_range"]
-    med = summary.get("tm_median", "")
-    med_str = f" (median {med:.1f}\u00b0C)" if med else ""
-    tm_std = summary.get("tm_std")
-    if tm_std is not None:
-        med_str += f", \u03c3 {tm_std:.1f}\u00b0C"
-    return f"{lo:.1f}-{hi:.1f}\u00b0C{med_str}"
-
-
-def _format_gc_stat(summary: dict) -> str | None:
-    """Format the GC content summary row."""
-    if not summary.get("gc_range"):
-        return None
-    lo, hi = summary["gc_range"]
-    med = summary.get("gc_median", "")
-    med_str = f" (median {med:.1f}%)" if med else ""
-    return f"{lo:.1f}-{hi:.1f}%{med_str}"
-
-
-# Summary stat rows: (label, formatter returning the value or None to skip)
-_SUMMARY_STAT_ROWS = (
-    ("Gene:", _format_gene_stat),
-    ("Probes:", _format_probe_count_stat),
-    ("Coverage:", _format_coverage_stat),
-    ("Length:", _format_length_stat),
-    ("TM range:", _format_tm_stat),
-    ("GC range:", _format_gc_stat),
-)
-
-_RECOMMENDATION_STYLES = {"PASS": "green", "FLAG": "yellow", "FAIL": "red"}
-
-
-def _format_recommendation_breakdown(probe_df: pd.DataFrame) -> str | None:
-    """Summarize PASS/FLAG/FAIL recommendation counts from probe data."""
-    if "recommendation" not in probe_df.columns:
-        return None
-    counts = probe_df["recommendation"].value_counts()
-    parts = []
-    for label, style in _RECOMMENDATION_STYLES.items():
-        n = counts.get(label, 0)
-        if n > 0:
-            parts.append(f"[{style}]{n} {label}[/{style}]")
-    return ", ".join(parts) if parts else None
-
-
-def _format_off_target_summary(probe_df: pd.DataFrame) -> str | None:
-    """Summarize transcriptome off-targets from probe data."""
-    if "txome_off_targets" not in probe_df.columns:
-        return None
-    total_ot = int(probe_df["txome_off_targets"].sum())
-    probes_with_ot = int((probe_df["txome_off_targets"] > 0).sum())
-    if probes_with_ot > 0:
-        return f"{probes_with_ot}/{len(probe_df)} probes have transcriptome off-targets ({total_ot} total)"
-    return "[green]none detected[/green]"
-
-
-def _build_stats_table(summary: dict, probe_df: pd.DataFrame | None) -> Table:
-    """Build the summary statistics table of the completion panel."""
-    stats_table = Table(
-        show_header=False, box=None, padding=(0, 1), show_edge=False
-    )
-    stats_table.add_column("Label", style="bold", no_wrap=True)
-    stats_table.add_column("Value")
-
-    rows = [(label, formatter(summary)) for label, formatter in _SUMMARY_STAT_ROWS]
-    if probe_df is not None:
-        # Recommendation breakdown and off-target summary from probe data
-        rows.append(("Quality:", _format_recommendation_breakdown(probe_df)))
-        rows.append(("Off-targets:", _format_off_target_summary(probe_df)))
-
-    for label, value in rows:
-        if value is not None:
-            stats_table.add_row(label, value)
-    return stats_table
-
-
-# Short labels for funnel display
-_FUNNEL_SHORT_NAMES = {
-    "Generating candidate probes": "Generated",
-    "Filtering by TM/GC content": "TM/GC filter",
-    "Aligning probes to genome": "Genome alignment",
-    "Filtering by k-mer frequency": "K-mer filter",
-    "Filtering by secondary structure": "Secondary structure",
-    "Optimizing probe coverage": "Optimization",
-}
-
-# Stages to skip in the funnel (non-filtering)
-_FUNNEL_SKIP_STAGES = {"Preparing gene sequence", "Finalizing output"}
-
-
-def _get_drop_pct(count: int, prev_count: int) -> float:
-    """Calculate percentage drop between two stage counts."""
-    return (prev_count - count) / prev_count * 100 if prev_count > 0 else 0
-
-
-def _get_stage_color(drop_pct: float) -> str:
-    """Return Rich color based on drop severity."""
-    if drop_pct > 50:
-        return "red"
-    if drop_pct > 20:
-        return "yellow"
-    return "green"
-
-
-def _build_funnel_table() -> Table | None:
-    """Build a Rich Table for the filtering funnel. Returns None if no data."""
-    stages = [
-        (name, count)
-        for name, count in _funnel_data
-        if name not in _FUNNEL_SKIP_STAGES
-    ]
-    if not stages:
-        return None
-
-    max_count = max(count for _, count in stages)
-    if max_count == 0:
-        return None
-
-    bar_width = 24
-    last = len(stages) - 1
-
-    table = Table(
-        show_header=False, box=None, padding=(0, 1), show_edge=False,
-        expand=False,
-    )
-    table.add_column("Stage", style="dim", min_width=20, no_wrap=True)
-    table.add_column("Bar", min_width=bar_width, no_wrap=True)
-    table.add_column("Count", justify="right", min_width=7, no_wrap=True)
-    table.add_column("Drop", min_width=8, no_wrap=True)
-
-    for i, (stage_name, count) in enumerate(stages):
-        filled = max(1, round(count / max_count * bar_width))
-        bar = "\u2588" * filled
-        short_name = _FUNNEL_SHORT_NAMES.get(stage_name, stage_name)
-        drop_pct = _get_drop_pct(count, stages[i - 1][1]) if i > 0 else 0
-
-        if i == 0:
-            color, drop_str = "green", ""
-        elif i == last:
-            color, drop_str = "cyan bold", "[cyan]selected[/cyan]"
-        else:
-            color = _get_stage_color(drop_pct)
-            drop_str = f"[dim]\u2193{drop_pct:>3.0f}%[/dim]" if drop_pct else ""
-
-        table.add_row(
-            short_name,
-            f"[{color}]{bar}[/{color}]",
-            f"{count:,}",
-            drop_str,
-        )
-
-    return table
-
-
-def _build_coverage_map(
-    probe_df: pd.DataFrame,
-    gene_length: int,
-    coverage_pct: float,
-) -> Text | None:
-    """Build an ASCII coverage map showing probe binding positions on the gene.
-
-    Returns a Rich Text renderable with a horizontal bar where filled blocks
-    represent covered regions and light blocks represent gaps.
-    """
-    if gene_length <= 0:
-        return None
-
-    bar_width = 50
-
-    # Build boolean coverage array across the gene
-    coverage = [False] * gene_length
-    for _, row in probe_df.iterrows():
-        start = max(0, int(row["start"]))
-        end = min(int(row["end"]), gene_length)
-        for i in range(start, end):
-            coverage[i] = True
-
-    # Downsample to bar width — a cell is "covered" if any base in its range is
-    bar = []
-    for i in range(bar_width):
-        region_start = int(i * gene_length / bar_width)
-        region_end = int((i + 1) * gene_length / bar_width)
-        bar.append(any(coverage[region_start:region_end]))
-
-    # Build the visual bar
-    text = Text()
-    text.append(f" Coverage ({coverage_pct:.1f}% of {gene_length:,} nt)\n", style="bold")
-    text.append("  5\u2032 ", style="dim")
-    for covered in bar:
-        if covered:
-            text.append("\u2588", style="green")
-        else:
-            text.append("\u2591", style="dim")
-    text.append(" 3\u2032\n", style="dim")
-
-    # Scale line with position markers at 0%, 25%, 50%, 75%, 100%
-    # Use a wider buffer to avoid truncation at the right edge
-    scale_width = bar_width + 10
-    scale = [" "] * scale_width
-    markers = [
-        (0, "0"),
-        (bar_width // 4, str(gene_length // 4)),
-        (bar_width // 2, str(gene_length // 2)),
-        (3 * bar_width // 4, str(3 * gene_length // 4)),
-    ]
-    # Right-align the last label so it doesn't overflow
-    last_label = str(gene_length)
-    markers.append((bar_width - len(last_label), last_label))
-
-    for pos, label in markers:
-        for j, ch in enumerate(label):
-            idx = pos + j
-            if 0 <= idx < scale_width:
-                scale[idx] = ch
-
-    text.append("     " + "".join(scale).rstrip(), style="dim")
-    return text
-
-
-def _build_verification_summary(verification: dict) -> Text:
-    """Build a Rich Text summary of BLAST verification results."""
-    total = verification["total"]
-    clean = verification["clean"]
-    flagged = verification.get("flagged", {})
-    max_show = 5
-
-    text = Text()
-    text.append(" BLAST Verification\n", style="bold")
-
-    if clean == total:
-        text.append("  \u2714 ", style="green")
-        text.append(f"{clean}/{total} probes verified ", style="green")
-        text.append("(independent BLAST cross-check)", style="dim")
-    else:
-        text.append("  \u2714 ", style="green")
-        text.append(f"{clean}/{total} probes clean", style="green")
-        n_flagged = total - clean
-        text.append(f", {n_flagged} with additional BLAST hits:\n", style="yellow")
-        max_expected = verification.get("max_expected", 1)
-        items = sorted(flagged.items(), key=lambda x: -x[1])
-        for probe_name, hit_count in items[:max_show]:
-            text.append(f"    \u26a0 {probe_name}: ", style="yellow")
-            text.append(f"{hit_count} loci ", style="yellow")
-            text.append(f"(expected \u2264{max_expected})\n", style="dim")
-        if len(items) > max_show:
-            text.append(
-                f"    [dim]...and {len(items) - max_show} more[/dim]",
-            )
-
-    return text
-
-
-def print_filtering_funnel() -> None:
-    """Print a standalone filtering funnel visualization."""
-    if _silent_mode or not _funnel_data:
-        return
-    table = _build_funnel_table()
-    if table is None:
-        return
-    console.print()
-    console.print("[bold]Filtering Funnel[/bold]")
-    console.print(table)
-
-
-def add_cached_step(order: int, total: int, description: str) -> None:
-    """Add a step that was already completed (cached by Luigi)."""
-    if _silent_mode:
-        return
-
-    if order > 0:
-        step_name = f"Step {order}/{total}: {description}"
-    else:
-        step_name = description
-
-    _steps.append({
-        "name": step_name,
-        "status": "done",
-        "result": "[dim]cached[/dim]",
-        "elapsed": "",
-        "start_time": 0,
-    })
-    _refresh_live()
-
-
-def print_stage(order: int, total: int, description: str) -> None:
-    """Print a pipeline stage indicator — updates the live step display."""
-    global _current_stage, _total_stages, _step_status
-    if _silent_mode:
-        return
-
-    _current_stage = order
-    _total_stages = total
-
-    # Finish the previous running step
-    for step in _steps:
-        if step["status"] == "running":
-            step["status"] = "done"
-            step["elapsed"] = _format_elapsed(time.time() - step["start_time"])
-
-    # Include candidate count from previous stage if available
-    count_str = ""
-    if _funnel_data:
-        last_count = _funnel_data[-1][1]
-        count_str = f"({last_count:,} probes)"
-
-    # Add new step
-    if order > 0:
-        step_name = f"Step {order}/{total}: {description}"
-    else:
-        step_name = description
-
-    _steps.append({
-        "name": step_name,
-        "status": "running",
-        "result": count_str,
-        "elapsed": "",
-        "start_time": time.time(),
-    })
-    _step_status = ""
-    _refresh_live()
-
-
-def print_candidate_count(_name: str, count: int, count_prev: int = 0) -> None:
-    """Print candidate count — updates the current step's result in the live display."""
-    global _step_status
-    if _silent_mode:
-        return
-
-    # Update the current running step's result
-    for step in reversed(_steps):
-        if step["status"] == "running":
-            if count_prev:
-                filtered = count_prev - count
-                drop_pct = (filtered / count_prev * 100) if count_prev else 0
-                step["result"] = f"{count:,} remaining  (\u2212{drop_pct:.1f}%)"
-            else:
-                step["result"] = f"{count:,} probes"
-            break
-
-    _step_status = ""
-    _refresh_live()
-
-
 def print_parameter_warnings(warnings: list[str]) -> None:
     """Print parameter validation warnings in a panel."""
-    if _silent_mode or not warnings:
+    if is_silent() or not warnings:
         return
 
     lines = []
@@ -736,12 +100,11 @@ def print_parameter_warnings(warnings: list[str]) -> None:
 
 def print_warning(message: str) -> None:
     """Print a styled warning message."""
-    if _silent_mode:
+    if is_silent():
         return
     # If live display is active, show as transient status
-    if _live is not None:
-        global _step_status
-        _step_status = f"\u26a0 {message}"
+    if pipeline_display._live is not None:
+        pipeline_display._step_status = f"\u26a0 {message}"
         _refresh_live()
     else:
         console.print(f"[warning]Warning:[/warning] {message}")
@@ -750,172 +113,12 @@ def print_warning(message: str) -> None:
 def print_error_panel(title: str, message: str, hint: str | None = None) -> None:
     """Display an error in a formatted panel."""
     # Stop live display before showing error so it doesn't interfere
-    if _live is not None:
-        _live.stop()
+    if pipeline_display._live is not None:
+        pipeline_display._live.stop()
     content = f"[error]{message}[/error]"
     if hint:
         content += f"\n\n[dim]Hint: {hint}[/dim]"
     console.print(Panel(content, title=f"[error]{title}[/error]", border_style="red"))
-
-
-def _compute_probe_quality(row: pd.Series, df: pd.DataFrame) -> str:
-    """Compute a quality score for a probe based on how central its metrics are.
-
-    Returns a star rating string (3 stars max).
-    """
-    score = 3  # Start perfect, subtract for issues
-
-    # TM centrality: penalize if near the edges of the range
-    tm_range = df["TM"].max() - df["TM"].min()
-    if tm_range > 0:
-        tm_mid = (df["TM"].max() + df["TM"].min()) / 2
-        tm_dist = abs(row["TM"] - tm_mid) / (tm_range / 2)
-        if tm_dist > 0.8:
-            score -= 1
-
-    # GC balance: penalize extremes
-    if row["GC"] < 30 or row["GC"] > 65:
-        score -= 1
-
-    # deltaG: penalize very negative (strong secondary structure)
-    if row["deltaG"] < -8:
-        score -= 1
-
-    # Off-targets
-    if "count" in row.index and row["count"] > 0:
-        score -= 1
-
-    score = max(1, min(3, score))
-    return "\u2605" * score + "\u2606" * (3 - score)
-
-
-def _build_probe_table(
-    df: pd.DataFrame, max_rows: int = 100, show_title: bool = True
-) -> Table:
-    """Build a Rich Table for probe data. Returns the Table renderable."""
-    title = f"Probe Summary ({len(df)} probes)" if show_title else None
-
-    table = Table(
-        title=title, show_header=True, header_style="bold cyan", box=None
-    )
-    has_recommendation = "recommendation" in df.columns
-    has_off_targets = "txome_off_targets" in df.columns
-
-    table.add_column("Name", style="green")
-    table.add_column("Sequence", style="dim", max_width=25)
-    table.add_column("Length", justify="right")
-    table.add_column("GC%", justify="right")
-    table.add_column("TM", justify="right")
-    table.add_column("deltaG", justify="right")
-    if has_off_targets:
-        table.add_column("Off-targets", justify="right")
-    if has_recommendation:
-        table.add_column("Rec.", justify="center")
-    table.add_column("Score", justify="center")
-
-    for _, row in df.head(max_rows).iterrows():
-        seq = row["sequence"]
-        seq_display = seq[:22] + "..." if len(seq) > 25 else seq
-        quality = _compute_probe_quality(row, df)
-        cells = [
-            str(row["name"]),
-            seq_display,
-            str(row["length"]),
-            f"{row['GC']:.1f}",
-            f"{row['TM']:.1f}",
-            f"{row['deltaG']:.1f}",
-        ]
-        if has_off_targets:
-            ot = int(row.get("txome_off_targets", 0))
-            cells.append(str(ot) if ot > 0 else "[dim]0[/dim]")
-        if has_recommendation:
-            rec = str(row.get("recommendation", ""))
-            rec_style = {"PASS": "[green]PASS[/green]", "FLAG": "[yellow]FLAG[/yellow]", "FAIL": "[red]FAIL[/red]"}
-            cells.append(rec_style.get(rec, rec))
-        cells.append(quality)
-        table.add_row(*cells)
-
-    if len(df) > max_rows:
-        ncols = 7 + int(has_off_targets) + int(has_recommendation)
-        filler = [""] * (ncols - 2)
-        table.add_row("...", f"({len(df) - max_rows} more)", *filler)
-
-    return table
-
-
-def print_probe_table(df: pd.DataFrame, max_rows: int = 100) -> None:
-    """Display probe data as a Rich table with quality scores."""
-    if _silent_mode:
-        return
-    table = _build_probe_table(df, max_rows)
-    console.print(table)
-    console.print()
-
-
-@contextmanager
-def pipeline_progress(total_stages: int = 8, mode: str = "pipeline"):
-    """Context manager for pipeline progress tracking using a live step display.
-
-    Args:
-        total_stages: Number of stages to track
-        mode: "pipeline" for normal probe design, "analyze" for probe set analysis
-    """
-    global _live, _steps, _step_status, _current_stage, _total_stages, _pipeline_mode
-
-    _current_stage = 0
-    _total_stages = total_stages
-    _steps = []
-    _step_status = ""
-    _pipeline_mode = mode
-
-    if _silent_mode:
-        yield
-        return
-
-    live = Live(
-        _pipeline_display,
-        console=console,
-        refresh_per_second=8,
-        transient=False,
-    )
-
-    with live:
-        _live = live
-        yield
-        # Finish the last running step
-        for step in _steps:
-            if step["status"] == "running":
-                step["status"] = "done"
-                step["elapsed"] = _format_elapsed(time.time() - step["start_time"])
-        _refresh_live()
-
-    _live = None
-
-
-def print_analysis_stage(step: int, total: int, description: str) -> None:
-    """Print an analysis stage indicator — uses the live step display."""
-    global _current_stage, _total_stages, _step_status
-    if _silent_mode:
-        return
-
-    _current_stage = step
-    _total_stages = total
-
-    # Finish the previous running step
-    for s in _steps:
-        if s["status"] == "running":
-            s["status"] = "done"
-            s["elapsed"] = _format_elapsed(time.time() - s["start_time"])
-
-    _steps.append({
-        "name": description,
-        "status": "running",
-        "result": "",
-        "elapsed": "",
-        "start_time": time.time(),
-    })
-    _step_status = ""
-    _refresh_live()
 
 
 def print_dependency_check(results: dict[str, dict]) -> None:
@@ -981,17 +184,16 @@ def spinner(description: str):
 
     Updates the live display's transient status line.
     """
-    global _step_status
-    if _silent_mode:
+    if is_silent():
         yield
         return
 
-    if _live is not None:
+    if pipeline_display._live is not None:
         # Show as transient status under current step
-        _step_status = description
+        pipeline_display._step_status = description
         _refresh_live()
         yield
-        _step_status = ""
+        pipeline_display._step_status = ""
         _refresh_live()
     else:
         # Standalone — print inline
