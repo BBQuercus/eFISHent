@@ -27,10 +27,6 @@ def task_cleanup():
 
 @pytest.mark.skipif(not JELLYFISH_AVAILABLE, reason="jellyfish not installed")
 def test_prettify_table(task_cleanup):
-    class Config(luigi.Config):
-        na_concentration = luigi.FloatParameter(390)
-        formamide_concentration = luigi.FloatParameter(10)
-
     sequences = [
         Bio.SeqRecord.SeqRecord(
             Bio.Seq.Seq("ATGCATGCATTAGCGCATGCATGC"), id="candidate-1-4"
@@ -61,7 +57,6 @@ def test_prettify_table(task_cleanup):
             basename="test",
             jellyfish_path="./tests/data/sacCer3_15.jf",
             alignment_path=alignment_path,
-            config=Config,
         )
         columns = [
             "name",
