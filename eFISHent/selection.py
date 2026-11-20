@@ -72,13 +72,14 @@ def cleanliness(df: pd.DataFrame) -> pd.Series:
 
 
 def selection_weights(df: pd.DataFrame) -> pd.Series:
-    """Per-probe weight for selection: probe count first, then specificity, then quality.
+    """Per-probe weight for selection: probe count, specificity and quality combined.
 
     Every probe is worth 1, plus up to 0.5 for off-target cleanliness and up
-    to 0.25 for sequence quality (``_quality``). Because the bonus never
-    exceeds 0.75, two probes always outweigh one, so the set is never shrunk
-    for cleanliness; among arrangements with the same probe count the
-    cleanest, best-quality one wins (TrueProbes-style: specific probes first).
+    to 0.25 for sequence quality (``_quality``). The selection maximizes the
+    sum of these weights, so it favours more probes, then cleaner and
+    better-quality ones. No part has strict priority: two probes always
+    outweigh one, but three clean probes (up to 1.75 each) can outweigh four
+    poor ones, and a quality bonus can outweigh a cleanliness advantage.
     """
     quality = df["_quality"] if "_quality" in df else compute_pre_optimization_quality(df)
     return 1.0 + 0.5 * cleanliness(df) + 0.25 * quality

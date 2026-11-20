@@ -51,6 +51,10 @@ def antisense_hits(df_blast: pd.DataFrame) -> pd.DataFrame:
 HYBRIDIZATION_TEMP = 37.0
 # Shortest hit that counts towards the burden (TrueProbes ignores < 15 nt).
 MIN_BURDEN_MATCH_LENGTH = 15
+# Shortest perfect hit that marks a transcript as the target's own locus.
+# The sensitive BLAST also reports 8-12 nt perfect matches; on a small
+# transcriptome those reach half of all probes for unrelated long transcripts.
+MIN_SELF_LOCUS_MATCH_LENGTH = 15
 
 
 def hit_melting_temps(
@@ -210,13 +214,18 @@ def _phantom_self_transcripts(
 ) -> set[str]:
     """Find non-self transcripts that are alternative annotations of the target.
 
-    If a non-self transcript hits >=50% of all probes at 100% identity it is
-    almost certainly a read-through or pseudogene overlay of the target, not a
-    true off-target.
+    If a non-self transcript hits >=50% of all probes at 100% identity over
+    at least MIN_SELF_LOCUS_MATCH_LENGTH nt, it is almost certainly a
+    read-through or pseudogene overlay of the target, not a true off-target.
+    Shorter perfect matches are chance hits and do not count.
     """
     if n_probes == 0:
         return set()
-    perfect_hits = df_blast[(df_blast["pident"] >= 100.0) & (df_blast["gapopen"] == 0)]
+    perfect_hits = df_blast[
+        (df_blast["pident"] >= 100.0)
+        & (df_blast["gapopen"] == 0)
+        & (df_blast["length"] >= MIN_SELF_LOCUS_MATCH_LENGTH)
+    ]
     if perfect_hits.empty:
         return set()
     phantom_counts = (
