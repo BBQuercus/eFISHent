@@ -792,6 +792,37 @@ def test_same_strand_hits_are_not_off_targets(monkeypatch):
             _luigi_config_restore(old, cfg)
 
 
+def test_short_perfect_matches_do_not_whitelist_a_transcript(monkeypatch):
+    """Only perfect hits >= 15 nt on half of the probes mark a transcript as self.
+
+    Reduced from yeast AAD4: the sensitive BLAST reports short perfect matches
+    to the paralog AAD6 for most probes. Those (14 nt here) must not whitelist
+    the paralog, or its real 21 nt off-target on p1 is ignored. A transcript
+    that overlaps the target is still whitelisted: its 15 nt hit on p3 counts,
+    so 2 of 3 probes vote and the full-length hit on p2 is not an off-target.
+    """
+    records = _make_records(
+        ("p1", "ATGCGTACGTAGCTAGCTAGC"),
+        ("p2", "GCGCGTACGTAGCTAGCGCGC"),
+        ("p3", "TTGCGTACGATGCTAGCTGGA"),
+    )
+    blast = (
+        "p1\tparalog\t100.0\t14\t0\t0\t1\t14\t314\t301\t5\t28\n"
+        "p2\tparalog\t100.0\t14\t0\t0\t5\t18\t414\t401\t5\t28\n"
+        "p3\tparalog\t100.0\t14\t0\t0\t8\t21\t514\t501\t5\t28\n"
+        "p1\tparalog\t100.0\t21\t0\t0\t1\t21\t121\t101\t0.001\t42\n"
+        "p2\toverlap\t100.0\t21\t0\t0\t1\t21\t221\t201\t0.001\t42\n"
+        "p3\toverlap\t100.0\t15\t0\t0\t1\t15\t315\t301\t1\t30\n"
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        task, out_fa, _, old, cfg = _setup_task(monkeypatch, tmpdir, records, blast_lines=blast)
+        try:
+            task.run()
+            assert [r.id for r in Bio.SeqIO.parse(out_fa, "fasta")] == ["p2", "p3"]
+        finally:
+            _luigi_config_restore(old, cfg)
+
+
 # ---------------------------------------------------------------------------
 # 11. Off-target burden and thermodynamic gate
 # ---------------------------------------------------------------------------
