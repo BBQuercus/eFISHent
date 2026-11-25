@@ -133,7 +133,7 @@
 
 **Validator Functions:**
 - Purpose: Type coercion + validation for CLI arguments
-- Examples: `eFISHent/cli.py` string_to_bool(), positive_int(), existing_file()
+- Examples: `eFISHent/cli.py` string_to_bool(), positive_int(), existing_fasta_file()
 - Pattern: Applied to each argument via PARAM_VALIDATORS dict during parsing
 
 ## Entry Points
@@ -166,7 +166,7 @@
 
 **Patterns:**
 - **CLI Validation**: Cross-parameter constraints checked in validate_args() before task execution
-- **File Validation**: existing_file(), existing_fasta_file(), existing_gtf_file() type validators prevent invalid paths
+- **File Validation**: existing_fasta_file(), existing_gtf_file() type validators prevent invalid paths
 - **Dependency Checking**: check_required_dependencies() verifies external tools before pipeline start
 - **Task Failures**: Luigi catches subprocess errors; logs written to efishent.log in debug mode
 - **Parameter Warnings**: validate_parameter_warnings() identifies risky combinations (narrow TM window, high formamide, etc.) and surfaces as non-fatal warnings

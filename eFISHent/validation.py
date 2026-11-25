@@ -51,15 +51,6 @@ def percentage(value) -> float:
     return fvalue
 
 
-def existing_file(value) -> str:
-    """Validate that file exists."""
-    if not value:
-        return value
-    if not os.path.isfile(value):
-        raise argparse.ArgumentTypeError(f"File not found: '{value}'")
-    return value
-
-
 def existing_fasta_file(value) -> str:
     """Validate that file exists and has fasta extension."""
     if not value:

@@ -43,8 +43,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "deptry==0.25.1",
     "pytest>=7.0",
     "pytest-cov>=7.1.0",
+    "vulture==2.16",
 ]
 
 [project.urls]
@@ -76,6 +78,25 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "eFISHent/cli.py" = ["E402", "F401"]
+"vulture_whitelist.py" = ["B018", "F821"]  # bare names by design
+
+# Dead-code check (CI job "static-analysis"); run locally with `scripts/lint_dead.sh`.
+# Known false positives live in vulture_whitelist.py, one reason per entry.
+[tool.vulture]
+paths = ["eFISHent", "tests", "vulture_whitelist.py"]
+min_confidence = 60
+ignore_decorators = ["@pytest.fixture"]
+# requires: luigi task hook; mock_*: arguments injected by @patch; kw: catch-all in lambdas.
+ignore_names = ["requires", "mock_*", "kw"]
+
+# Unused / missing dependency check, same CI job.
+[tool.deptry]
+known_first_party = ["eFISHent"]
+
+[tool.deptry.per_rule_ignores]
+# packaging comes in via other deps today; eFISHent/updates.py imports it. Baseline – add it to
+# [project.dependencies] in a later release.
+DEP003 = ["packaging"]
 
 [tool.mypy]
 mypy_path = "eFISHent"

@@ -85,7 +85,6 @@ def test_align_probes(task_align: AlignProbeCandidates, gene, endogenous):
     fname_sam = f"./tests/data/{gene}_basic.sam"
     fname_fastq = f"./tests/data/{gene}_basic.fastq"
     task_align.fname_fasta = f"./tests/data/{gene}_basic.fasta"
-    task_align.fname_gene = gene
     task_align.fname_sam = fname_sam
 
     def get_number_of_alignments(fname):
@@ -111,7 +110,6 @@ def test_align_probes(task_align: AlignProbeCandidates, gene, endogenous):
 @pytest.mark.parametrize("gene", ["renilla", "aad4"])
 def test_filter_unique_probes(task_align: AlignProbeCandidates, gene):
     fname_sam = f"./tests/data/{gene}_basic.sam"
-    task_align.fname_gene = gene
     task_align.fname_sam = fname_sam
 
     task_align.is_endogenous = True

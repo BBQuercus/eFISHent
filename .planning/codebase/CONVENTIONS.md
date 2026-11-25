@@ -12,7 +12,7 @@
 **Functions:**
 - Private helper functions use leading underscore: `_compute_gc()`, `_preferred_length()`, `_parse_parquet_gtf()`
 - Public functions use snake_case: `get_melting_temp()`, `is_overlapping()`, `string_to_bool()`
-- Validator functions follow pattern `<noun>()` or `<adjective>_<noun>()`: `positive_int()`, `existing_file()`, `existing_fasta_file()`
+- Validator functions follow pattern `<noun>()` or `<adjective>_<noun>()`: `positive_int()`, `existing_fasta_file()`
 
 **Variables:**
 - snake_case for local variables and module-level constants: `na_concentration`, `sequences`, `PIPELINE_STAGES`
@@ -84,7 +84,7 @@ if TYPE_CHECKING:
       raise argparse.ArgumentTypeError(f"Percentage must be 0-100, got {fvalue}")
   ```
 - Custom exceptions not used; relies on standard Python exceptions
-- File existence and type validation in CLI validators: `existing_file()`, `existing_fasta_file()`
+- File existence and type validation in CLI validators: `existing_fasta_file()`, `existing_gtf_file()`
 - Logger assertions via `log_and_check_candidates()` utility for filtering stage results
 - `ValueError` raised for invalid configuration: `raise ValueError(f"Invalid optimization method: {RunConfig().optimization_method}")`
 

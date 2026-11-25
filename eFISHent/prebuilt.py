@@ -62,25 +62,6 @@ DEFAULT_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".local", "efishent", 
 
 METADATA_FILENAME = "metadata.json"
 
-# Files expected per genome
-GENOME_FILES = [
-    "genome.fa",
-    "genome.fa.fai",
-    "annotation.gtf",
-    "transcriptome.fa",
-    # Bowtie2 index files
-    "genome.1.bt2", "genome.2.bt2", "genome.3.bt2", "genome.4.bt2",
-    "genome.rev.1.bt2", "genome.rev.2.bt2",
-    # Jellyfish index
-    "genome_15.jf",
-    # BLAST transcriptome DB (BLAST+ v5 format)
-    "transcriptome.fa.nsq", "transcriptome.fa.nin", "transcriptome.fa.nhr",
-    "transcriptome.fa.ndb", "transcriptome.fa.not", "transcriptome.fa.ntf",
-    "transcriptome.fa.nto", "transcriptome.fa.njs",
-    # Metadata
-    METADATA_FILENAME,
-]
-
 
 def resolve_genome(alias: str) -> str:
     """Resolve a genome alias to a canonical identifier.
