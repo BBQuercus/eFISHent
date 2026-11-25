@@ -51,11 +51,6 @@ class LiveLogHandler(logging.Handler):
             console.print(f"  [dim]{record.getMessage()}[/dim]")
 
 
-def get_live_log_handler() -> LiveLogHandler:
-    """Get a logging handler that routes to the live display."""
-    return LiveLogHandler()
-
-
 def get_rich_handler() -> logging.Handler:
     """Get a configured logging handler.
 

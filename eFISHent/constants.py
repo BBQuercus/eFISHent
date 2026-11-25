@@ -21,21 +21,6 @@ SAMFILE_COLUMNS: list[str] = [
     "NM",
 ]
 
-BLAST_COLUMNS: list[str] = [
-    "qseqid",
-    "sseqid",
-    "pident",
-    "length",
-    "mismatch",
-    "gapopen",
-    "qstart",
-    "qend ",
-    "sstart",
-    "send",
-    "evalue",
-    "bitscore",
-]
-
 GTF_COLUMNS: list[str] = [
     "gene_id",
     "seqname",

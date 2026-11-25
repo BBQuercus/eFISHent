@@ -139,14 +139,14 @@ efishent/
 **Functions:**
 - Public functions: snake_case (e.g., `create_candidate_probes_generator()`, `get_free_energy()`)
 - Private functions: Prefix with underscore (e.g., `_add_groups()`, `_parse_args()`, `_ensure_deps_on_path()`)
-- Type validators: snake_case describing validation (e.g., `existing_file()`, `positive_int()`, `percentage()`)
+- Type validators: snake_case describing validation (e.g., `existing_fasta_file()`, `positive_int()`, `percentage()`)
 
 **Classes:**
 - Task classes: PascalCase, descriptive (e.g., `GenerateAllProbes`, `BasicFiltering`, `OptimizeProbeCoverage`)
 - Configuration classes: PascalCase with "Config" suffix (e.g., `GeneralConfig`, `ProbeConfig`)
 
 **Constants:**
-- Global constants: UPPER_SNAKE_CASE (e.g., `SAMFILE_COLUMNS`, `BLAST_COLUMNS`, `PIPELINE_STAGES`)
+- Global constants: UPPER_SNAKE_CASE (e.g., `SAMFILE_COLUMNS`, `GTF_COLUMNS`, `PIPELINE_STAGES`)
 - Private constants: Prefix with underscore (e.g., `_BOOL_METAVAR`)
 
 **Variables:**

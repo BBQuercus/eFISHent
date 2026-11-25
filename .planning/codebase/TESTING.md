@@ -163,8 +163,8 @@ def df():
     )
 
 @pytest.fixture
-def sequential_solution():
-    return ["seq1", "seq3", "seq5", "seq7"]
+def optimal_solution():
+    return ["seq1", "seq4", "seq6", "seq7"]
 ```
 
 **Location:**

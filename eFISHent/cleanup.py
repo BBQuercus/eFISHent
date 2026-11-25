@@ -46,12 +46,6 @@ class CleanUpOutput(
 
     logger = logging.getLogger("custom-logger")
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.is_blast_required = (
-            ProbeConfig().encode_count_table and SequenceConfig().is_endogenous
-        )
-
     def requires(self):
         tasks = {
             "optimize": OptimizeProbeCoverage(),

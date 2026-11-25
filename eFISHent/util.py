@@ -281,10 +281,8 @@ def create_data_table(sequences: list[Bio.SeqRecord.SeqRecord]) -> pd.DataFrame:
 class UniCode:
     """Unicode symbols for output messages."""
 
-    dash = "\U0001f4a8"
     dna = "\U0001f9ec"
     error = "\U0001f6d1"
     fishing = "\U0001f3a3"
-    happy = "\U0001f603"
     party = "\U0001f973"
     warn = "\u26a0"
