@@ -13,7 +13,5 @@ _.C2  # eFISHent/selection.py
 # Kept on purpose: backwards-compatible alias for callers outside this repo (eFISHent/util.py).
 PIPELINE_STAGES
 
-# Tests: pytest hook signature, and MagicMock magic-method setup.
-pytest_sessionstart  # tests/test_integration.py – pytest only calls hooks from conftest.py; kept for review
-session  # pytest_sessionstart argument
+# Tests: MagicMock magic-method setup.
 _.__getitem__  # MagicMock setup in tests/test_unit_alignment.py and tests/test_unit_cleanup.py

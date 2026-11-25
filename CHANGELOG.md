@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Checksums for pre-built genomes**: `--genome` / `--download-genome` now check every downloaded file against the SHA256 in the genome's `metadata.json`. On a mismatch the download stops with an error and the bad files are deleted, so the next run downloads them again. A file without a checksum entry is kept with a warning. A supplemental `genome_<k>.jf` that fails its checksum is deleted and the index is built locally.
+
 ## v0.0.19
 
 **Probe sets can change in this release.** The same command can give a different probe set than v0.0.18; on the benchmark below the new sets are more specific. No command-line option name, command-line default, column of the final probe table or Python package dependency changed. The internal BLAST settings and the prepared annotation `.parq` did change (see below).

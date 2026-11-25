@@ -132,40 +132,54 @@ def is_genome_cached(genome_id: str, cache_dir: str | None = None) -> bool:
         return False
 
 
+def _sha256(path: str) -> str:
+    """Return the SHA256 hex digest of a file, read in 1 MiB chunks."""
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def _listed_checksums(genome_dir: str) -> dict[str, str]:
+    """Return the filename -> SHA256 map in a genome's metadata.json.
+
+    Raises FileNotFoundError if metadata.json is missing, ValueError or
+    AttributeError if it is corrupt.
+    """
+    with open(os.path.join(genome_dir, METADATA_FILENAME)) as f:
+        return json.load(f).get("files", {})
+
+
 def verify_checksums(
     genome_id: str, cache_dir: str | None = None
 ) -> tuple[bool, list[str]]:
     """Verify SHA256 checksums for all cached genome files.
 
+    Checks every file listed under "files" in metadata.json (written by
+    scripts/prepare_*_hf_upload.sh). Files on disk without an entry there are
+    not checked; download_genome warns about them instead of failing.
+
     Returns:
-        Tuple of (all_valid, list_of_failed_files).
+        Tuple of (all_valid, list_of_failed_files). A missing or corrupt
+        metadata.json is reported as a single "metadata.json missing/corrupt"
+        entry.
     """
     genome_dir = get_genome_dir(genome_id, cache_dir)
-    metadata_path = os.path.join(genome_dir, METADATA_FILENAME)
-
-    if not os.path.isfile(metadata_path):
-        return False, [f"{METADATA_FILENAME} missing"]
 
     try:
-        with open(metadata_path) as f:
-            metadata = json.load(f)
-    except (json.JSONDecodeError, KeyError):
+        expected = _listed_checksums(genome_dir)
+    except FileNotFoundError:
+        return False, [f"{METADATA_FILENAME} missing"]
+    except (OSError, ValueError, AttributeError):
         return False, [f"{METADATA_FILENAME} corrupt"]
 
-    failed = []
-    for filename, expected_hash in metadata.get("files", {}).items():
-        filepath = os.path.join(genome_dir, filename)
-        if not os.path.isfile(filepath):
-            failed.append(filename)
-            continue
-
-        sha256 = hashlib.sha256()
-        with open(filepath, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                sha256.update(chunk)
-        if sha256.hexdigest() != expected_hash:
-            failed.append(filename)
-
+    failed = [
+        filename
+        for filename, expected_hash in expected.items()
+        if not os.path.isfile(os.path.join(genome_dir, filename))
+        or _sha256(os.path.join(genome_dir, filename)) != expected_hash
+    ]
     return len(failed) == 0, failed
 
 
@@ -184,8 +198,13 @@ def download_genome(
     Returns:
         Path to the genome directory containing all index files.
 
+    After the download, every file is checked against the SHA256 checksums in
+    metadata.json. Files that fail are deleted, so the genome does not count
+    as cached and the next run downloads them again. Downloaded files without
+    a checksum entry are kept with a warning.
+
     Raises:
-        RuntimeError: If download fails.
+        RuntimeError: If the download or the checksum check fails.
     """
     from huggingface_hub import hf_hub_download, list_repo_tree
 
@@ -237,6 +256,31 @@ def download_genome(
             console.print(" [red]failed[/red]")
             raise RuntimeError(f"Failed to download {filepath}: {e}") from e
 
+    console.print("    Verifying checksums...", end="")
+    valid, failed = verify_checksums(genome_id, cache_dir)
+    if not valid:
+        console.print(" [red]failed[/red]")
+        for filename in failed:
+            path = os.path.join(genome_dir, filename)
+            if os.path.isfile(path):
+                os.remove(path)
+        raise RuntimeError(
+            f"Checksum check failed for genome {genome_id}: {', '.join(failed)}. "
+            "The bad files were deleted. Run the command again to re-download them."
+        )
+    console.print(" [green]done[/green]")
+
+    unchecked = sorted(
+        {os.path.basename(p) for p in files}
+        - _listed_checksums(genome_dir).keys()
+        - {METADATA_FILENAME}
+    )
+    if unchecked:
+        console.print(
+            f"    [yellow]No checksum in {METADATA_FILENAME} for "
+            f"{', '.join(unchecked)}; kept unchecked.[/yellow]"
+        )
+
     logger.info(f"Genome {genome_id} downloaded to {genome_dir}")
     return genome_dir
 
@@ -281,7 +325,10 @@ def try_download_supplemental_index(
     here so users never have to build from the full genome locally.
 
     Returns True if the file is now present (either already there or freshly
-    downloaded), False if it is unavailable (not yet hosted or network error).
+    downloaded), False if it is unavailable (not yet hosted or network error)
+    or failed its checksum. A file that fails is deleted, so the caller builds
+    the index locally. A file without a checksum in metadata.json is kept
+    with a warning.
     """
     filename = f"genome_{kmer_length}.jf"
     genome_dir = get_genome_dir(genome_id, cache_dir)
@@ -300,9 +347,30 @@ def try_download_supplemental_index(
             local_dir=get_cache_dir(cache_dir),
             local_dir_use_symlinks=False,
         )
-        return os.path.isfile(out_path)
     except Exception:
         return False
+    if not os.path.isfile(out_path):
+        return False
+
+    from .console import console
+
+    try:
+        expected = _listed_checksums(genome_dir).get(filename)
+    except (OSError, ValueError, AttributeError):
+        expected = None
+    if expected is None:
+        console.print(
+            f"\n  [yellow]No checksum in {METADATA_FILENAME} for {filename}; "
+            "using it unchecked.[/yellow]"
+        )
+        return True
+    if _sha256(out_path) != expected:
+        os.remove(out_path)
+        console.print(
+            f"\n  [red]Checksum mismatch for {filename}; deleted the download.[/red]"
+        )
+        return False
+    return True
 
 
 def list_available_genomes() -> list[dict[str, str]]:
