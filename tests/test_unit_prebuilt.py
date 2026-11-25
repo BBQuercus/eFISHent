@@ -1,7 +1,9 @@
 """Tests for pre-built genome index management."""
 
+import hashlib
 import json
 import os
+import sys
 import tempfile
 import unittest.mock
 
@@ -289,7 +291,7 @@ class TestDownloadGenome:
             dummy_file = os.path.join(genome_dir, "genome.fa")
             with open(dummy_file, "w") as f:
                 f.write(">chr1\nATCG\n")
-            metadata = {"files": {"genome.fa": "abc123"}}
+            metadata = {"files": {"genome.fa": hashlib.sha256(b">chr1\nATCG\n").hexdigest()}}
             with open(os.path.join(genome_dir, "metadata.json"), "w") as f:
                 json.dump(metadata, f)
 
@@ -339,6 +341,84 @@ class TestDownloadGenome:
                 with patch("eFISHent.console.console", MagicMock()):
                     with pytest.raises(RuntimeError, match="Could not list files"):
                         download_genome("homo_sapiens/GRCh38", cache_dir=tmpdir)
+
+
+GENOME_ID = "homo_sapiens/GRCh38"
+
+
+@pytest.fixture
+def fake_hub(monkeypatch, tmp_path):
+    """Fake huggingface_hub that serves `remote` ({filename: bytes}) for GENOME_ID.
+
+    Downloads write into tmp_path the way hf_hub_download(local_dir=...) does.
+    """
+    from unittest.mock import MagicMock
+
+    remote: dict[str, bytes] = {}
+
+    def download(filename, local_dir, **kwargs):
+        path = os.path.join(local_dir, filename)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(remote[os.path.relpath(filename, GENOME_ID)])
+        return path
+
+    hub = MagicMock()
+    hub.list_repo_tree.side_effect = lambda *a, **k: [
+        MagicMock(rfilename=f"{GENOME_ID}/{name}") for name in remote
+    ]
+    hub.hf_hub_download.side_effect = download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    monkeypatch.setattr("eFISHent.console.console", MagicMock())
+    return remote
+
+
+def _metadata(checksums: dict[str, str]) -> bytes:
+    return json.dumps({"files": checksums}).encode()
+
+
+class TestDownloadChecksums:
+    def test_good_checksum_passes(self, fake_hub, tmp_path):
+        from eFISHent.prebuilt import download_genome
+
+        fake_hub["genome.fa"] = b">chr1\nATCG\n"
+        fake_hub["README.md"] = b"no checksum for me"
+        fake_hub["metadata.json"] = _metadata(
+            {"genome.fa": hashlib.sha256(b">chr1\nATCG\n").hexdigest()}
+        )
+
+        genome_dir = download_genome(GENOME_ID, cache_dir=str(tmp_path))
+
+        assert is_genome_cached(GENOME_ID, str(tmp_path))
+        # A file without a checksum entry is kept (with a warning), not rejected.
+        assert os.path.isfile(os.path.join(genome_dir, "README.md"))
+
+    def test_bad_checksum_fails_and_deletes_file(self, fake_hub, tmp_path):
+        from eFISHent.prebuilt import download_genome
+
+        fake_hub["genome.fa"] = b">chr1\nTAMPERED\n"
+        fake_hub["metadata.json"] = _metadata(
+            {"genome.fa": hashlib.sha256(b">chr1\nATCG\n").hexdigest()}
+        )
+
+        with pytest.raises(RuntimeError, match="Checksum check failed.*genome.fa"):
+            download_genome(GENOME_ID, cache_dir=str(tmp_path))
+
+        genome_dir = get_genome_dir(GENOME_ID, str(tmp_path))
+        assert not os.path.exists(os.path.join(genome_dir, "genome.fa"))
+        assert not is_genome_cached(GENOME_ID, str(tmp_path))
+
+    def test_supplemental_bad_checksum_is_deleted(self, fake_hub, tmp_path):
+        from eFISHent.prebuilt import try_download_supplemental_index
+
+        genome_dir = get_genome_dir(GENOME_ID, str(tmp_path))
+        os.makedirs(genome_dir)
+        with open(os.path.join(genome_dir, "metadata.json"), "wb") as f:
+            f.write(_metadata({"genome_20.jf": hashlib.sha256(b"good").hexdigest()}))
+        fake_hub["genome_20.jf"] = b"bad"
+
+        assert try_download_supplemental_index(GENOME_ID, 20, str(tmp_path)) is False
+        assert not os.path.exists(os.path.join(genome_dir, "genome_20.jf"))
 
 
 class TestResolveGenomeErrorMessage:

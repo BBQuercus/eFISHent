@@ -76,17 +76,6 @@ LEGACY_TOOLS_AVAILABLE = all([
 ])
 
 
-def pytest_sessionstart(session):
-    """Delete old files in case of rerun."""
-    files = glob.glob("./*/sacCer3*.ebwt")
-    files.extend(glob.glob("./*/sacCer3*.bt2"))
-    files.extend(glob.glob("./*/sacCer3*.jf"))
-    files.extend(glob.glob("./*/Saccharomyces*"))
-    files.extend(glob.glob("./*/YKL185W_*.jf"))
-    files.extend(glob.glob("./*/renilla_*.jf"))
-    [os.remove(f) for f in files]  # type: ignore
-
-
 def verify_csv(fname: str, *params):
     """Basic inspection if CSV file has the right columns and values fall within ranges."""
     df = pd.read_csv(fname)
@@ -133,8 +122,8 @@ def test_index_only():
         "True",
     ]
     subprocess.run(args, check=True)
-    bowtie_files = glob.glob("./tests/data/sacCer3*.ebwt")
-    assert len(bowtie_files) == 6
+    bowtie2_files = glob.glob("./tests/data/sacCer3*.bt2")
+    assert len(bowtie2_files) == 6
     assert os.path.isfile("./tests/data/sacCer3_15.jf")
 
 

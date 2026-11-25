@@ -86,8 +86,9 @@ ignore = [
 paths = ["eFISHent", "tests", "vulture_whitelist.py"]
 min_confidence = 60
 ignore_decorators = ["@pytest.fixture"]
-# requires: luigi task hook; mock_*: arguments injected by @patch; kw: catch-all in lambdas.
-ignore_names = ["requires", "mock_*", "kw"]
+# requires: luigi task hook; mock_*: arguments injected by @patch; kw: catch-all in lambdas;
+# pytest_*: hooks that pytest calls from tests/conftest.py.
+ignore_names = ["requires", "mock_*", "kw", "pytest_*"]
 
 # Unused / missing dependency check, same CI job.
 [tool.deptry]
