@@ -34,3 +34,24 @@ jobs:
       - uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3
         with:
           version: "0.17.0"
+
+  # Fails on new dead code (vulture), dependency drift (deptry) or duplication above the
+  # baseline in .jscpd.json (jscpd). Same check locally: bash scripts/lint_dead.sh
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+      - name: Dead code (vulture)
+        run: uv run --frozen vulture
+      - name: Dependencies (deptry)
+        run: uv run --frozen deptry .
+      # jscpd reads .jscpd.json (threshold = today's duplication rounded up to the next 0.5 %).
+      - name: Duplicates (jscpd)
+        run: npx --yes jscpd@5.4.3

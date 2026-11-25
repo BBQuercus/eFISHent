@@ -1,0 +1,10 @@
+{
+  "path": ["eFISHent", "tests", "scripts", "install.sh", "install_linux.sh", "install_macos.sh"],
+  "format": ["python", "bash"],
+  "ignore": ["**/tests/data/**", "**/__pycache__/**"],
+  "minTokens": 70,
+  "threshold": 3.5,
+  "reporters": ["console"],
+  "absolute": false,
+  "gitignore": true
+}

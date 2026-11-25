@@ -66,6 +66,12 @@ uv venv && source .venv/bin/activate
 uv pip install -e .
 ```
 
+Static analysis (dead code, dependencies, duplication – the CI `static-analysis` job; needs `uv` and Node):
+
+```bash
+bash scripts/lint_dead.sh
+```
+
 **Uninstall:**
 
 ```bash
